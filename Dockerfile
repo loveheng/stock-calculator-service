@@ -31,7 +31,7 @@ RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
 
 # 3. 仅复制生成的二进制可执行文件
-COPY --from=builder --chown=spring:spring /build/target/stock-calculator /application/stock-calculator
+COPY --from=builder --chown=spring:spring /build/target/stock-calculator-service /application/stock-calculator-service
 
 EXPOSE 8080
 
