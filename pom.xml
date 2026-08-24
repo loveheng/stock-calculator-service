@@ -11,7 +11,7 @@
     </parent>
 
     <groupId>com.zzh</groupId>
-    <artifactId>stock-calculator</artifactId>
+    <artifactId>stock-calculator-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>stock-calculator</name>
 
