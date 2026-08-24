@@ -7,14 +7,6 @@ RUN apk add --no-cache \
     ca-certificates \
     gcompat \
     libstdc++ \
-    # ------ 新增 AWT 依赖开始 ------
-    freetype \
-    fontconfig \
-    libxext \
-    libxrender \
-    libxtst \
-    libxi \
-    # ------ 新增 AWT 依赖结束 ------
     && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
