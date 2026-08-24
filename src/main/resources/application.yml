@@ -1,16 +1,35 @@
 server:
   port: 8080
+  tomcat:
+    # 限制内置 Tomcat 工作线程数（个人使用 10 个足够，默认 200 个会吃掉上百兆栈内存）
+    threads:
+      max: 10
+      min-spare: 2
+    # 限制连接与等待队列
+    max-connections: 50
+    accept-count: 20
 
 spring:
   application:
     name: stock-calculator
+  threads:
+    virtual:
+      enabled: true
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:sk-your-openai-api-key}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      api-key: ${GEMINI_API_KEY:${spring.ai.gemini.api-key:}}
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
       chat:
         options:
-          model: gpt-4o-mini
+          model: gemini-3.6-flash
           temperature: 0.0
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=300,expireAfterWrite=24h
 
-
+main:
+  # 禁用 Spring 启动 Banner，微量减少启动开销
+  banner-mode: "off"
+  # 启用延迟初始化（按需加载 Bean，显著降低初始内存）
+  lazy-initialization: true

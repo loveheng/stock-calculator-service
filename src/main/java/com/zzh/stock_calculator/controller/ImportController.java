@@ -1,15 +1,14 @@
 package com.zzh.stock_calculator.controller;
 
+import com.zzh.stock_calculator.common.ApiResponse;
 import com.zzh.stock_calculator.dto.TradeDraftItem;
-import com.zzh.stock_calculator.service.TradeVisionService;
+import com.zzh.stock_calculator.service.impl.GeminiTradeVisionServiceImpl;
 import org.springframework.web.bind.annotation.RestController;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
-import java.util.Map;
 
 
 @CrossOrigin(origins = "*") // 允许前端直接跨域调用
@@ -19,19 +18,11 @@ import java.util.Map;
 public class ImportController {
 
 
-    private final TradeVisionService tradeVisionService;
+    private final GeminiTradeVisionServiceImpl tradeVisionService;
 
     @PostMapping("/ocr-parse")
-    public ResponseEntity<?> parseScreenshot(@RequestParam("file") MultipartFile file) {
-        if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "上传文件不能为空"));
-        }
-
-        List<TradeDraftItem> items = tradeVisionService.parseScreenshot(file);
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "count", items.size(),
-                "data", items
-        ));
+    public ApiResponse<List<TradeDraftItem>> parseTradeScreenshot(@RequestParam("file") MultipartFile file) {
+        List<TradeDraftItem> result = tradeVisionService.parseScreenshot(file);
+        return ApiResponse.success(result);
     }
 }
