@@ -1,8 +1,21 @@
 FROM alpine:3.19
 WORKDIR /application
 
-# 1. 基础证书、时区与动态链接兼容层
-RUN apk add --no-cache tzdata ca-certificates gcompat libstdc++ && \
+# 安装基础运行依赖、时区、动态链接兼容层，以及 AWT/ImageIO 必需的底层图形库和字体
+RUN apk add --no-cache \
+    tzdata \
+    ca-certificates \
+    gcompat \
+    libstdc++ \
+    # ------ 新增 AWT 依赖开始 ------
+    freetype \
+    fontconfig \
+    libxext \
+    libxrender \
+    libxtst \
+    libxi \
+    # ------ 新增 AWT 依赖结束 ------
+    && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 
