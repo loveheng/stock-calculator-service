@@ -16,7 +16,7 @@ public class ImagePreprocessUtil {
 
     private static final long MIN_FILE_SIZE = 10 * 1024;        // 10KB
     private static final long MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-    private static final double MAX_ASPECT_RATIO = 4.8;         // 支持约 2~2.5 屏长度的滚动长截图
+    private static final double MAX_ASPECT_RATIO = 5;         // 支持约 2~2.5 屏长度的滚动长截图
     private static final double MIN_ASPECT_RATIO = 0.45;        // 竖屏下限
     private static final int MAX_INPUT_HEIGHT = 5200;           // 高度放宽至 5200px（约 10~15 笔交易）
 
