@@ -4,13 +4,17 @@
 FROM bellsoft/liberica-openjre-alpine:21 AS builder
 WORKDIR /build
 
+# 安装原生 maven，确保 PATH 绝对可用
+RUN apk add --no-cache maven
+
 # 1. 单独复制 pom.xml 下载依赖，最大化复用 Docker 缓存层
 COPY pom.xml .
-RUN mvn dependency:go-offline -B || true
 
-# 2. 复制源码并执行构建与单测（发现代码/装配错误会在此处直接中断）
+# 2. 复制源码
 COPY src ./src
-RUN mvn clean package -Dfile.encoding=UTF-8
+
+# 3. 容器内编译打包（代码报错或单测失败会在此中断）
+RUN mvn clean package -DskipTests=false -Dfile.encoding=UTF-8
 
 # 3. 提取 Spring Boot layertools 分层文件
 WORKDIR /build/extracted
