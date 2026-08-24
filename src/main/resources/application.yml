@@ -1,0 +1,16 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: stock-calculator
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:sk-your-openai-api-key}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: gpt-4o-mini
+          temperature: 0.0
+
+
