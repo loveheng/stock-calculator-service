@@ -2,13 +2,19 @@
 # 第一阶段：分层提取（Builder）
 # ==========================================
 FROM bellsoft/liberica-openjre-alpine:21 AS builder
-WORKDIR /application
+WORKDIR /build
 
-ARG JAR_FILE=target/*.jar
-COPY ${JAR_FILE} application.jar
+# 1. 单独复制 pom.xml 下载依赖，最大化复用 Docker 缓存层
+COPY pom.xml .
+RUN mvn dependency:go-offline -B || true
 
-# 利用 Spring Boot layertools 提取分层依赖
-RUN java -Djarmode=layertools -jar application.jar extract
+# 2. 复制源码并执行构建与单测（发现代码/装配错误会在此处直接中断）
+COPY src ./src
+RUN mvn clean package -Dfile.encoding=UTF-8
+
+# 3. 提取 Spring Boot layertools 分层文件
+WORKDIR /build/extracted
+RUN java -Djarmode=layertools -jar /build/target/*.jar extract
 
 # ==========================================
 # 第二阶段：极简生产运行时（Runtime，~120MB）
