@@ -39,7 +39,7 @@ COPY --from=builder /build/extracted/spring-boot-loader/ ./
 COPY --from=builder /build/extracted/snapshot-dependencies/ ./
 COPY --from=builder /build/extracted/application/ ./
 
-EXPOSE 8080
+EXPOSE 18080
 
 # 4. 针对 512MB 内存环境深度优化的 JVM 参数
 ENV JAVA_OPTS="-XX:+UseSerialGC \
