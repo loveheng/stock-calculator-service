@@ -1,6 +1,5 @@
 package com.zzh.stock_calculator.service.impl;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.zzh.stock_calculator.dto.TradeDraftItem;
 import com.zzh.stock_calculator.enums.TradeDirection;
 import com.zzh.stock_calculator.enums.TradeStatus;
@@ -9,13 +8,12 @@ import com.zzh.stock_calculator.service.OcrExecutor;
 import com.zzh.stock_calculator.service.TradeVisionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
-import org.springframework.web.client.RestClient;
+
 import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

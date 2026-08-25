@@ -1,4 +1,6 @@
 package com.zzh.stock_calculator.enums;
+
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;

@@ -4,28 +4,26 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.zzh.stock_calculator.service.OcrExecutor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzh.stock_calculator.common.BusinessException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.content.Media;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MimeTypeUtils;
 
-import java.util.List;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class GeminiOcrExecutorImpl implements OcrExecutor {
 
     private final ChatClient chatClient;
+
     private final ObjectMapper objectMapper;
+
+    public GeminiOcrExecutorImpl(ChatClient.Builder chatClientBuilder, ObjectMapper objectMapper) {
+        this.chatClient = chatClientBuilder.build();
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     @Cacheable(value = "genericVisionCache", key = "#cacheKey")

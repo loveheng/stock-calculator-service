@@ -27,12 +27,11 @@ spring:
     type: caffeine
     caffeine:
       spec: maximumSize=300,expireAfterWrite=24h
-
-main:
-  # 禁用 Spring 启动 Banner，微量减少启动开销
-  banner-mode: "off"
-  # 启用延迟初始化（按需加载 Bean，显著降低初始内存）
-  lazy-initialization: true
+  main:
+    # 禁用 Spring 启动 Banner，微量减少启动开销
+    banner-mode: off
+    # 启用延迟初始化（按需加载 Bean，显著降低初始内存）
+    lazy-initialization: true
 
 image:
   service:

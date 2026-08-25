@@ -17,7 +17,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>2.0.0</spring-ai.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
     </properties>
 
     <dependencyManagement>
@@ -36,18 +36,20 @@
 
     <dependencies>
 
-        <!-- Web 基础模块 -->
+        <!-- Spring Boot 4.x 标准 WebMVC Starter（包含 spring-boot-starter-json / Jackson 3） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
+        <!-- 显式引入 Jackson 2（com.fasterxml.jackson），因为 Spring Boot 4.x 默认使用 Jackson 3（tools.jackson）
+             代码中的 DTO、枚举、ObjectMapper 均基于 Jackson 2 类型 -->
         <dependency>
-            <groupId>org.aspectj</groupId>
-            <artifactId>aspectjweaver</artifactId>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
         </dependency>
 
-
+        <!-- Spring AI OpenAI Starter（2.0.x 命名规范：spring-ai-starter-model-{provider}） -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
@@ -79,7 +81,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
 
 
     <build>
@@ -151,6 +152,7 @@
                         </executions>
                         <configuration>
                             <imageName>stock-calculator-service</imageName>
+                            <mainClass>com.zzh.stock_calculator.StockCalculatorApplication</mainClass>
                             <buildArgs>
                                 <!-- 限制 Native-image 编译器最大占用 5GB 内存，避免爆内存 -->
                                 <buildArg>-J-Xmx5g</buildArg>
@@ -159,6 +161,12 @@
                                 <buildArg>-H:+AddAllCharsets</buildArg>
                                 <buildArg>-H:EnableURLProtocols=https</buildArg>
                                 <buildArg>--enable-all-security-services</buildArg>
+                                <!-- 运行时遇到不支持的 API 报错而非静默失败 -->
+                                <buildArg>-H:+ReportUnsupportedFeaturesAtRuntime</buildArg>
+                                <!-- 安装退出信号处理器，Docker 环境下优雅关闭 -->
+                                <buildArg>--install-exit-handlers</buildArg>
+                                <!-- Jackson 2 需要在运行时初始化（而非构建时），否则 ObjectMapper 内部缓存会出错 -->
+                                <buildArg>--initialize-at-run-time=com.fasterxml.jackson.databind.ObjectMapper,com.fasterxml.jackson.databind.json.JsonMapper,com.fasterxml.jackson.databind.ObjectReader,com.fasterxml.jackson.databind.ObjectWriter</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>
