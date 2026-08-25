@@ -12,6 +12,8 @@ public class ScrimageRuntimeHints implements RuntimeHintsRegistrar {
         // 1. 注册 SPI 描述文件资源（包含 javax.imageio.spi.ImageReaderSpi 等）
         hints.resources().registerPattern("META-INF/services/javax.imageio.spi.*");
         hints.resources().registerPattern("META-INF/services/com.sksamuel.scrimage.*");
+        hints.resources().registerPattern("META-INF/services/com.twelvemonkeys.*");
+        hints.resources().registerPattern("META-INF/services/javax.imageio.*");
 
         // 2. 注册 SPI 类以及实际的 Reader/Writer 实现类
         String[] reflectClasses = {
@@ -41,7 +43,14 @@ public class ScrimageRuntimeHints implements RuntimeHintsRegistrar {
                 "com.twelvemonkeys.imageio.plugins.webp.WebPImageReader",
                 "com.twelvemonkeys.imageio.plugins.webp.WebPImageWriter",
                 "com.twelvemonkeys.imageio.plugins.bmp.BMPImageReader",
-                "com.twelvemonkeys.imageio.plugins.bmp.BMPImageWriter"
+                "com.twelvemonkeys.imageio.plugins.bmp.BMPImageWriter",
+
+                // Scrimage 内部缩放/编码类
+                "com.sksamuel.scrimage.ResizeFunction",
+                "com.sksamuel.scrimage.ScaleMethod",
+
+                // 常用的 ImageIO 插件 SPI 注册器
+                "com.twelvemonkeys.imageio.spi.ReaderWriterSpix"
         };
 
         for (String clazz : reflectClasses) {
@@ -52,5 +61,9 @@ public class ScrimageRuntimeHints implements RuntimeHintsRegistrar {
                     MemberCategory.DECLARED_FIELDS
             );
         }
+
+        // 3. 注册额外的资源文件：TwelveMonkeys 版本属性和配置
+        hints.resources().registerPattern("com/twelvemonkeys/*.properties");
+        hints.resources().registerPattern("com/twelvemonkeys/**/*.properties");
     }
 }

@@ -14,7 +14,7 @@ import java.math.BigDecimal;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@RegisterReflectionForBinding({TradeDraftItem.class})
+@RegisterReflectionForBinding({TradeDraftItem.class, TradeDirection.class, TradeStatus.class})
 public class TradeDraftItem {
 
 

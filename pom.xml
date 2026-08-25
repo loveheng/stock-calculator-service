@@ -17,7 +17,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.0.0-M1</spring-ai.version>
+        <spring-ai.version>1.0.0-M6</spring-ai.version>
     </properties>
 
     <dependencyManagement>
@@ -143,7 +143,7 @@
                                 <builder>paketobuildpacks/builder-jammy-base:latest</builder>
                                 <env>
                                     <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
-                                    <BP_NATIVE_IMAGE_BUILD_ARGUMENTS><![CDATA[--no-fallback -H:+ReportExceptionStackTraces -H:+AddAllCharsets -Djava.awt.headless=true --initialize-at-run-time=com.sksamuel.scrimage,com.twelvemonkeys,javax.imageio,java.awt,sun.awt,sun.java2d,sun.font,org.apache.commons.imaging]]></BP_NATIVE_IMAGE_BUILD_ARGUMENTS>
+                                    <BP_NATIVE_IMAGE_BUILD_ARGUMENTS><![CDATA[--no-fallback -H:+ReportExceptionStackTraces -H:+AddAllCharsets -H:EnableURLProtocols=https -Djava.awt.headless=true --initialize-at-run-time=com.sksamuel.scrimage,com.twelvemonkeys,javax.imageio,java.awt,sun.awt,sun.java2d,sun.font,org.apache.commons.imaging]]></BP_NATIVE_IMAGE_BUILD_ARGUMENTS>
                                 </env>
                             </image>
                         </configuration>
@@ -169,6 +169,7 @@
                                 <buildArg>--no-fallback</buildArg>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
                                 <buildArg>-H:+AddAllCharsets</buildArg>
+                                <buildArg>-H:EnableURLProtocols=https</buildArg>
                                 <buildArg>-Djava.awt.headless=true</buildArg>
                                 <!-- 延迟图形与图像处理核心包的初始化到运行时 -->
                                 <buildArg>--initialize-at-run-time=com.sksamuel.scrimage,com.twelvemonkeys,javax.imageio,java.awt,sun.awt,sun.java2d,sun.font,org.apache.commons.imaging</buildArg>
