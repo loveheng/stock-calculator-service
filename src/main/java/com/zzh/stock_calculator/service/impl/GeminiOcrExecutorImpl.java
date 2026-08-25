@@ -6,11 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzh.stock_calculator.common.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.Media;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.Media;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Component;
@@ -54,7 +54,7 @@ public class GeminiOcrExecutorImpl implements OcrExecutor {
             if (response == null || response.getResult() == null) {
                 throw new BusinessException(500, "多模态大模型未返回有效数据");
             }
-            return response.getResult().getOutput().getContent();
+            return response.getResult().getOutput().getText();
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
