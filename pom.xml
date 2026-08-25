@@ -67,6 +67,13 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- AspectJ Weaver：GraalVM Native Image 构建时，AOT 序列化配置会引用 org.aspectj.lang.JoinPoint，
+             缺少此依赖会导致 NoClassDefFoundError -->
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
