@@ -58,6 +58,7 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- 图像处理库 Scrimage -->
         <dependency>
             <groupId>com.sksamuel.scrimage</groupId>
             <artifactId>scrimage-core</artifactId>
@@ -85,7 +86,7 @@
         </dependency>
     </dependencies>
 
-    <!-- 基础构建插件：保证日常 mvn package 正常生成 Jar -->
+    <!-- 基础构建插件 -->
     <build>
         <plugins>
             <plugin>
@@ -94,7 +95,6 @@
             </plugin>
         </plugins>
     </build>
-
 
     <!-- 依赖仓库源：用于拉取 Spring AI 的 jar 包 -->
     <repositories>
@@ -114,7 +114,9 @@
             <id>spring-milestones</id>
             <name>Spring Milestones</name>
             <url>https://repo.spring.io/milestone</url>
-            <snapshots><enabled>false</enabled></snapshots>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
         </pluginRepository>
     </pluginRepositories>
 
@@ -124,6 +126,7 @@
             <id>native</id>
             <build>
                 <plugins>
+                    <!-- 1. Spring Boot 插件：针对 GitHub Actions 或容器化构建（spring-boot:build-image） -->
                     <plugin>
                         <groupId>org.springframework.boot</groupId>
                         <artifactId>spring-boot-maven-plugin</artifactId>
@@ -135,7 +138,18 @@
                                 </goals>
                             </execution>
                         </executions>
+                        <configuration>
+                            <image>
+                                <builder>paketobuildpacks/builder-jammy-base:latest</builder>
+                                <env>
+                                    <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
+                                    <BP_NATIVE_IMAGE_BUILD_ARGUMENTS><![CDATA[--no-fallback -H:+ReportExceptionStackTraces -H:+AddAllCharsets -Djava.awt.headless=true --initialize-at-run-time=com.sksamuel.scrimage,com.twelvemonkeys,javax.imageio,java.awt,sun.awt,sun.java2d,sun.font,org.apache.commons.imaging]]></BP_NATIVE_IMAGE_BUILD_ARGUMENTS>
+                                </env>
+                            </image>
+                        </configuration>
                     </plugin>
+
+                    <!-- 2. GraalVM 插件：针对使用安装了 GraalVM 环境的本地或 CI 直接编译二进制文件 -->
                     <plugin>
                         <groupId>org.graalvm.buildtools</groupId>
                         <artifactId>native-maven-plugin</artifactId>
@@ -154,6 +168,10 @@
                             <buildArgs>
                                 <buildArg>--no-fallback</buildArg>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
+                                <buildArg>-H:+AddAllCharsets</buildArg>
+                                <buildArg>-Djava.awt.headless=true</buildArg>
+                                <!-- 延迟图形与图像处理核心包的初始化到运行时 -->
+                                <buildArg>--initialize-at-run-time=com.sksamuel.scrimage,com.twelvemonkeys,javax.imageio,java.awt,sun.awt,sun.java2d,sun.font,org.apache.commons.imaging</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

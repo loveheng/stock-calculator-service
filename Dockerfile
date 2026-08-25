@@ -1,23 +1,29 @@
-FROM alpine:3.19
+FROM ubuntu:22.04
 WORKDIR /application
 
-# 安装基础运行依赖、时区、动态链接兼容层，以及 AWT/ImageIO 必需的底层图形库和字体
-RUN apk add --no-cache \
+# 避免交互式弹窗，安装时区、AWT/ImageIO 核心字体和图形依赖库
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     ca-certificates \
-    gcompat \
-    libstdc++ \
-    && \
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone
+    libfreetype6 \
+    fontconfig \
+    fonts-dejavu-core \
+    libstdc++6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && dpkg-reconfigure --frontend noninteractive tzdata
 
-# 2. 安全非 root 用户
-RUN addgroup -S spring && adduser -S spring -G spring
+# 创建非 root 用户
+RUN groupadd -r spring && useradd -r -g spring spring
+
+# 复制 Native 二进制文件并赋予权限
+COPY --chown=spring:spring target/stock-calculator-service /application/stock-calculator-service
+RUN chmod +x /application/stock-calculator-service
+
 USER spring:spring
 
-# 3. 复制由 GitHub Actions 编译好的原生二进制文件
-COPY --chown=spring:spring target/stock-calculator-service /application/stock-calculator-service
+EXPOSE 18080
 
-EXPOSE 8080
-
-ENTRYPOINT ["/application/stock-calculator-service"]
+# 强制开启 headless 模式
+ENTRYPOINT ["/application/stock-calculator-service", "-Djava.awt.headless=true"]

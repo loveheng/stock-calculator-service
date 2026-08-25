@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 18080
   tomcat:
     # 限制内置 Tomcat 工作线程数（个人使用 10 个足够，默认 200 个会吃掉上百兆栈内存）
     threads:
