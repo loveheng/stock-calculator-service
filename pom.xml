@@ -161,8 +161,8 @@
                                 <buildArg>-H:+AddAllCharsets</buildArg>
                                 <buildArg>-H:EnableURLProtocols=https</buildArg>
                                 <buildArg>--enable-all-security-services</buildArg>
-                                <!-- 运行时遇到不支持的 API 报错而非静默失败 -->
-                                <buildArg>-H:+ReportUnsupportedFeaturesAtRuntime</buildArg>
+                                <!-- 运行时遇到不支持的 API 报错而非静默失败（GraalVM 21+ 已重命名为此选项） -->
+                                <buildArg>-H:+ReportUnsupportedElementsAtRuntime</buildArg>
                                 <!-- 安装退出信号处理器，Docker 环境下优雅关闭 -->
                                 <buildArg>--install-exit-handlers</buildArg>
                                 <!-- Jackson 2 需要在运行时初始化（而非构建时），否则 ObjectMapper 内部缓存会出错 -->
