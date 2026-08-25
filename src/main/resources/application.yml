@@ -14,7 +14,7 @@ spring:
     name: stock-calculator
   threads:
     virtual:
-      enabled: true
+      enabled: true  # Spring Boot 4.x 虚拟线程已默认启用，此处保留显式配置确保行为一致
   ai:
     openai:
       api-key: ${GEMINI_API_KEY:dummy-gemini-key}
@@ -33,3 +33,7 @@ main:
   banner-mode: "off"
   # 启用延迟初始化（按需加载 Bean，显著降低初始内存）
   lazy-initialization: true
+
+image:
+  service:
+    url: ${IMAGE_SERVICE_URL:http://localhost:8088}

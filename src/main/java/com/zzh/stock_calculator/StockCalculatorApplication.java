@@ -9,8 +9,6 @@ import org.springframework.cache.annotation.EnableCaching;
 public class StockCalculatorApplication {
 
 	public static void main(String[] args) {
-        // 在 Spring Boot 主类或 ImagePreprocessUtil 头部加上这句
-        System.setProperty("java.awt.headless", "true");
         SpringApplication.run(StockCalculatorApplication.class, args);
 	}
 

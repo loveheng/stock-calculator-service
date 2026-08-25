@@ -6,11 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzh.stock_calculator.common.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.Media;
+import org.springframework.ai.content.Media;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Component;
@@ -23,7 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class GeminiOcrExecutorImpl implements OcrExecutor {
 
-    private final ChatModel chatModel;
+    private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -45,16 +46,17 @@ public class GeminiOcrExecutorImpl implements OcrExecutor {
     private String callVisionModel(byte[] imageBytes, String promptText) {
         try {
             ByteArrayResource resource = new ByteArrayResource(imageBytes);
-            UserMessage userMessage = new UserMessage(
-                    promptText,
-                    List.of(new Media(MimeTypeUtils.IMAGE_JPEG, resource))
-            );
 
-            ChatResponse response = chatModel.call(new Prompt(userMessage));
-            if (response == null || response.getResult() == null) {
+            String content = chatClient.prompt()
+                    .user(u -> u.text(promptText)
+                            .media(MimeTypeUtils.IMAGE_JPEG, resource))
+                    .call()
+                    .content();
+
+            if (content == null || content.isBlank()) {
                 throw new BusinessException(500, "多模态大模型未返回有效数据");
             }
-            return response.getResult().getOutput().getText();
+            return content;
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {

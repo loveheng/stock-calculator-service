@@ -1,0 +1,27 @@
+FROM ubuntu:22.04
+WORKDIR /application
+
+# 避免交互式弹窗
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装最小运行时依赖与配置时区
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
+    ca-certificates \
+    libstdc++6 \
+    zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && dpkg-reconfigure --frontend noninteractive tzdata
+
+# 创建非 root 运行用户
+RUN groupadd -r spring && useradd -r -g spring spring
+
+# 拷贝 Native 二进制文件并授权
+COPY --chown=spring:spring --chmod=755 target/stock-calculator-service /application/stock-calculator-service
+
+USER spring:spring
+
+EXPOSE 18080
+
+ENTRYPOINT ["/application/stock-calculator-service"]

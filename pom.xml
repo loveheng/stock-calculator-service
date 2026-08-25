@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <version>3.4.3</version>
         <relativePath/>
     </parent>
 
@@ -17,12 +17,12 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.0.0-M6</spring-ai.version>
+        <spring-ai.version>2.0.0</spring-ai.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Spring AI 版本管理 -->
+            <!-- Spring AI BOM 版本管理 -->
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
@@ -33,17 +33,17 @@
         </dependencies>
     </dependencyManagement>
 
+
     <dependencies>
-        <!-- Web 模块 -->
+        <!-- Web 基础模块 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Spring AI OpenAI Starter -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
 
         <!-- Spring Cache 抽象 -->
@@ -52,22 +52,10 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
-        <!-- 高性能本地缓存实现 Caffeine -->
+        <!-- 高性能本地缓存 Caffeine (版本由 Boot Parent 自动管理) -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
-        </dependency>
-
-        <!-- 图像处理库 Scrimage -->
-        <dependency>
-            <groupId>com.sksamuel.scrimage</groupId>
-            <artifactId>scrimage-core</artifactId>
-            <version>4.1.3</version>
-        </dependency>
-        <dependency>
-            <groupId>com.sksamuel.scrimage</groupId>
-            <artifactId>scrimage-formats-extra</artifactId>
-            <version>4.1.3</version>
         </dependency>
 
         <!-- Lombok -->
@@ -75,10 +63,9 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
-            <scope>provided</scope>
         </dependency>
 
-        <!-- 标准测试组件 -->
+        <!-- 测试组件 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -86,74 +73,51 @@
         </dependency>
     </dependencies>
 
-    <!-- 基础构建插件 -->
+
+
     <build>
         <plugins>
+            <!-- Spring Boot 打包插件 -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- 显式配置编译插件与 Lombok 注解处理器（避免 Java 21 下偶发编译警告/反射异常） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
             </plugin>
         </plugins>
     </build>
 
-    <!-- 依赖仓库源：用于拉取 Spring AI 的 jar 包 -->
-    <repositories>
-        <repository>
-            <id>spring-milestones</id>
-            <name>Spring Milestones</name>
-            <url>https://repo.spring.io/milestone</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
-    </repositories>
-
-    <!-- 插件仓库源：用于拉取 Spring 构建插件 -->
-    <pluginRepositories>
-        <pluginRepository>
-            <id>spring-milestones</id>
-            <name>Spring Milestones</name>
-            <url>https://repo.spring.io/milestone</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </pluginRepository>
-    </pluginRepositories>
-
-    <!-- Native 原生编译 Profile -->
+    <!-- 原生镜像编译 Profile (需要 Native 时激活: mvn -Pnative package) -->
     <profiles>
         <profile>
             <id>native</id>
             <build>
                 <plugins>
-                    <!-- 1. Spring Boot 插件：针对 GitHub Actions 或容器化构建（spring-boot:build-image） -->
-                    <plugin>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>process-aot</id>
-                                <goals>
-                                    <goal>process-aot</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <image>
-                                <builder>paketobuildpacks/builder-jammy-base:latest</builder>
-                                <env>
-                                    <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
-                                    <BP_NATIVE_IMAGE_BUILD_ARGUMENTS><![CDATA[--no-fallback -H:+ReportExceptionStackTraces -H:+AddAllCharsets -H:EnableURLProtocols=https -Djava.awt.headless=true --initialize-at-run-time=com.sksamuel.scrimage,com.twelvemonkeys,javax.imageio,java.awt,sun.awt,sun.java2d,sun.font,org.apache.commons.imaging]]></BP_NATIVE_IMAGE_BUILD_ARGUMENTS>
-                                </env>
-                            </image>
-                        </configuration>
-                    </plugin>
-
-                    <!-- 2. GraalVM 插件：针对使用安装了 GraalVM 环境的本地或 CI 直接编译二进制文件 -->
                     <plugin>
                         <groupId>org.graalvm.buildtools</groupId>
                         <artifactId>native-maven-plugin</artifactId>
-                        <version>0.9.28</version>
+                        <extensions>true</extensions>
                         <executions>
                             <execution>
                                 <id>build-native</id>
@@ -170,9 +134,7 @@
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
                                 <buildArg>-H:+AddAllCharsets</buildArg>
                                 <buildArg>-H:EnableURLProtocols=https</buildArg>
-                                <buildArg>-Djava.awt.headless=true</buildArg>
-                                <!-- 延迟图形与图像处理核心包的初始化到运行时 -->
-                                <buildArg>--initialize-at-run-time=com.sksamuel.scrimage,com.twelvemonkeys,javax.imageio,java.awt,sun.awt,sun.java2d,sun.font,org.apache.commons.imaging</buildArg>
+                                <buildArg>--enable-all-security-services</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

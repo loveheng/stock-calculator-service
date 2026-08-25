@@ -6,15 +6,12 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
-
 import java.math.BigDecimal;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@RegisterReflectionForBinding({TradeDraftItem.class, TradeDirection.class, TradeStatus.class})
 public class TradeDraftItem {
 
 

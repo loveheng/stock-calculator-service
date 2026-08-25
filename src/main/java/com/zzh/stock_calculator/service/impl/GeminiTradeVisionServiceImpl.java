@@ -4,14 +4,17 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.zzh.stock_calculator.dto.TradeDraftItem;
 import com.zzh.stock_calculator.enums.TradeDirection;
 import com.zzh.stock_calculator.enums.TradeStatus;
+import com.zzh.stock_calculator.service.ImagePreprocessService;
 import com.zzh.stock_calculator.service.OcrExecutor;
 import com.zzh.stock_calculator.service.TradeVisionService;
-import com.zzh.stock_calculator.util.ImagePreprocessUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
@@ -25,6 +28,8 @@ import java.util.List;
 public class GeminiTradeVisionServiceImpl implements TradeVisionService {
 
     private final OcrExecutor ocrExecutor;
+
+    private final ImagePreprocessService imagePreprocessService;
 
     private static final String TRADE_OCR_PROMPT = """
             你是一个资深的金融证券交易记录与对账单提取专家。
@@ -47,7 +52,7 @@ public class GeminiTradeVisionServiceImpl implements TradeVisionService {
     @Override
     public List<TradeDraftItem> parseScreenshot(MultipartFile file) {
         // 1. 图像前置防御校验与自适应预处理
-        byte[] processedImage = ImagePreprocessUtil.validateAndProcess(file);
+        byte[] processedImage = imagePreprocessService.validateAndProcess(file);
 
         // 2. 计算处理后的唯一哈希
         String imageHash = DigestUtils.md5DigestAsHex(processedImage);
