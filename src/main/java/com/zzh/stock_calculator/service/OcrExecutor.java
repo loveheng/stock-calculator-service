@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.service;
 
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import tools.jackson.core.type.TypeReference;
 
 public interface OcrExecutor {
 

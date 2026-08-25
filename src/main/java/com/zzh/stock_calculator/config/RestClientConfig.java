@@ -13,7 +13,9 @@ import java.time.Duration;
 public class RestClientConfig {
 
     /**
-     * 基础 ClientHttpRequestFactory 配置（统一连接与读取超时）
+     * 基础 ClientHttpRequestFactory（统一连接与读取超时）。
+     * 注：Spring Boot 4 不再自动配置 RestClient.Builder Bean，且 org.springframework.boot.web.client
+     * 包在 4.1 中已不存在（故无 RestClientCustomizer），此处直接用 RestClient.builder() 构建具体实例。
      */
     private SimpleClientHttpRequestFactory requestFactory() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -27,8 +29,8 @@ public class RestClientConfig {
      */
     @Bean
     @Primary
-    public RestClient commonRestClient(RestClient.Builder builder) {
-        return builder
+    public RestClient commonRestClient() {
+        return RestClient.builder()
                 .requestFactory(requestFactory())
                 .build();
     }
@@ -38,9 +40,8 @@ public class RestClientConfig {
      */
     @Bean("imageRestClient")
     public RestClient imageRestClient(
-            RestClient.Builder builder,
             @Value("${image.service.url:http://localhost:8088}") String imageBaseUrl) {
-        return builder
+        return RestClient.builder()
                 .baseUrl(imageBaseUrl)
                 .requestFactory(requestFactory())
                 .build();

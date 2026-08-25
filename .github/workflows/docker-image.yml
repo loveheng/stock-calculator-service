@@ -1,4 +1,4 @@
-name: Build and Push Docker Image for Stock Calculator Service
+name: Build and Push Native Docker Image for Stock Calculator Service
 
 on:
   push:
@@ -26,30 +26,94 @@ jobs:
         run: |
           echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
-      # 3. 扩展 Runner 虚拟内存 (Swap Space 4GB/6GB，防止 GraalVM AOT 编译 OOM 崩溃)
+      # 3. 扩展 Runner 虚拟内存 (Swap Space)
+      #    native-image 直接调用时用 -J-Xmx7g，标准 GitHub Runner 只有 7GB RAM，
+      #    增加 8GB Swap 确保编译不 OOM。
       - name: 扩展虚拟内存 (Swap Space)
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 5
+          swap-size-gb: 8
 
-      # 4. 配置 GraalVM JDK 21 环境
-      - name: 配置 GraalVM JDK 21 环境
+      # 4. 配置 GraalVM JDK 25 环境（含 native-image 组件）
+      #    ⚠️ 必须使用 JDK 22+ (GraalVM 22.3+)：项目依赖 Spring Boot AOT 生成的
+      #    reachability-metadata.json 格式，该格式在 GraalVM 22.3 以下不支持。
+      #    本地开发环境使用 GraalVM 25.0.4 (JDK 25)，CI 保持一致。
+      - name: 配置 GraalVM JDK 25 环境
         uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '21'
+          java-version: '25'
           distribution: 'graalvm'
+          components: 'native-image'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: 'maven'
+          native-image-job-reports: true
 
-      # 5. 编译 Native 原生二进制文件（为 Maven 设置 MAVEN_OPTS 限制最大堆内存，确保稳定）
+      # 5. 编译 Native 原生二进制文件
+      #    与本地 build-native.sh 完全一致，直接调用 native-image 而非 native-maven-plugin
+      #    （native-maven-plugin:1.1.8 在 package 阶段会卡死），并显式剥离所有 test 相关 jar，
+      #    确保 spring-boot-test 的 spring.factories（ExcludeFilterApplicationContextInitializer）
+      #    绝不会进入镜像，否则运行时会 ClassNotFoundException 崩溃。
       - name: 编译 Native 二进制产物
         env:
-          MAVEN_OPTS: "-Xmx3g"
+          MAVEN_OPTS: "-Xmx2g"
         run: |
-          mvn -Pnative clean package -DskipTests -Dfile.encoding=UTF-8 \
+          set -e
+          echo "█████ 步骤 A: Maven compile + AOT 处理..."
+          # 只执行到 process-classes（compile + process-aot + compile-after-aot），
+          # 不执行 package，避免触发 native-maven-plugin 在 package 阶段卡死。
+          mvn -Pnative -DskipTests compile process-classes -q -Dfile.encoding=UTF-8 \
             -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
-      # 6. 登录 GitHub Container Registry (GHCR)
+          echo "█████ 步骤 B: 生成依赖 classpath 并剥离 test jar..."
+          mvn -Pnative dependency:build-classpath -Dmdep.outputFile=/tmp/cp.txt -q -Dfile.encoding=UTF-8 >/dev/null 2>&1
+          RAW_CP=$(cat /tmp/cp.txt)
+          STRIPPED=""
+          while IFS= read -r j; do
+            case "$j" in
+              *spring-boot-starter-test*|*spring-boot-test*|*junit*|*mockito*|*assertj*|*hamcrest*|*opentest4j*|*spring-test*|*json-path*|*json-smart*|*jsonassert*|*xmlunit*|*awaitility*)
+                continue ;;
+            esac
+            STRIPPED="$STRIPPED:$j"
+          done < <(printf '%s' "$RAW_CP" | tr ':' '\n')
+          CP="${STRIPPED#:}:target/classes:target/spring-aot/main/resources"
+          if [ -z "$CP" ] || [ "$CP" = ":target/classes:target/spring-aot/main/resources" ]; then
+            echo "❌ 错误：classpath 为空，dependency:build-classpath 可能失败。请检查 /tmp/cp.txt。"
+            exit 1
+          fi
+          echo "        生效 classpath jar 数量: $(printf '%s' "$CP" | tr ':' '\n' | grep -c '\.jar$')"
+
+          echo "█████ 步骤 C: 运行 native-image (此步耗时最长，约 8~15 分钟)..."
+          native-image \
+            -cp "$CP" \
+            -H:Class=com.zzh.stock_calculator.StockCalculatorApplication \
+            --no-fallback \
+            -J-Xmx7g \
+            --enable-all-security-services \
+            -H:+AddAllCharsets \
+            -H:EnableURLProtocols=https \
+            -H:+ReportUnsupportedElementsAtRuntime \
+            --install-exit-handlers \
+            --initialize-at-build-time=ch.qos.logback.classic,ch.qos.logback.core,org.slf4j \
+            -o target/stock-calculator-service \
+            -H:NumberOfThreads=8 \
+            > /tmp/ni-build.log 2>&1
+
+          echo "✅ Native 编译完成"
+
+      # 6. 验证 Native 二进制产物
+      - name: 验证 Native 二进制产物
+        run: |
+          ls -lh target/stock-calculator-service
+          file target/stock-calculator-service
+          # 快速启动验证（12 秒超时，仅检查进程能否正常初始化并监听端口）
+          # 服务未引入 actuator，因此直接探测任意 HTTP 端点（404 也说明服务已启动）
+          timeout 12 ./target/stock-calculator-service --server.port=19999 &
+          PID=$!
+          sleep 6
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:19999/ || echo " [服务未响应]"
+          kill $PID 2>/dev/null || true
+
+      # 7. 登录 GitHub Container Registry (GHCR)
       - name: 登录 GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -58,7 +122,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. 解析镜像 Tag 和 Labels
+      # 8. 解析镜像 Tag 和 Labels
       - name: 解析镜像 Tag 和 Label 标签
         id: meta
         uses: docker/metadata-action@v5
@@ -70,11 +134,11 @@ jobs:
             type=semver,pattern={{version}}
             type=sha,prefix=
 
-      # 8. 初始化 Docker Buildx
+      # 9. 初始化 Docker Buildx
       - name: 初始化 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 9. 构建并推送 Docker 镜像
+      # 10. 构建并推送最小镜像（单阶段 Dockerfile.native：仅拷贝预编译二进制 + 最小运行依赖）
       - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v5
         with:

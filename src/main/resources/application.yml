@@ -15,14 +15,12 @@ spring:
   threads:
     virtual:
       enabled: true  # Spring Boot 4.x 虚拟线程已默认启用，此处保留显式配置确保行为一致
-  ai:
-    openai:
-      api-key: ${GEMINI_API_KEY:dummy-gemini-key}
-      base-url: https://generativelanguage.googleapis.com/v1beta/openai
-      chat:
-        options:
-          model: gemini-3.6-flash
-          temperature: 0.0
+
+# Gemini 多模态识别（普通 REST 接口调用，不再依赖 Spring AI）
+gemini:
+  api-key: ${GEMINI_API_KEY:dummy-gemini-key}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+  model: ${GEMINI_MODEL:gemini-3.6-flash}
   cache:
     type: caffeine
     caffeine:
