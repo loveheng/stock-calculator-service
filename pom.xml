@@ -145,6 +145,8 @@
                         <configuration>
                             <imageName>stock-calculator-service</imageName>
                             <buildArgs>
+                                <!-- 限制 Native-image 编译器最大占用 5GB 内存，避免爆内存 -->
+                                <buildArg>-J-Xmx5g</buildArg>
                                 <buildArg>--no-fallback</buildArg>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
                                 <buildArg>-H:+AddAllCharsets</buildArg>

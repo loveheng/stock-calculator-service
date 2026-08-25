@@ -26,7 +26,13 @@ jobs:
         run: |
           echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
-      # 3. 配置 GraalVM JDK 21 环境
+      # 3. 扩展 Runner 虚拟内存 (Swap Space 4GB/6GB，防止 GraalVM AOT 编译 OOM 崩溃)
+      - name: 扩展虚拟内存 (Swap Space)
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 5
+
+      # 4. 配置 GraalVM JDK 21 环境
       - name: 配置 GraalVM JDK 21 环境
         uses: graalvm/setup-graalvm@v1
         with:
@@ -35,13 +41,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: 'maven'
 
-      # 4. 编译 Native 原生二进制文件（针对 GitHub Runner 内存优化）
+      # 5. 编译 Native 原生二进制文件（为 Maven 设置 MAVEN_OPTS 限制最大堆内存，确保稳定）
       - name: 编译 Native 二进制产物
+        env:
+          MAVEN_OPTS: "-Xmx3g"
         run: |
           mvn -Pnative clean package -DskipTests -Dfile.encoding=UTF-8 \
             -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
-      # 5. 登录 GitHub Container Registry (GHCR)
+      # 6. 登录 GitHub Container Registry (GHCR)
       - name: 登录 GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -50,7 +58,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 6. 解析镜像 Tag 和 Labels
+      # 7. 解析镜像 Tag 和 Labels
       - name: 解析镜像 Tag 和 Label 标签
         id: meta
         uses: docker/metadata-action@v5
@@ -62,11 +70,11 @@ jobs:
             type=semver,pattern={{version}}
             type=sha,prefix=
 
-      # 7. 初始化 Docker Buildx
+      # 8. 初始化 Docker Buildx
       - name: 初始化 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 8. 构建并推送 Docker 镜像
+      # 9. 构建并推送 Docker 镜像
       - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v5
         with:
