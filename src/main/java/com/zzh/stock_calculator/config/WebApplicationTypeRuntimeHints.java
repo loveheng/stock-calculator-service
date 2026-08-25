@@ -5,7 +5,6 @@ import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.aot.hint.TypeReference;
 import org.springframework.boot.WebApplicationType;
-import org.springframework.core.io.support.SpringFactoriesLoader;
 
 import java.util.List;
 
@@ -20,13 +19,19 @@ import java.util.List;
  */
 public class WebApplicationTypeRuntimeHints implements RuntimeHintsRegistrar {
 
+    /**
+     * Spring Boot 4.x 中 Web 应用的 {@link WebApplicationType.Deducer} 实现类。
+     * 使用 {@code SpringFactoriesLoader.loadFactoryNames()} 在 AOT 阶段动态读取不可靠，
+     * 因为传入的 ClassLoader 可能无法访问 spring-boot-webmvc 模块，导致返回空列表。
+     * 因此这里直接硬编码已知的实现类名，确保 Native Image 一定能注册反射 hint。
+     */
+    private static final List<String> WEBMVC_DEDUCER_CLASSES = List.of(
+            "org.springframework.boot.webmvc.WebMvcWebApplicationTypeDeducer"
+    );
+
     @Override
     public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
-        // 在 AOT 编译期，读取所有 Deducer 实现类名并注册反射
-        List<String> factoryNames = SpringFactoriesLoader.loadFactoryNames(
-                WebApplicationType.Deducer.class, classLoader);
-
-        for (String factoryName : factoryNames) {
+        for (String factoryName : WEBMVC_DEDUCER_CLASSES) {
             hints.reflection().registerType(
                     TypeReference.of(factoryName),
                     MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS);
