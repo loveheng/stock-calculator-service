@@ -35,11 +35,18 @@
 
 
     <dependencies>
+
         <!-- Web 基础模块 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+        </dependency>
+
 
         <dependency>
             <groupId>org.springframework.ai</groupId>
