@@ -99,18 +99,36 @@ jobs:
             > /tmp/ni-build.log 2>&1
 
           echo "✅ Native 编译完成"
+          # 冒烟校验：确认 native-image 确实是 25.x（若被旧 JDK 拦截则直接报错，避免产出 21 二进制）
+          native-image --version
+          if ! native-image --version | grep -qE '25\.[0-9]+'; then
+            echo "❌ CI 使用的 native-image 不是 GraalVM 25.x，已中止"
+            exit 1
+          fi
 
-      # 6. 验证 Native 二进制产物
+      # 6. 验证 Native 二进制产物（必须真正启动成功，否则中止，避免坏二进制被打进镜像）
       - name: 验证 Native 二进制产物
         run: |
+          set -e
           ls -lh target/stock-calculator-service
           file target/stock-calculator-service
-          # 快速启动验证（12 秒超时，仅检查进程能否正常初始化并监听端口）
-          # 服务未引入 actuator，因此直接探测任意 HTTP 端点（404 也说明服务已启动）
-          timeout 12 ./target/stock-calculator-service --server.port=19999 &
+          # 启动探测：能监听端口即启动成功；若启动阶段就崩（如 Deducer ClassNotFound）curl 连不上并中止
+          timeout 15 ./target/stock-calculator-service --server.port=19999 > /tmp/ci-probe.log 2>&1 &
           PID=$!
-          sleep 6
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:19999/ || echo " [服务未响应]"
+          sleep 7
+          echo "--- 启动日志关键行 ---"
+          grep -iE 'using Java|Tomcat started|Started Stock|Exception|Error|APPLICATION FAILED' /tmp/ci-probe.log || true
+          set +e
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:19999/)
+          CURL_RC=$?
+          set -e
+          if [ "$CURL_RC" -ne 0 ]; then
+            echo "❌ 二进制未能监听端口，启动阶段已崩溃。完整日志："
+            cat /tmp/ci-probe.log
+            kill $PID 2>/dev/null || true
+            exit 1
+          fi
+          echo "   ✅ 二进制启动成功，HTTP $CODE"
           kill $PID 2>/dev/null || true
 
       # 7. 登录 GitHub Container Registry (GHCR)
