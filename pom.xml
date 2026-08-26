@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
@@ -17,7 +17,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.0.0-M6</spring-ai.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
     </properties>
 
     <dependencyManagement>
@@ -26,7 +26,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>3.2.5</version>
+                <version>4.1.1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -42,22 +42,30 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Web 模块 -->
+        <!-- Spring Boot 4.x WebMVC Starter（官方推荐，非 deprecated）
+             包含 spring-boot-starter-jackson / Jackson 3 (tools.jackson)、Tomcat、Spring MVC。
+             Jackson 3 由 spring-boot-starter-jackson 传递引入，无需显式声明。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
-        <!-- Spring AI OpenAI Starter -->
+        <!-- Spring AI OpenAI Starter（Spring AI 2.x 起启用新命名，由 spring-ai-bom 管理版本） -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
 
         <!-- Spring Cache 抽象 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
+        <!-- 高性能本地缓存 Caffeine（版本由 Boot Parent 自动管理，application.yml 配置了 spring.cache.type=caffeine） -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
         </dependency>
 
         <!-- Lombok -->
