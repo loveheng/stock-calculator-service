@@ -47,8 +47,10 @@ jobs:
         with:
           context: .
           push: true
+          # 单架构镜像通常部署在 amd64 服务器；如需多架构可改为 'linux/amd64,linux/arm64'
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 开启 GitHub Actions 缓存加速编译
+          # 开启 GitHub Actions 缓存加速 Maven 依赖下载与编译层
           cache-from: type=gha
           cache-to: type=gha,mode=max
