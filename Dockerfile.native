@@ -1,0 +1,43 @@
+# ============================================================================
+# Stock Calculator Service — GraalVM Native 镜像（尽可能小）
+# 构建假设：native 二进制已由 CI/本地编译好（build-native.sh 或 mvn -Pnative package），
+#           本 Dockerfile 只负责打包成最小运行镜像，不再在镜像内编译。
+#
+# glibc 兼容性说明：
+#   CI (ubuntu-latest = Ubuntu 24.04, glibc 2.39) / 本地 GraalVM 编译出的二进制，
+#   运行基础镜像的 glibc 必须 >= 2.39，因此这里使用 ubuntu:24.04 作为基座。
+# ============================================================================
+FROM ubuntu:24.04
+
+# 避免交互式弹窗
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 只安装运行必需的最小依赖，并合并到单一 layer 减小体积：
+#   - libstdc++6 / zlib1g: GraalVM Native 二进制运行时需要
+#   - ca-certificates:     HTTPS 调用 Gemini API 需要
+#   - curl:                Docker HEALTHCHECK 需要（如不需要可移除，体积再减约 5MB）
+# 已移除 tzdata（省 ~7MB）：日志将使用默认 UTC 时区；如需 Shanghai 时区请自行加回 tzdata。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libstdc++6 \
+        zlib1g \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建非 root 运行用户
+RUN groupadd -r spring && useradd -r -g spring spring
+
+# 拷贝 Native 二进制文件并授权
+COPY --chown=spring:spring --chmod=755 target/stock-calculator-service /application/stock-calculator-service
+
+USER spring:spring
+
+EXPOSE 18080
+
+# 健康检查：服务未引入 actuator，直接探测 HTTP 端口是否响应
+#   - curl -s 忽略 HTTP 状态码（即使返回 404 也说明服务已启动）
+HEALTHCHECK --start-period=10s --timeout=5s --interval=30s --retries=3 \
+    CMD curl -s http://localhost:18080/ > /dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["/application/stock-calculator-service"]

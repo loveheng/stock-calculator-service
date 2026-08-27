@@ -1,0 +1,36 @@
+server:
+  port: 18080
+  tomcat:
+    # 限制内置 Tomcat 工作线程数（个人使用 10 个足够，默认 200 个会吃掉上百兆栈内存）
+    threads:
+      max: 10
+      min-spare: 2
+    # 限制连接与等待队列
+    max-connections: 50
+    accept-count: 20
+
+spring:
+  application:
+    name: stock-calculator
+  threads:
+    virtual:
+      enabled: true  # Spring Boot 4.x 虚拟线程已默认启用，此处保留显式配置确保行为一致
+
+# Gemini 多模态识别（普通 REST 接口调用，不再依赖 Spring AI）
+gemini:
+  api-key: ${GEMINI_API_KEY:dummy-gemini-key}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+  model: ${GEMINI_MODEL:gemini-3.6-flash}
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=300,expireAfterWrite=24h
+  main:
+    # 禁用 Spring 启动 Banner，微量减少启动开销
+    banner-mode: off
+    # 启用延迟初始化（按需加载 Bean，显著降低初始内存）
+    lazy-initialization: true
+
+image:
+  service:
+    url: ${IMAGE_SERVICE_URL:http://localhost:8088}

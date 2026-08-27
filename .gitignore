@@ -4,6 +4,18 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# GraalVM Native Image binary (when built outside target/)
+stock-calculator-service
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
 ### STS ###
 .apt_generated
 .classpath
@@ -31,3 +43,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Zed ###
+.zed/
