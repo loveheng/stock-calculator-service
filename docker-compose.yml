@@ -1,0 +1,19 @@
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - /data/redis/data:/data
+      - /data/redis/conf/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+  postgres:
+    image: postgres:18.4
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=zzh@scs.com
+      - POSTGRES_USER=root
+      - POSTGRES_DB=scs
+    volumes:
+      - /data/postgres/data:/var/lib/postgresql:Z

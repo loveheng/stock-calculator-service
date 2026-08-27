@@ -12,9 +12,24 @@ server:
 spring:
   application:
     name: stock-calculator
+  profiles:
+    active: postgres
   threads:
     virtual:
       enabled: true
+  sql:
+    init:
+      schema-locations: classpath*:db/${database}/schema.sql
+      data-locations: classpath*:db/${database}/data.sql
+  jpa:
+    hibernate:
+      diff-auto: none
+      open-in-view: false
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+      properties:
+        hibernate:
+          default_batch_fetch_size: 16
   ai:
     openai:
       api-key: ${GEMINI_API_KEY:dummy-gemini-key}
