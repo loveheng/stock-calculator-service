@@ -27,9 +27,9 @@ public class ClsSignTest {
 
             Map<String, Object> params = new TreeMap<>();
             params.put("app", "CailianpressWeb");
-            params.put("last_time", epochSecond); // 当前时间戳（秒）
+            params.put("last_time", 1787904773); // 当前时间戳（秒）
             params.put("os", "web");
-            params.put("refresh_type", 1);
+            params.put("refresh_type", 2);
             params.put("rn", 5);
             params.put("sv", "8.7.9");
 

@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -71,4 +72,10 @@ public class ClsArticleService {
                 stocks != null ? stocks.size() : 0);
         return true;
     }
+
+    public ClsArticle getMaxCtimeByClsArticle() {
+        Optional<ClsArticle> firstByOrderByCtimeDesc = articleRepository.findFirstByOrderByCtimeDesc();
+        return firstByOrderByCtimeDesc.get();
+    }
+
 }
