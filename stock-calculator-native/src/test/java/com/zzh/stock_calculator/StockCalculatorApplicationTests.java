@@ -8,6 +8,7 @@ class StockCalculatorApplicationTests {
 
 	@Test
 	void contextLoads() {
+
 	}
 
 }

@@ -42,6 +42,11 @@ spring:
     type: caffeine
     caffeine:
       spec: maximumSize=300,expireAfterWrite=24h
+  task:
+    scheduling:
+      pool:
+        size: 5
+      thread-name-prefix: stock-calculator-scheduler
 
 main:
   # 禁用 Spring 启动 Banner，微量减少启动开销

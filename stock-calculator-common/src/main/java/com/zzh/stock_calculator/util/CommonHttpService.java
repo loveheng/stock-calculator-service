@@ -21,12 +21,38 @@ public class CommonHttpService {
      * 通用 GET 请求
      */
     public <T> T get(String url, Class<T> responseType, Map<String, ?> uriVariables) {
+
         return restClient.get()
                 .uri(url, uriVariables)
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .body(responseType);
     }
+
+    public <T> T get(String url, Class<T> responseType, Map<String, ?> queryParams, Map<String, String> headerMap) {
+
+        return restClient.get()
+                .uri(url, uriBuilder -> {
+                    // 遍历 Map，逐个添加 QueryParam
+                    if (queryParams != null) {
+                        queryParams.forEach((key, value) -> {
+                            if (value != null) {
+                                uriBuilder.queryParam(key, value);
+                            }
+                        });
+                    }
+                    return uriBuilder.build();
+                })
+                .accept(MediaType.APPLICATION_JSON)
+                .headers(httpHeaders -> {
+                    if (headerMap != null) {
+                        headerMap.forEach(httpHeaders::set);
+                    }
+                })
+                .retrieve()
+                .body(responseType);
+    }
+
 
     /**
      * 通用 POST JSON 请求

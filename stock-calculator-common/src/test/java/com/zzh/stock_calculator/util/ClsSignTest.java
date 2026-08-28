@@ -23,7 +23,6 @@ public class ClsSignTest {
             // 1. 构造请求参数
             long epochSecond = Instant.now().getEpochSecond();
             log.info("当前时间："+epochSecond);
-
             epochSecond=1787816196;
 
             Map<String, Object> params = new TreeMap<>();
