@@ -35,8 +35,8 @@ public class TaskService {
 
     @Scheduled(fixedDelay = 5000)
     public void fixedDelayTask() {
-        Map<String, Object> params = getClsUrl();
-        Map<String, Object> result = commonHttpService.get("https://www.cls.cn/api/cache", Map.class, params, getHeader());
+
+        Map<String, Object> result = getClsCache();
 
         Object dataObj = result.get("data");
         if (!(dataObj instanceof Map<?, ?> dataMap)) {
@@ -63,6 +63,12 @@ public class TaskService {
         if (newCount > 0) {
             log.info("saved {} new articles from this fetch", newCount);
         }
+    }
+
+    private Map<String, Object> getClsCache() {
+        Map<String, Object> params = getClsCacheUrl();
+        Map<String, Object> result = commonHttpService.get("https://www.cls.cn/api/cache", Map.class, params, getHeader());
+        return result;
     }
 
     @SuppressWarnings("unchecked")
@@ -257,7 +263,7 @@ public class TaskService {
         return defaultVal;
     }
 
-    private Map<String, Object> getClsUrl() {
+    private Map<String, Object> getClsCacheUrl() {
 
         Map<String, Object> params = new TreeMap<>();
 
