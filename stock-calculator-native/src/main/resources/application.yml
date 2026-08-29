@@ -12,25 +12,39 @@ server:
 spring:
   application:
     name: stock-calculator
+  profiles:
+    active: postgres
   threads:
     virtual:
-      enabled: true  # Spring Boot 4.x 虚拟线程已默认启用，此处保留显式配置确保行为一致
-
-# Gemini 多模态识别（普通 REST 接口调用，不再依赖 Spring AI）
-gemini:
-  api-key: ${GEMINI_API_KEY:dummy-gemini-key}
-  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
-  model: ${GEMINI_MODEL:gemini-3.6-flash}
+      enabled: true
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 16
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
   cache:
     type: caffeine
     caffeine:
       spec: maximumSize=300,expireAfterWrite=24h
+  task:
+    scheduling:
+      pool:
+        size: 5
+      thread-name-prefix: stock-calculator-scheduler
   main:
     # 禁用 Spring 启动 Banner，微量减少启动开销
-    banner-mode: off
+    banner-mode: "off"
     # 启用延迟初始化（按需加载 Bean，显著降低初始内存）
     lazy-initialization: true
 
-image:
-  service:
-    url: ${IMAGE_SERVICE_URL:http://localhost:8088}
+# Gemini 多模态识别（native 变体走自建 RestClient，读 gemini.*，不依赖 Spring AI）
+gemini:
+  api-key: ${GEMINI_API_KEY:dummy-gemini-key}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+  model: ${GEMINI_MODEL:gemini-3.6-flash}
+crawler:
+  enabled: true

@@ -14,7 +14,7 @@
 #     且自动剥离 test jar 避免 ExcludeFilter... 崩溃)
 #   - 校验二进制自报"使用 Java 25"后才允许打包
 #   - docker build --no-cache,避免 COPY 命中旧层
-#   - 不依赖当前 sdkman current 指向谁(主动从已安装的 25.0.x 里挑)
+#   - 不依赖 sdkman（按 JAVA_HOME → /opt/GraalVM25 → PATH 探测）
 #
 # 用法:
 #   ./package-native.sh                    # 完整: 编译 + 打镜像
@@ -41,27 +41,29 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---------------- 步骤 0: 锁定 GraalVM 25.0.x ----------------
-# 这个脚本的核心动作:强行以 25.0.x 编译,不许用 21,也不许用 sdkman current。
-JAVA_HOME=""
-for cand in ~/.sdkman/candidates/java/25.0.*-graal ~/.sdkman/candidates/java/25.0.*; do
-  if [ -f "$cand/bin/native-image" ]; then
-    JAVA_HOME="$cand"
-    break
-  fi
-done
-
-if [ -z "$JAVA_HOME" ]; then
-  echo "❌ 未找到 GraalVM 25.0.x 的 native-image。请先: sdk install java 25.0.4-graal" >&2
+# 不再依赖 sdkman。探测顺序：JAVA_HOME → /opt/GraalVM25 → PATH。
+GRAALVM_HOME=""
+if [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/native-image" ]; then
+  GRAALVM_HOME="$JAVA_HOME"
+elif [ -x "/opt/GraalVM25/bin/native-image" ]; then
+  GRAALVM_HOME="/opt/GraalVM25"
+elif command -v native-image >/dev/null 2>&1; then
+  GRAALVM_HOME=""   # native-image 已在 PATH 上，直接用
+else
+  echo "❌ 未找到 GraalVM 25.0.x 的 native-image（已检查 JAVA_HOME、/opt/GraalVM25、PATH）。" >&2
   exit 1
 fi
-export JAVA_HOME
-export PATH="$JAVA_HOME/bin:$PATH"
 
-echo "════════════════════════════════════════════════════════════════"
-echo " 确定性打包 (GraalVM: 从 sdkman 锁定 25.0.x)"
-echo "   JAVA_HOME       = $JAVA_HOME"
+if [ -n "$GRAALVM_HOME" ]; then
+  export JAVA_HOME="$GRAALVM_HOME"
+  export PATH="$GRAALVM_HOME/bin:$PATH"
+fi
+
+echo "════════════════════════════════════════════════════════════"
+echo " 确定性打包 (GraalVM: JAVA_HOME → /opt/GraalVM25 → PATH)"
+echo "   JAVA_HOME       = ${JAVA_HOME:-来自 PATH 的 native-image}"
 echo "   native-image    = $(native-image --version 2>&1 | head -1)"
-echo "════════════════════════════════════════════════════════════════"
+echo "════════════════════════════════════════════════════════════"
 
 # 硬性下线检查:绝不允许 21 混入
 if ! native-image --version 2>&1 | grep -qE '25\.0\.[0-9]+'; then
