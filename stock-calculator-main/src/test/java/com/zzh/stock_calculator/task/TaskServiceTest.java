@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 public class TaskServiceTest {
 
     @Autowired
-    private  TaskService taskService;
+    private ClsDayTask taskService;
 
     @Test
     void testFixedDelayTask() {

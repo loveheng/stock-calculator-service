@@ -75,7 +75,12 @@ public class ClsArticleService {
 
     public ClsArticle getMaxCtimeByClsArticle() {
         Optional<ClsArticle> firstByOrderByCtimeDesc = articleRepository.findFirstByOrderByCtimeDesc();
-        return firstByOrderByCtimeDesc.get();
+        return firstByOrderByCtimeDesc.orElse(null);
     }
+
+    public Long findHistoryMinCtime(long startTime, long endTime) {
+        return articleRepository.findHistoryMinCtime(startTime, endTime);
+    };
+
 
 }

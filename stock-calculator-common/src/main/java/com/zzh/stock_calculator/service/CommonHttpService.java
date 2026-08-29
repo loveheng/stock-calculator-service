@@ -1,5 +1,6 @@
-package com.zzh.stock_calculator.util;
+package com.zzh.stock_calculator.service;
 
+import com.zzh.stock_calculator.util.HttpUtil;
 import org.springframework.stereotype.Component;
 
 import org.springframework.core.ParameterizedTypeReference;
@@ -23,7 +24,7 @@ public class CommonHttpService {
     public <T> T get(String url, Class<T> responseType, Map<String, ?> uriVariables) {
 
         return restClient.get()
-                .uri(url, uriVariables)
+                .uri(url, HttpUtil.setGetRequestParam(uriVariables))
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .body(responseType);
@@ -32,17 +33,7 @@ public class CommonHttpService {
     public <T> T get(String url, Class<T> responseType, Map<String, ?> queryParams, Map<String, String> headerMap) {
 
         return restClient.get()
-                .uri(url, uriBuilder -> {
-                    // 遍历 Map，逐个添加 QueryParam
-                    if (queryParams != null) {
-                        queryParams.forEach((key, value) -> {
-                            if (value != null) {
-                                uriBuilder.queryParam(key, value);
-                            }
-                        });
-                    }
-                    return uriBuilder.build();
-                })
+                .uri(url, HttpUtil.setGetRequestParam(queryParams))
                 .accept(MediaType.APPLICATION_JSON)
                 .headers(httpHeaders -> {
                     if (headerMap != null) {
@@ -77,4 +68,6 @@ public class CommonHttpService {
                 .retrieve()
                 .body(responseType);
     }
+
+
 }

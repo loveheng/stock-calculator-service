@@ -1,5 +1,6 @@
 # ==========================================
 # 第一阶段：编译（Java 21，与 pom.xml 的 java.version 一致）
+# 多模块构建：只拷贝 main 变体及其依赖（common + 父 POM），不拷贝 native 模块
 # ==========================================
 FROM bellsoft/liberica-openjdk-alpine:21 AS builder
 WORKDIR /build
@@ -7,12 +8,14 @@ WORKDIR /build
 # 安装 maven
 RUN apk add --no-cache maven
 
-# 复制 pom.xml 与源码
-COPY pom.xml .
-COPY src ./src
+# 复制构建所需的 POM 与模块源码（多模块：父 POM + common + main）
+COPY .mvn ./.mvn
+COPY mvnw pom.xml ./
+COPY stock-calculator-common ./stock-calculator-common
+COPY stock-calculator-main ./stock-calculator-main
 
-# 编译打包（跳过单测；Docker 构建由 GitHub Actions 的 type=gha 缓存加速依赖下载与编译层）
-RUN mvn -B clean package -DskipTests -Dfile.encoding=UTF-8
+# 只构建 main 变体及其依赖（-pl stock-calculator-main -am），跳过单测
+RUN mvn -B clean package -DskipTests -pl stock-calculator-main -am -Dfile.encoding=UTF-8
 
 # ==========================================
 # 第二阶段：极简生产运行时
@@ -31,8 +34,8 @@ RUN apk add --no-cache tzdata && \
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
 
-# 3. 拷贝可执行 jar
-COPY --from=builder /build/target/*.jar ./app.jar
+# 3. 拷贝可执行 jar（main 变体的 boot jar）
+COPY --from=builder /build/stock-calculator-main/target/*.jar ./app.jar
 
 EXPOSE 18080
 
@@ -48,5 +51,5 @@ ENV JAVA_OPTS="-XX:+UseSerialGC \
                -Djava.awt.headless=true \
                -Dfile.encoding=UTF-8"
 
-# 仅注入 API Key；base-url 与 model 使用 application.yml 默认值（Gemini 的 OpenAI 兼容端点）
+# 注入 Gemini API Key 与数据库连接（main 变体含爬虫，需要 PostgreSQL）
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dspring.ai.openai.api-key=${GEMINI_API_KEY:-dummy-gemini-key} -jar app.jar"]
