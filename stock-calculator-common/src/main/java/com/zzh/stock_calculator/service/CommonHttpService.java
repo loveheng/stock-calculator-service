@@ -24,7 +24,7 @@ public class CommonHttpService {
     public <T> T get(String url, Class<T> responseType, Map<String, ?> uriVariables) {
 
         return restClient.get()
-                .uri(url, HttpUtil.setGetRequestParam(uriVariables))
+                .uri(HttpUtil.buildGetUri(url, uriVariables))
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .body(responseType);
@@ -33,7 +33,7 @@ public class CommonHttpService {
     public <T> T get(String url, Class<T> responseType, Map<String, ?> queryParams, Map<String, String> headerMap) {
 
         return restClient.get()
-                .uri(url, HttpUtil.setGetRequestParam(queryParams))
+                .uri(HttpUtil.buildGetUri(url, queryParams))
                 .accept(MediaType.APPLICATION_JSON)
                 .headers(httpHeaders -> {
                     if (headerMap != null) {

@@ -46,3 +46,6 @@ build/
 
 ### Zed ###
 .zed/
+
+### Python ###
+__pycache__/
