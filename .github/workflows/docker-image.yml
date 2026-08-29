@@ -16,6 +16,24 @@ jobs:
       contents: read
       packages: write
 
+    # build-native.sh 步骤 4 的启动测试需要真实连库（EMF 初始化时 Hikari
+    # 要拿连接探测方言），与本地 docker-compose 的 postgres 保持同版本同账号，
+    # 应用侧零配置（application-postgres.yml 的默认值即 localhost/scs）。
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: zzh@scs.com
+          POSTGRES_DB: scs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       # 1. 检出代码
       - name: 检出代码

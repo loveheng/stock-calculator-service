@@ -127,11 +127,18 @@ if missing:
 
 classes = sorted(set(present) | set(logger_classes) | (service_providers & all_names))
 
-# merge any previously captured tracing-agent metadata (target/agent-config) so a
-# single consolidated file is produced; agent entries take precedence on conflict
+# merge tracing-agent metadata so a single consolidated file is produced.
+# agent-config/ (committed to the repo) is preferred; target/agent-config/ is
+# a legacy local-only location. WITHOUT this file CI builds would only get the
+# generator's ~132 reflection entries — the ~1683 agent-recorded entries cover
+# runtime gaps (hikari internals, jdbc driver wiring, …) that are invisible to
+# static analysis and not derivable from the classpath. It is committed on
+# purpose (like the graalvm reachability-metadata project does); re-record with
+# native-image-agent when hibernate/dependency upgrades change the boot path.
 agent_meta = {'reflection': [], 'resources': []}
-agent_dir = 'target/agent-config'
-if os.path.exists(os.path.join(agent_dir, 'reachability-metadata.json')):
+agent_dir = next((d for d in ('agent-config', 'target/agent-config')
+                  if os.path.exists(os.path.join(d, 'reachability-metadata.json'))), None)
+if agent_dir:
     agent_meta = json.load(open(os.path.join(agent_dir, 'reachability-metadata.json')))
 
 def type_of(entry):
@@ -189,21 +196,31 @@ for fq in classes:
 
 res_patterns = {e.get('pattern') or e.get('glob') for e in agent_meta.get('resources', [])}
 merged_res = list(agent_meta.get('resources', []))
+# NOTE: must use the 'glob' key — GraalVM 25 silently ignores 'pattern' entries in
+# the consolidated reachability-metadata.json resources section (agent capture
+# emits glob; CI builds have no agent-config, so the generator's own entries are
+# the only resource includes and must actually take effect)
 for pat in ('org/hibernate/.*\\.(dtd|xsd)', 'jakarta/persistence/.*\\.(dtd|xsd)'):
     if not any(p and p == pat for p in res_patterns):
-        merged_res.append({'pattern': pat})
+        merged_res.append({'glob': pat})
 
 out_dir = 'target/classes/META-INF/native-image/com.zzh/ni-logger-config'
 os.makedirs(out_dir, exist_ok=True)
 with open(os.path.join(out_dir, 'reachability-metadata.json'), 'w') as f:
     json.dump({'reflection': merged, 'resources': merged_res}, f, indent=2)
 
-# Exclusion of the BytecodeProvider service file goes into a classic
-# resource-config.json: excludes semantics are guaranteed there, while the
-# consolidated reachability-metadata.json resources section is an opaque flat
-# pattern list (unknown keys risk a parse failure of the whole file).
+# DTD/XSD schema resources are registered in the classic resource-config.json
+# (includes), NOT via the consolidated reachability-metadata.json resources
+# section: on GraalVM 25 the latter does not include resources into the image
+# (verified: both 'pattern' and 'glob' keys are silently ignored there), while
+# classic resource-config.json includes do work. Without this, EMF boot fails
+# with XmlInfrastructureException: Unable to locate schema
+# [org/hibernate/hibernate-mapping-3.0.dtd] via classpath
 with open(os.path.join(out_dir, 'resource-config.json'), 'w') as f:
-    json.dump({'resources': {'includes': [], 'excludes': [
+    json.dump({'resources': {'includes': [
+        {'pattern': 'org/hibernate/.*\\.(dtd|xsd)'},
+        {'pattern': 'jakarta/persistence/.*\\.(dtd|xsd)'},
+    ], 'excludes': [
         {'pattern': 'META-INF/services/org\\.hibernate\\.bytecode\\.spi\\.BytecodeProvider'},
     ]}}, f, indent=2)
 print(f'gen-logger-config: registered {len(merged)} reflection entries '
