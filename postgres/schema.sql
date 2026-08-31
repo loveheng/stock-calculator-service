@@ -95,3 +95,57 @@ CREATE TABLE if not exists public.stock (
 	updated_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
 	CONSTRAINT stock_pkey PRIMARY KEY (stock_id)
 );
+
+-- ============================================================
+-- E2EE 用户服务（docs/e2ee-auth-backend-design.md §D.3）
+-- IF NOT EXISTS 幂等，无需停机；gen_random_uuid() 为 PG13+ 内置
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.users (
+	id uuid NOT NULL,
+	email varchar(255) NOT NULL,
+	password_hash varchar(60) NOT NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NULL,
+	updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NULL,
+	CONSTRAINT users_pkey PRIMARY KEY (id),
+	CONSTRAINT users_email_key UNIQUE (email)
+);
+
+CREATE TABLE IF NOT EXISTS public.user_profiles (
+	id uuid NOT NULL,
+	password_payload text NOT NULL,
+	password_iv varchar(32) NOT NULL,
+	recovery_payload text NOT NULL,
+	recovery_iv varchar(32) NOT NULL,
+	updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NULL,
+	CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+	CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES public.users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS public.auth_sessions (
+	id uuid NOT NULL DEFAULT gen_random_uuid(),
+	user_id uuid NOT NULL,
+	token_hash varchar(64) NOT NULL,
+	scope varchar(16) NOT NULL DEFAULT 'full',
+	expires_at timestamptz NOT NULL,
+	last_seen_at timestamptz NULL,
+	revoked_at timestamptz NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NULL,
+	CONSTRAINT auth_sessions_pkey PRIMARY KEY (id),
+	CONSTRAINT auth_sessions_token_hash_key UNIQUE (token_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON public.auth_sessions USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON public.auth_sessions USING btree (expires_at);
+
+CREATE TABLE IF NOT EXISTS public.otp_codes (
+	id bigserial NOT NULL,
+	email varchar(255) NOT NULL,
+	code_hash varchar(64) NOT NULL,
+	purpose varchar(16) NOT NULL DEFAULT 'recovery',
+	attempts int4 NOT NULL DEFAULT 0,
+	expires_at timestamptz NOT NULL,
+	consumed_at timestamptz NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NULL,
+	CONSTRAINT otp_codes_pkey PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS idx_otp_codes_email ON public.otp_codes USING btree (email);

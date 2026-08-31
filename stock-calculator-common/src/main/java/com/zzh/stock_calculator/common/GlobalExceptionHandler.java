@@ -23,6 +23,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleGenericException(Exception e) {
         log.error("系统未知异常", e);
-        return ApiResponse.fail(500, "截图解析服务暂不可用，请稍后重试");
+        return ApiResponse.fail(500, "系统繁忙，请稍后重试");
     }
 }

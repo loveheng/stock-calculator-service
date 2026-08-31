@@ -4,10 +4,7 @@ package com.zzh.stock_calculator.service;
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.util.ImageHeaderUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
@@ -19,17 +16,6 @@ public class ImagePreprocessService {
     private static final double MAX_ASPECT_RATIO = 5;         // 支持约 2~2.5 屏长度的滚动长截图
     private static final double MIN_ASPECT_RATIO = 0.45;        // 竖屏下限
     private static final int MAX_INPUT_HEIGHT = 5200;           // 高度放宽至 5200px（约 10~15 笔交易）
-
-    // 缩放目标尺寸：最大宽 1200px，最大高 4800px
-    private static final int TARGET_MAX_WIDTH = 1200;
-    private static final int TARGET_MAX_HEIGHT = 5000;
-    private static final int DEFAULT_JPEG_QUALITY = 80;
-
-    private final RestClient imageRestClient;
-    // 直接注入配置好的 imageRestClient
-    public ImagePreprocessService(@Qualifier("imageRestClient") RestClient imageRestClient) {
-        this.imageRestClient = imageRestClient;
-    }
 
     public byte[] validateAndProcess(MultipartFile file) {
         // 1. 基础大小校验
@@ -63,26 +49,6 @@ public class ImagePreprocessService {
             if (aspectRatio < MIN_ASPECT_RATIO) {
                 throw new BusinessException(400, "图片比例过于扁平，请上传手机垂直竖屏截图");
             }
-
-            /*
-            // 4. 计算实际目标缩放尺寸（只缩小不放大，避免拉伸失真）
-            int targetW = Math.min(width, TARGET_MAX_WIDTH);
-            int targetH = Math.min(height, TARGET_MAX_HEIGHT);
-
-            // 5. 调用外部主流轻量图像服务 (imaginary) 进行等比自适应缩放 + 转码为优化后的 JPEG
-            return imageRestClient.post()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/resize")
-                            .queryParam("width", targetW)
-                            .queryParam("height", targetH)
-                            .queryParam("type", "jpeg")
-                            .queryParam("quality", DEFAULT_JPEG_QUALITY)
-                            .queryParam("stripmeta", true)
-                            .build())
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .body(rawBytes)
-                    .retrieve()
-                    .body(byte[].class);*/
 
             return rawBytes;
 

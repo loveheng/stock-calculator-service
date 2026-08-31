@@ -1,9 +1,9 @@
-database: postgres
 spring:
   datasource:
     url: ${POSTGRES_URL:jdbc:postgresql://localhost/scs}
     username: ${POSTGRES_USER:root}
-    password: ${POSTGRES_PASS:zzh@scs.com}
+    # 口令不落库：必须通过 POSTGRES_PASS 环境变量注入
+    password: ${POSTGRES_PASS:}
   sql:
     init:
       mode: never

@@ -1,8 +1,8 @@
 package com.zzh.stock_calculator.util;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +10,7 @@ import java.util.List;
 @Slf4j
 public class ParseDataUtil {
 
+    /** Boot 4 默认 Jackson 3（tools.jackson）；readValue 抛 unchecked JacksonException，catch 语义不变 */
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     private static final TypeReference<List<String>> JSON_STRING_LIST_TYPE =
             new TypeReference<List<String>>() {};

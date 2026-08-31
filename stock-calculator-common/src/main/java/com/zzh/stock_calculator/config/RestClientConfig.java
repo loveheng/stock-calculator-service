@@ -1,6 +1,5 @@
 package com.zzh.stock_calculator.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -25,24 +24,13 @@ public class RestClientConfig {
     }
 
     /**
-     * 1. 全局通用的 RestClient（用于没有固定 baseUrl 的临时请求）
+     * 全局通用的 RestClient（用于没有固定 baseUrl 的临时请求）。
+     * native 变体下与 geminiRestClient 并存，@Primary 供 CommonHttpService 按类型注入。
      */
     @Bean
     @Primary
     public RestClient commonRestClient() {
         return RestClient.builder()
-                .requestFactory(requestFactory())
-                .build();
-    }
-
-    /**
-     * 2. 图像处理专用 RestClient（绑定 imgproxy / imaginary 的 baseUrl）
-     */
-    @Bean("imageRestClient")
-    public RestClient imageRestClient(
-            @Value("${image.service.url:http://localhost:8088}") String imageBaseUrl) {
-        return RestClient.builder()
-                .baseUrl(imageBaseUrl)
                 .requestFactory(requestFactory())
                 .build();
     }

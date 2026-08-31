@@ -17,14 +17,14 @@ jobs:
       packages: write
 
     # build-native.sh 步骤 4 的启动测试需要真实连库（EMF 初始化时 Hikari
-    # 要拿连接探测方言），与本地 docker-compose 的 postgres 保持同版本同账号，
-    # 应用侧零配置（application-postgres.yml 的默认值即 localhost/scs）。
+    # 要拿连接探测方言），与本地 docker-compose 的 postgres 保持同版本同账号。
+    # 口令经 POSTGRES_PASS 注入下方编译步骤（优先取 secrets.CI_POSTGRES_PASSWORD）。
     services:
       postgres:
         image: postgres:18.4
         env:
           POSTGRES_USER: root
-          POSTGRES_PASSWORD: zzh@scs.com
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
           POSTGRES_DB: scs
         ports:
           - 5432:5432
@@ -45,7 +45,7 @@ jobs:
           echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       # 3. 扩展 Runner 虚拟内存 (Swap Space)
-      #    GitHub Runner 只有 7GB RAM，build-native.sh 里 native-image 用 -J-Xmx7g，
+      #    main 变体含 Spring AI 全家桶（173 jar），native-image 用 -J-Xmx12g，
       #    增加 8GB Swap 确保编译不 OOM。
       - name: 扩展虚拟内存 (Swap Space)
         uses: pierotofy/set-swap-space@master
@@ -71,7 +71,9 @@ jobs:
       #    -> 生成 classpath 并剥离 test jar -> native-image -> 启动测试（失败即中止）
       #    任一步骤失败脚本都会 exit 1，坏二进制不会进入镜像。
       - name: 编译 Native 二进制 (build-native.sh)
-        run: bash stock-calculator-native/build-native.sh
+        env:
+          POSTGRES_PASS: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: bash stock-calculator-main/build-native.sh
 
       # 6. 登录 GitHub Container Registry (GHCR)
       - name: 登录 GHCR
@@ -98,13 +100,13 @@ jobs:
       - name: 初始化 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 9. 构建并推送最小镜像（Dockerfile.native 在 native 模块目录内，
+      # 9. 构建并推送最小镜像（Dockerfile.native 在 main 模块目录内，
       #    context 必须同为该目录，才能 COPY 到模块 target/ 下的二进制）
       - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v5
         with:
-          context: ./stock-calculator-native
-          file: ./stock-calculator-native/Dockerfile.native
+          context: ./stock-calculator-main
+          file: ./stock-calculator-main/Dockerfile.native
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

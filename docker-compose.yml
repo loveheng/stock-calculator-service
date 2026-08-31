@@ -1,18 +1,11 @@
 services:
-  redis:
-    image: redis:latest
-    ports:
-      - "6379:6379"
-    volumes:
-      - /data/redis/data:/data
-      - /data/redis/conf/redis.conf:/usr/local/etc/redis/redis.conf
-    command: redis-server /usr/local/etc/redis/redis.conf
   postgres:
     image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_PASSWORD=zzh@scs.com
+      # 口令从项目根 .env 注入（compose 自动加载）；仅首次初始化数据卷时生效
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?请在项目根 .env 中设置 POSTGRES_PASSWORD}
       - POSTGRES_USER=root
       - POSTGRES_DB=scs
     volumes:

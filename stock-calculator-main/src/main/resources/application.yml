@@ -48,6 +48,24 @@ spring:
     banner-mode: "off"
     # 启用延迟初始化（按需加载 Bean，显著降低初始内存）
     lazy-initialization: true
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 crawler:
   enabled: true
+  # /api/admin/sync 管理端点令牌；未配置时端点拒绝所有请求
+  admin-token: ${CRAWLER_ADMIN_TOKEN:}
+
+app:
+  auth:
+    # E2EE 用户服务总开关：native 变体的 application.yml 不配置此项，即整体关闭
+    enabled: true

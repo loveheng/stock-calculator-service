@@ -19,7 +19,6 @@
     <modules>
         <module>stock-calculator-common</module>
         <module>stock-calculator-main</module>
-        <module>stock-calculator-native</module>
     </modules>
     <dependencyManagement>
         <dependencies>
