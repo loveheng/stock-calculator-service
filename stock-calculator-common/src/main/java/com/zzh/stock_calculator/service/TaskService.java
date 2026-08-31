@@ -109,4 +109,5 @@ public class TaskService {
     public Long findHistoryMinCtime(Long sartTime,Long endTime) {
         return clsArticleService.findHistoryMinCtime(sartTime, endTime);
     }
+
 }
