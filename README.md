@@ -1,12 +1,12 @@
 # Stock Calculator Service
 
-基于 **Spring Boot 4.x** 的多模块服务：**股票交易截图智能识别（OCR + LLM）** 与 **财联社快讯数据采集**。用户上传股票交易截图，通过 **Google Gemini 多模态大模型** 自动识别并提取成交流水，生成结构化交易明细数据；内置财联社快讯爬虫，将快讯及其关联股票/题材入库（PostgreSQL）。
+基于 **Spring Boot 4.x** 的单模块服务：**股票交易截图智能识别（OCR + LLM）** 与 **财联社快讯数据采集**。用户上传股票交易截图，通过 **Google Gemini 多模态大模型** 自动识别并提取成交流水，生成结构化交易明细数据；内置财联社快讯爬虫，将快讯及其关联股票/题材入库（PostgreSQL）。
 
 | 模块 | 定位 | AI 接入 | JSON 序列化 | 数据库 | 运行形态 |
 |------|------|---------|-------------|--------|----------|
-| `stock-calculator-main` | OCR 服务 + CLS 爬虫（全功能） | Spring AI（Gemini OpenAI 兼容端点） | Jackson 3（tools.jackson） | PostgreSQL（必需） | JVM Fat JAR 或 GraalVM Native Image（推荐生产） |
+| `stock-calculator-main` | 唯一模块：OCR 服务 + CLS 爬虫 + E2EE auth（全功能） | Spring AI（Gemini OpenAI 兼容端点） | Jackson 3（tools.jackson） | PostgreSQL（必需） | JVM Fat JAR 或 GraalVM Native Image（推荐生产） |
 
-两个模块共用 `stock-calculator-common`（统一响应/异常、图片预处理、HTTP 工具、爬虫领域模型）。注意：**JVM 与 Native 两种形态都监听 18080 端口，不能同时运行**。
+> 原双模块（common 公共库 + main 应用）已合并为单模块（2026-09）：领域隔离由包级限界上下文 + Spring Modulith 边界测试承担。注意：**JVM 与 Native 两种形态都监听 18080 端口，不能同时运行**。
 
 ---
 
@@ -153,11 +153,11 @@ cd stock-calculator-service
 docker compose up -d postgres
 
 # 3. 首次运行需手动建表（sql.init.mode=never，不自动执行 DDL）
-psql -h localhost -U root -d scs -f stock-calculator-main/src/main/resources/db/postgres/schema.sql
+psql -h localhost -U root -d scs -f postgres/schema.sql
 
 # 4. 设置 Gemini API Key 并启动
 export GEMINI_API_KEY=your-api-key-here
-./mvnw -pl stock-calculator-main -am spring-boot:run
+./mvnw spring-boot:run
 
 # 5. 服务启动后访问
 curl http://localhost:18080/
@@ -181,8 +181,8 @@ curl -X POST http://localhost:18080/api/import/ocr-parse \
 ### 1. JVM 模式构建
 
 ```bash
-# 编译 main 模块 Fat JAR（-am 会连带构建依赖的 common 模块）
-./mvnw clean package -DskipTests -pl stock-calculator-main -am
+# 编译 Fat JAR（单模块）
+./mvnw clean package -DskipTests
 
 # 运行
 java -jar stock-calculator-main/target/stock-calculator-main-0.0.1-SNAPSHOT.jar
@@ -193,7 +193,7 @@ java -jar stock-calculator-main/target/stock-calculator-main-0.0.1-SNAPSHOT.jar
 > **要求**：GraalVM 25.0.x（含 native-image）。脚本按 `JAVA_HOME` → `/opt/GraalVM25` → `PATH` 顺序自动探测，**不依赖 sdkman**。二进制含全量功能（Spring AI OCR + 爬虫 + auth），启动仍需连 PostgreSQL。
 
 ```bash
-# 完整构建：install 父POM/common -> AOT 处理 -> native-image -> 启动冒烟测试（约 10~20 分钟）
+# 完整构建：AOT 处理 -> native-image -> 启动冒烟测试（约 10~20 分钟）
 ./stock-calculator-main/build-native.sh
 
 # 跳过 Maven 编译，复用已有 target/ 产物
@@ -201,11 +201,10 @@ java -jar stock-calculator-main/target/stock-calculator-main-0.0.1-SNAPSHOT.jar
 ```
 
 构建脚本会自动完成：
-1. 安装父 POM 与 common 模块到本地仓库（多模块单独构建的前提）
-2. `mvnw compile` + `spring-boot:process-aot`（AOT 上下文处理）
-3. 生成依赖 classpath 并剥离全部 test 相关 jar
-4. 直接调用 `native-image` 编译原生二进制
-5. 启动冒烟测试：未捕获 `Tomcat started` 则判定失败退出
+1. `mvnw compile` + `spring-boot:process-aot`（AOT 上下文处理）
+2. 生成依赖 classpath 并剥离全部 test 相关 jar
+3. 直接调用 `native-image` 编译原生二进制
+4. 启动冒烟测试：未捕获 `Tomcat started` 则判定失败退出
 
 二进制产物：`stock-calculator-main/target/stock-calculator-service`（实测约 303MB，含 Spring AI 全家桶）
 
@@ -374,36 +373,35 @@ POST /api/import/ocr-parse
 
 ```
 stock-calculator-service/
-├── pom.xml                            # 父 POM（packaging=pom，聚合 common + main 两模块）
+├── pom.xml                            # 父 POM（packaging=pom，BOM 聚合 + 唯一模块）
 ├── mvnw / mvnw.cmd                    # Maven Wrapper
-├── stock-calculator-common/           # 公共库
-│   └── src/main/java/com/zzh/stock_calculator/
-│       ├── common/                    # ApiResponse / BusinessException / GlobalExceptionHandler
-│       ├── config/                    # RestClientConfig（通用 + 图像服务 RestClient）
-│       ├── dto/                       # TradeDraftItem(OCR) + ClsArticle/Stock 等(爬虫实体)
-│       ├── enums/                     # TradeDirection / TradeStatus
-│       ├── repository/                # 爬虫 JPA Repository
-│       ├── service/                   # ImagePreprocessService + 爬虫 Service + auth 四件套
-│       ├── task/                      # TaskService（财联社快讯定时抓取）
-│       ├── controller/                # ImportController / SynclsHistorycontroller / AuthController
-│       └── util/                      # CommonHttpService / ImageHeaderUtil / ClsSignUtil
-├── stock-calculator-main/             # 可运行模块：Spring AI + tools.jackson（OCR + 爬虫 + auth）
-│   ├── src/main/java/.../service/impl/  # GeminiOcrExecutorImpl（Spring AI ChatClient）
+├── stock-calculator-main/             # 唯一模块：Spring AI OCR + 爬虫 + E2EE auth
+│   ├── src/main/java/com/zzh/stock_calculator/
+│   │   ├── auth/                      # 用户/E2EE：entity repository service dto config controller util
+│   │   ├── crawler/                   # CLS 抓取：entity repository service task event controller util
+│   │   ├── vision/                    # 截图导入/OCR：OcrExecutor(缓存边界) service impl controller dto util enums
+│   │   ├── common/                    # 开放共享：ApiResponse / BusinessException / GlobalExceptionHandler
+│   │   ├── config/                    # 开放共享：RestClientConfig
+│   │   ├── util/                      # 开放共享：HttpUtil
+│   │   └── StockCalculatorApplication.java
 │   ├── src/main/resources/
 │   │   ├── application.yml            # 主配置（默认激活 postgres profile）
-│   │   ├── application-postgres.yml   # 数据源配置
-│   │   └── db/postgres/schema.sql     # 建表 DDL（需手动执行）
+│   │   └── application-postgres.yml   # 数据源配置
+│   ├── src/test/java/                 # ModulithVerifyTest（领域边界校验）+ 单测
 │   ├── build-native.sh                # Native 编译脚本（不依赖 sdkman）
 │   ├── gen-logger-config.py           # native 反射元数据生成器
 │   ├── record-agent.sh                # tracing agent 录制脚本（依赖升级后重录）
-│   ├── agent-config/                  # agent 录制的 reachability metadata（入库）
+│   ├── agent-config/                  # agent 录制的 reachability metadata（入库，免重录）
 │   ├── smoke-curl.sh                  # 二进制 HTTP 冒烟（token 门禁验证）
 │   ├── package-native.sh              # Native Docker 打包脚本
 │   └── Dockerfile.native              # 仅拷贝二进制的最小镜像
-├── Dockerfile                         # JVM 镜像（多模块构建 main 模块）
+├── postgres/                          # schema.sql / data.sql（建表 DDL，需手动执行）
+├── Dockerfile                         # JVM 镜像（构建 main 模块）
 ├── docker-compose.yml                 # 本地基础设施：postgres
 └── .github/workflows/docker-image.yml # CI：Native 镜像构建并推送 GHCR
 ```
+
+> 领域隔离规则：跨域只能引用对方基包下的类型，子包（entity/repository/impl 等）对外不可见，由 `ModulithVerifyTest`（Spring Modulith verify()）强制。
 
 ## 性能对比
 

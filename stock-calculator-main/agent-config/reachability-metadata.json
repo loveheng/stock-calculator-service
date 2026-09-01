@@ -449,19 +449,19 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.config.AuthInterceptor",
+      "type": "com.zzh.stock_calculator.auth.config.AuthInterceptor",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.SessionService",
+            "com.zzh.stock_calculator.auth.service.SessionService",
             "tools.jackson.databind.ObjectMapper"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.config.AuthProperties",
+      "type": "com.zzh.stock_calculator.auth.config.AuthProperties",
       "methods": [
         {
           "name": "<init>",
@@ -533,10 +533,10 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.config.WebConfig"
+      "type": "com.zzh.stock_calculator.auth.config.WebConfig"
     },
     {
-      "type": "com.zzh.stock_calculator.config.WebConfig$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.auth.config.WebConfig$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "$$beanFactory"
@@ -552,7 +552,7 @@
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.config.AuthInterceptor"
+            "com.zzh.stock_calculator.auth.config.AuthInterceptor"
           ]
         },
         {
@@ -564,31 +564,31 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.controller.AuthController",
+      "type": "com.zzh.stock_calculator.auth.controller.AuthController",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.AuthService",
-            "com.zzh.stock_calculator.service.ProfileService",
-            "com.zzh.stock_calculator.service.RateLimitService"
+            "com.zzh.stock_calculator.auth.service.AuthService",
+            "com.zzh.stock_calculator.auth.service.ProfileService",
+            "com.zzh.stock_calculator.auth.service.RateLimitService"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.controller.ImportController",
+      "type": "com.zzh.stock_calculator.vision.controller.ImportController",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.TradeVisionService"
+            "com.zzh.stock_calculator.vision.service.TradeVisionService"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.controller.SynclsHistorycontroller",
+      "type": "com.zzh.stock_calculator.crawler.controller.SynclsHistorycontroller",
       "fields": [
         {
           "name": "adminToken"
@@ -598,13 +598,13 @@
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.task.HistoryClsDayTask"
+            "com.zzh.stock_calculator.crawler.task.HistoryClsDayTask"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticle",
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticle",
       "fields": [
         {
           "name": "audioUrl"
@@ -651,16 +651,16 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticle$ClsArticleBuilder"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticle$ClsArticleBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticle$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticle$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticle$HibernateProxy"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticle$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleStock",
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleStock",
       "fields": [
         {
           "name": "articleId"
@@ -689,22 +689,22 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleStock$ClsArticleStockBuilder"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleStock$ClsArticleStockBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleStock$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleStock$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleStock$HibernateProxy"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleStock$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleStock_"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleStock_"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleStock__Accessor_u3nkb"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleStock__Accessor_u3nkb"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleSubject",
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleSubject",
       "fields": [
         {
           "name": "articleId"
@@ -727,85 +727,82 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleSubject$ClsArticleSubjectBuilder"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleSubject$ClsArticleSubjectBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleSubject$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleSubject$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleSubject$HibernateProxy"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleSubject$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleSubject_"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleSubject_"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticleSubject__Accessor_mhc4wx"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticleSubject__Accessor_mhc4wx"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticle_"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticle_"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsArticle__Accessor_34wc7f"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsArticle__Accessor_34wc7f"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsSubject"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsSubject"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsSubject$ClsSubjectBuilder"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsSubject$ClsSubjectBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsSubject$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsSubject$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsSubject$HibernateProxy"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsSubject$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsSubject_"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsSubject_"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.ClsSubject__Accessor_fn5iwv"
+      "type": "com.zzh.stock_calculator.crawler.entity.ClsSubject__Accessor_fn5iwv"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.Stock"
+      "type": "com.zzh.stock_calculator.crawler.entity.Stock"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.Stock$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.crawler.entity.Stock$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.Stock$HibernateProxy"
+      "type": "com.zzh.stock_calculator.crawler.entity.Stock$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.Stock$StockBuilder"
+      "type": "com.zzh.stock_calculator.crawler.entity.Stock$StockBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.Stock_"
+      "type": "com.zzh.stock_calculator.crawler.entity.Stock_"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.Stock__Accessor_i11vah"
+      "type": "com.zzh.stock_calculator.crawler.entity.Stock__Accessor_i11vah"
     },
     {
-      "type": "com.zzh.stock_calculator.dto.package-info"
+      "type": "com.zzh.stock_calculator.auth.entity.AuthSessionEntity"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.AuthSessionEntity"
+      "type": "com.zzh.stock_calculator.auth.entity.AuthSessionEntity$AuthSessionEntityBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.AuthSessionEntity$AuthSessionEntityBuilder"
+      "type": "com.zzh.stock_calculator.auth.entity.AuthSessionEntity$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.AuthSessionEntity$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.auth.entity.AuthSessionEntity$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.AuthSessionEntity$HibernateProxy"
+      "type": "com.zzh.stock_calculator.auth.entity.AuthSessionEntity_"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.AuthSessionEntity_"
+      "type": "com.zzh.stock_calculator.auth.entity.AuthSessionEntity__Accessor_d0yr7u"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.AuthSessionEntity__Accessor_d0yr7u"
-    },
-    {
-      "type": "com.zzh.stock_calculator.entity.OtpCodeEntity",
+      "type": "com.zzh.stock_calculator.auth.entity.OtpCodeEntity",
       "fields": [
         {
           "name": "id"
@@ -819,66 +816,63 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.entity.OtpCodeEntity$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.auth.entity.OtpCodeEntity$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.OtpCodeEntity$HibernateProxy"
+      "type": "com.zzh.stock_calculator.auth.entity.OtpCodeEntity$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.OtpCodeEntity$OtpCodeEntityBuilder"
+      "type": "com.zzh.stock_calculator.auth.entity.OtpCodeEntity$OtpCodeEntityBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.OtpCodeEntity_"
+      "type": "com.zzh.stock_calculator.auth.entity.OtpCodeEntity_"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.OtpCodeEntity__Accessor_9ltie8"
+      "type": "com.zzh.stock_calculator.auth.entity.OtpCodeEntity__Accessor_9ltie8"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserEntity"
+      "type": "com.zzh.stock_calculator.auth.entity.UserEntity"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserEntity$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.auth.entity.UserEntity$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserEntity$HibernateProxy"
+      "type": "com.zzh.stock_calculator.auth.entity.UserEntity$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserEntity$UserEntityBuilder"
+      "type": "com.zzh.stock_calculator.auth.entity.UserEntity$UserEntityBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserEntity_"
+      "type": "com.zzh.stock_calculator.auth.entity.UserEntity_"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserEntity__Accessor_jzzah5"
+      "type": "com.zzh.stock_calculator.auth.entity.UserEntity__Accessor_jzzah5"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserProfileEntity"
+      "type": "com.zzh.stock_calculator.auth.entity.UserProfileEntity"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserProfileEntity$HibernateInstantiator"
+      "type": "com.zzh.stock_calculator.auth.entity.UserProfileEntity$HibernateInstantiator"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserProfileEntity$HibernateProxy"
+      "type": "com.zzh.stock_calculator.auth.entity.UserProfileEntity$HibernateProxy"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserProfileEntity$UserProfileEntityBuilder"
+      "type": "com.zzh.stock_calculator.auth.entity.UserProfileEntity$UserProfileEntityBuilder"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserProfileEntity_"
+      "type": "com.zzh.stock_calculator.auth.entity.UserProfileEntity_"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.UserProfileEntity__Accessor_l8qwfu"
+      "type": "com.zzh.stock_calculator.auth.entity.UserProfileEntity__Accessor_l8qwfu"
     },
     {
-      "type": "com.zzh.stock_calculator.entity.package-info"
-    },
-    {
-      "type": "com.zzh.stock_calculator.event.ApplicationEvent",
+      "type": "com.zzh.stock_calculator.crawler.event.ApplicationEvent",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.TaskService"
+            "com.zzh.stock_calculator.crawler.service.TaskService"
           ]
         },
         {
@@ -888,49 +882,49 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.repository.AuthSessionRepository"
+      "type": "com.zzh.stock_calculator.auth.repository.AuthSessionRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.ClsArticleRepository"
+      "type": "com.zzh.stock_calculator.crawler.repository.ClsArticleRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.ClsArticleStockRepository"
+      "type": "com.zzh.stock_calculator.crawler.repository.ClsArticleStockRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.ClsArticleSubjectRepository"
+      "type": "com.zzh.stock_calculator.crawler.repository.ClsArticleSubjectRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.ClsSubjectRepository"
+      "type": "com.zzh.stock_calculator.crawler.repository.ClsSubjectRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.OtpCodeRepository"
+      "type": "com.zzh.stock_calculator.auth.repository.OtpCodeRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.StockRepository"
+      "type": "com.zzh.stock_calculator.crawler.repository.StockRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.UserProfileRepository"
+      "type": "com.zzh.stock_calculator.auth.repository.UserProfileRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.repository.UserRepository"
+      "type": "com.zzh.stock_calculator.auth.repository.UserRepository"
     },
     {
-      "type": "com.zzh.stock_calculator.service.AuthService",
+      "type": "com.zzh.stock_calculator.auth.service.AuthService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.repository.UserRepository",
-            "com.zzh.stock_calculator.repository.UserProfileRepository",
-            "com.zzh.stock_calculator.service.SessionService",
-            "com.zzh.stock_calculator.service.OtpService",
-            "com.zzh.stock_calculator.config.AuthProperties"
+            "com.zzh.stock_calculator.auth.repository.UserRepository",
+            "com.zzh.stock_calculator.auth.repository.UserProfileRepository",
+            "com.zzh.stock_calculator.auth.service.SessionService",
+            "com.zzh.stock_calculator.auth.service.OtpService",
+            "com.zzh.stock_calculator.auth.config.AuthProperties"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.AuthService$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.auth.service.AuthService$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -941,22 +935,22 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.ClsArticleService",
+      "type": "com.zzh.stock_calculator.crawler.service.ClsArticleService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.repository.ClsArticleRepository",
-            "com.zzh.stock_calculator.repository.ClsArticleSubjectRepository",
-            "com.zzh.stock_calculator.repository.ClsArticleStockRepository",
-            "com.zzh.stock_calculator.service.StockService",
-            "com.zzh.stock_calculator.service.ClsSubjectService"
+            "com.zzh.stock_calculator.crawler.repository.ClsArticleRepository",
+            "com.zzh.stock_calculator.crawler.repository.ClsArticleSubjectRepository",
+            "com.zzh.stock_calculator.crawler.repository.ClsArticleStockRepository",
+            "com.zzh.stock_calculator.crawler.service.StockService",
+            "com.zzh.stock_calculator.crawler.service.ClsSubjectService"
           ]
         },
         {
           "name": "saveArticleWithRelations",
           "parameterTypes": [
-            "com.zzh.stock_calculator.dto.ClsArticle",
+            "com.zzh.stock_calculator.crawler.entity.ClsArticle",
             "java.util.List",
             "java.util.List",
             "java.util.List",
@@ -966,7 +960,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.ClsArticleService$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.crawler.service.ClsArticleService$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -977,24 +971,24 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.ClsSubjectService",
+      "type": "com.zzh.stock_calculator.crawler.service.ClsSubjectService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.repository.ClsSubjectRepository"
+            "com.zzh.stock_calculator.crawler.repository.ClsSubjectRepository"
           ]
         },
         {
           "name": "upsertIfNotExists",
           "parameterTypes": [
-            "com.zzh.stock_calculator.dto.ClsSubject"
+            "com.zzh.stock_calculator.crawler.entity.ClsSubject"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.ClsSubjectService$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.crawler.service.ClsSubjectService$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -1005,7 +999,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.CommonHttpService",
+      "type": "com.zzh.stock_calculator.crawler.service.CommonHttpService",
       "methods": [
         {
           "name": "<init>",
@@ -1016,7 +1010,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.ImagePreprocessService",
+      "type": "com.zzh.stock_calculator.vision.service.ImagePreprocessService",
       "methods": [
         {
           "name": "<init>",
@@ -1025,7 +1019,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.MailService",
+      "type": "com.zzh.stock_calculator.auth.service.MailService",
       "fields": [
         {
           "name": "from"
@@ -1041,24 +1035,24 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.OcrExecutor"
+      "type": "com.zzh.stock_calculator.vision.OcrExecutor"
     },
     {
-      "type": "com.zzh.stock_calculator.service.OtpService",
+      "type": "com.zzh.stock_calculator.auth.service.OtpService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.repository.OtpCodeRepository",
-            "com.zzh.stock_calculator.repository.UserRepository",
-            "com.zzh.stock_calculator.service.MailService",
-            "com.zzh.stock_calculator.config.AuthProperties"
+            "com.zzh.stock_calculator.auth.repository.OtpCodeRepository",
+            "com.zzh.stock_calculator.auth.repository.UserRepository",
+            "com.zzh.stock_calculator.auth.service.MailService",
+            "com.zzh.stock_calculator.auth.config.AuthProperties"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.OtpService$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.auth.service.OtpService$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -1069,18 +1063,18 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.ProfileService",
+      "type": "com.zzh.stock_calculator.auth.service.ProfileService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.repository.UserProfileRepository"
+            "com.zzh.stock_calculator.auth.repository.UserProfileRepository"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.ProfileService$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.auth.service.ProfileService$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -1091,7 +1085,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.RateLimitService",
+      "type": "com.zzh.stock_calculator.auth.service.RateLimitService",
       "methods": [
         {
           "name": "<init>",
@@ -1100,19 +1094,19 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.SessionService",
+      "type": "com.zzh.stock_calculator.auth.service.SessionService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.repository.AuthSessionRepository",
-            "com.zzh.stock_calculator.config.AuthProperties"
+            "com.zzh.stock_calculator.auth.repository.AuthSessionRepository",
+            "com.zzh.stock_calculator.auth.config.AuthProperties"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.SessionService$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.auth.service.SessionService$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -1123,24 +1117,24 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.StockService",
+      "type": "com.zzh.stock_calculator.crawler.service.StockService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.repository.StockRepository"
+            "com.zzh.stock_calculator.crawler.repository.StockRepository"
           ]
         },
         {
           "name": "upsertIfNotExists",
           "parameterTypes": [
-            "com.zzh.stock_calculator.dto.Stock"
+            "com.zzh.stock_calculator.crawler.entity.Stock"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.StockService$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.crawler.service.StockService$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -1151,22 +1145,22 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.TaskService",
+      "type": "com.zzh.stock_calculator.crawler.service.TaskService",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.ClsArticleService",
-            "com.zzh.stock_calculator.service.CommonHttpService"
+            "com.zzh.stock_calculator.crawler.service.ClsArticleService",
+            "com.zzh.stock_calculator.crawler.service.CommonHttpService"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.TradeVisionService"
+      "type": "com.zzh.stock_calculator.vision.service.TradeVisionService"
     },
     {
-      "type": "com.zzh.stock_calculator.service.impl.GeminiOcrExecutorImpl",
+      "type": "com.zzh.stock_calculator.vision.impl.GeminiOcrExecutorImpl",
       "methods": [
         {
           "name": "<init>",
@@ -1177,7 +1171,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.impl.GeminiOcrExecutorImpl$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.vision.impl.GeminiOcrExecutorImpl$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -1188,25 +1182,25 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.service.impl.GeminiTradeVisionServiceImpl",
+      "type": "com.zzh.stock_calculator.vision.service.impl.GeminiTradeVisionServiceImpl",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.OcrExecutor",
-            "com.zzh.stock_calculator.service.ImagePreprocessService",
+            "com.zzh.stock_calculator.vision.OcrExecutor",
+            "com.zzh.stock_calculator.vision.service.ImagePreprocessService",
             "tools.jackson.databind.ObjectMapper"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.task.ClsDayTask",
+      "type": "com.zzh.stock_calculator.crawler.task.ClsDayTask",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.TaskService"
+            "com.zzh.stock_calculator.crawler.service.TaskService"
           ]
         },
         {
@@ -1216,7 +1210,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.task.ClsSearchTask",
+      "type": "com.zzh.stock_calculator.crawler.task.ClsSearchTask",
       "methods": [
         {
           "name": "<init>",
@@ -1225,7 +1219,7 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.task.ClsSearchTask$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.crawler.task.ClsSearchTask$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -1236,18 +1230,18 @@
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.task.HistoryClsDayTask",
+      "type": "com.zzh.stock_calculator.crawler.task.HistoryClsDayTask",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "com.zzh.stock_calculator.service.TaskService"
+            "com.zzh.stock_calculator.crawler.service.TaskService"
           ]
         }
       ]
     },
     {
-      "type": "com.zzh.stock_calculator.task.HistoryClsDayTask$$SpringCGLIB$$0",
+      "type": "com.zzh.stock_calculator.crawler.task.HistoryClsDayTask$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "CGLIB$CALLBACK_FILTER"
@@ -12322,7 +12316,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.AuthSessionRepository",
+          "com.zzh.stock_calculator.auth.repository.AuthSessionRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12333,7 +12327,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.ClsArticleRepository",
+          "com.zzh.stock_calculator.crawler.repository.ClsArticleRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12344,7 +12338,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.ClsArticleStockRepository",
+          "com.zzh.stock_calculator.crawler.repository.ClsArticleStockRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12355,7 +12349,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.ClsArticleSubjectRepository",
+          "com.zzh.stock_calculator.crawler.repository.ClsArticleSubjectRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12366,7 +12360,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.ClsSubjectRepository",
+          "com.zzh.stock_calculator.crawler.repository.ClsSubjectRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12377,7 +12371,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.OtpCodeRepository",
+          "com.zzh.stock_calculator.auth.repository.OtpCodeRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12388,7 +12382,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.StockRepository",
+          "com.zzh.stock_calculator.crawler.repository.StockRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12399,7 +12393,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.UserProfileRepository",
+          "com.zzh.stock_calculator.auth.repository.UserProfileRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",
@@ -12410,7 +12404,7 @@
     {
       "type": {
         "proxy": [
-          "com.zzh.stock_calculator.repository.UserRepository",
+          "com.zzh.stock_calculator.auth.repository.UserRepository",
           "org.springframework.data.repository.Repository",
           "org.springframework.transaction.interceptor.TransactionalProxy",
           "org.springframework.aop.framework.Advised",

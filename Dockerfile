@@ -1,6 +1,6 @@
 # ==========================================
 # 第一阶段：编译（Java 21，与 pom.xml 的 java.version 一致）
-# 多模块构建：只拷贝 main 变体及其依赖（common + 父 POM），不拷贝 native 模块
+# 单模块构建：只拷贝唯一模块 stock-calculator-main 与父 POM
 # ==========================================
 FROM bellsoft/liberica-openjdk-alpine:21 AS builder
 WORKDIR /build
@@ -8,14 +8,13 @@ WORKDIR /build
 # 安装 maven
 RUN apk add --no-cache maven
 
-# 复制构建所需的 POM 与模块源码（多模块：父 POM + common + main）
+# 复制构建所需的 POM 与模块源码
 COPY .mvn ./.mvn
 COPY mvnw pom.xml ./
-COPY stock-calculator-common ./stock-calculator-common
 COPY stock-calculator-main ./stock-calculator-main
 
-# 只构建 main 变体及其依赖（-pl stock-calculator-main -am），跳过单测
-RUN mvn -B clean package -DskipTests -pl stock-calculator-main -am -Dfile.encoding=UTF-8
+# 构建可执行 Fat JAR，跳过单测
+RUN mvn -B clean package -DskipTests -Dfile.encoding=UTF-8
 
 # ==========================================
 # 第二阶段：极简生产运行时

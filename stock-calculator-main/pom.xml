@@ -12,10 +12,25 @@
     <artifactId>stock-calculator-main</artifactId>
     <name>stock-calculator-main</name>
     <dependencies>
+        <!-- E2EE 用户服务：仅取 BCrypt 实现，不引入 Security 过滤链（《设计》§D.5.1） -->
         <dependency>
-            <groupId>com.zzh</groupId>
-            <artifactId>stock-calculator-common</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+        <!-- E2EE 用户服务：找回验证码邮件（《设计》§D.5.2） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- Jackson 3（Boot 4 默认）：vision 的 JSON 反序列化；
+             注解包 com.fasterxml.jackson.annotation 与 2.x 同名，两代兼容 -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -70,6 +85,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.modulith</groupId>
+            <artifactId>spring-modulith-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

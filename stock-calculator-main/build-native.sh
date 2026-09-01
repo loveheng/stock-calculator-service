@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Stock Calculator Service — GraalVM Native 直接编译脚本 (多模块版)
+# Stock Calculator Service — GraalVM Native 直接编译脚本 (单模块)
+#
+# 单模块: stock-calculator-main（2026-09 与 common 合并后为唯一模块）
 #
 # 环境要求（不再依赖 sdkman）:
 #   1. GraalVM 25.0.x + native-image，来源按以下顺序探测：
@@ -69,10 +71,7 @@ echo "████████ 开始 GraalVM Native 编译"
 
 # ---------------- 步骤 1: Maven compile + AOT ----------------
 if [ "$SKIP_PKG" != "--no-pkg" ]; then
-  echo "█████ 步骤 1/4: install common + Maven compile + AOT 处理..."
-  # 多模块：父 POM 与 common 先进本地仓库，main 单独编译时才能解析到它们
-  ( cd .. && ./mvnw -q -DskipTests install -N -Dfile.encoding=UTF-8 \
-      && ./mvnw -q -DskipTests install -pl stock-calculator-common -Dfile.encoding=UTF-8 )
+  echo "█████ 步骤 1/4: Maven compile + AOT 处理..."
   # 只编译不 package，避免触发 native-maven-plugin 卡死问题。
   # process-aot 显式调用（它会生成并编译 AOT 类到 target/spring-aot/main/classes），
   # 不依赖 lifecycle phase 绑定，行为确定。
