@@ -65,6 +65,65 @@ crawler:
   # /api/admin/sync 管理端点令牌；未配置时端点拒绝所有请求
   admin-token: ${CRAWLER_ADMIN_TOKEN:}
 
+vision:
+  ocr:
+    # 默认识别语言（OCR.space 语言码：chs=简体中文）
+    language: chs
+    # 图片哈希 -> 识别文本缓存（命中直接返回，节省免费渠道额度）
+    cache-max-size: 256
+    cache-ttl: 30m
+    # 单渠道最大尝试次数与退避间隔（仅对 429/5xx/超时可重试异常生效）
+    max-attempts: 2
+    retry-backoff: 300ms
+    azure:
+      # 首选渠道：未申请 Azure AI Vision Key 时保持关闭，调度器健康检查自动跳过；
+      # 启用时通过环境变量提供 endpoint 与订阅 Key（或直接改为此处的字面量）
+      enabled: ${AZURE_OCR_ENABLED:true}
+      endpoint: ${AZURE_OCR_ENDPOINT:https://zzhscsocr.cognitiveservices.azure.com/}
+      api-key: ${AZURE_OCR_API_KEY:}
+      api-version: "2024-02-01"
+      connect-timeout: 5s
+      read-timeout: 30s
+      poll-interval: 500ms
+      poll-max-times: 20
+    ocrspace:
+      # 备用渠道：免费额度 Key（环境变量 OCRSPACE_API_KEY 可覆盖默认值）
+      enabled: true
+      api-key: ${OCRSPACE_API_KEY:K82621831488957}
+      url: https://api.ocr.space/parse/image
+      engine: "2"
+      connect-timeout: 5s
+      read-timeout: 30s
+  ai:
+    # 智能图片分析门面：图片哈希 -> 交易草稿 AI 结果缓存（命中零 OCR/LLM 消耗，useCache=false 时淘汰）
+    result-cache-max-size: 128
+    result-cache-ttl: 30m
+
+llm:
+  # 链路内单渠道最大尝试次数：429 属 RPM/TPM 窗口限流，短退避重试无意义，默认 1 次即流转下一渠道
+  max-attempts: 1
+  retry-backoff: 300ms
+  gemini:
+    # 首选渠道（OpenAI 兼容端点）：复用 spring.ai 的 GEMINI_API_KEY
+    enabled: ${LLM_GEMINI_ENABLED:true}
+    base-url: https://generativelanguage.googleapis.com/v1beta/openai
+    api-key: ${GEMINI_API_KEY:}
+    model: gemini-3.6-flash
+    connect-timeout: 5s
+    read-timeout: 20s
+  groq:
+    # 备用渠道（OpenAI 兼容端点）：免费层模型会轮换下线，model 保持可配置
+    enabled: ${LLM_GROQ_ENABLED:true}
+    base-url: https://api.groq.com/openai/v1
+    api-key: ${GROQ_API_KEY:}
+    model: llama-3.3-70b-versatile
+    connect-timeout: 5s
+    read-timeout: 20s
+  fallback:
+    # 兜底哑响应：不调用任何模型，明确告知降级；enabled=false 时全链失败抛 503
+    enabled: ${LLM_FALLBACK_ENABLED:true}
+    response: "[降级响应] AI 渠道暂不可用，本次结果未经模型处理，请稍后重试。"
+
 app:
   auth:
     # E2EE 用户服务总开关：native 变体的 application.yml 不配置此项，即整体关闭

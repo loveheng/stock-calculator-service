@@ -1,21 +1,15 @@
 package com.zzh.stock_calculator.vision.service.impl;
-import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
-import com.zzh.stock_calculator.vision.enums.TradeDirection;
-import com.zzh.stock_calculator.vision.enums.TradeStatus;
 import com.zzh.stock_calculator.vision.service.ImagePreprocessService;
 import com.zzh.stock_calculator.vision.OcrExecutor;
+import com.zzh.stock_calculator.vision.service.TradeDraftParser;
 import com.zzh.stock_calculator.vision.service.TradeVisionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 import org.springframework.web.multipart.MultipartFile;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -27,8 +21,8 @@ public class GeminiTradeVisionServiceImpl implements TradeVisionService {
 
     private final ImagePreprocessService imagePreprocessService;
 
-    /** Boot 4 自动装配的 Jackson 3（tools.jackson）Bean */
-    private final ObjectMapper objectMapper;
+    /** 模型输出 -> 交易草稿解析（与 /process-image 管道共用） */
+    private final TradeDraftParser tradeDraftParser;
 
     private static final String TRADE_OCR_PROMPT = """
             你是一个资深的金融证券交易记录与对账单提取专家。
@@ -60,60 +54,8 @@ public class GeminiTradeVisionServiceImpl implements TradeVisionService {
         // 3. 调用通用执行器获取模型原始文本（缓存拦截在执行器层）
         String rawText = ocrExecutor.execute(imageHash, processedImage, TRADE_OCR_PROMPT);
 
-        // 4. 清理 markdown 围栏并反序列化为原始二维数组
-        List<List<Object>> rawRows = parseRawRows(rawText);
-
-        // 5. 将原始结果映射为强类型 DTO 集合
-        return mapToTradeDraftItems(rawRows);
-    }
-
-    private List<List<Object>> parseRawRows(String rawText) {
-        String cleanJson = cleanMarkdown(rawText);
-        try {
-            return objectMapper.readValue(cleanJson, new TypeReference<List<List<Object>>>() {});
-        } catch (Exception e) {
-            log.error("通用视觉 JSON 反序列化失败: rawText={}", rawText, e);
-            throw new BusinessException(500, "数据解析失败，模型返回格式不合规");
-        }
-    }
-
-    private String cleanMarkdown(String text) {
-        if (text == null || text.isBlank()) {
-            return "[]";
-        }
-        String clean = text.trim();
-        if (clean.startsWith("```json")) {
-            clean = clean.substring(7);
-        } else if (clean.startsWith("```")) {
-            clean = clean.substring(3);
-        }
-        if (clean.endsWith("```")) {
-            clean = clean.substring(0, clean.length() - 3);
-        }
-        return clean.trim();
-    }
-
-    private List<TradeDraftItem> mapToTradeDraftItems(List<List<Object>> rawRows) {
-        if (rawRows == null || rawRows.isEmpty()) {
-            return List.of();
-        }
-
-        List<TradeDraftItem> items = new ArrayList<>();
-        for (List<Object> row : rawRows) {
-            if (row.size() >= 6) {
-                TradeDraftItem item = TradeDraftItem.builder()
-                        .stockCode(String.valueOf(row.get(0)).trim())
-                        .stockName(String.valueOf(row.get(1)).trim())
-                        .direction(TradeDirection.fromCode(String.valueOf(row.get(2))))
-                        .price(new BigDecimal(String.valueOf(row.get(3)).trim()))
-                        .volume(Integer.parseInt(String.valueOf(row.get(4)).trim()))
-                        .tradeTime(String.valueOf(row.get(5)).trim())
-                        .status(TradeStatus.FILLED)
-                        .build();
-                items.add(item);
-            }
-        }
-        return items;
+        // 4. 清理 Markdown 围栏并反序列化为强类型 DTO 集合（解析逻辑与 /process-image 管道共用）
+        return tradeDraftParser.parse(rawText);
     }
 
 }
