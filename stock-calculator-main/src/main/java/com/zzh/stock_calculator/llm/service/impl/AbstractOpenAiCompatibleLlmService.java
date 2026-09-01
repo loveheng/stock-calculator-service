@@ -1,131 +1,105 @@
 package com.zzh.stock_calculator.llm.service.impl;
 
+import com.openai.errors.InternalServerException;
+import com.openai.errors.OpenAIIoException;
+import com.openai.errors.OpenAIServiceException;
+import com.openai.errors.OpenAIRetryableException;
+import com.openai.errors.PermissionDeniedException;
+import com.openai.errors.RateLimitException;
+import com.openai.errors.UnauthorizedException;
+import com.openai.errors.UnexpectedStatusCodeException;
 import com.zzh.stock_calculator.llm.config.LlmProperties;
 import com.zzh.stock_calculator.llm.service.LlmProviderException;
 import com.zzh.stock_calculator.llm.service.LlmService;
 import com.zzh.stock_calculator.util.HttpUtil;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * OpenAI 兼容协议基类：Gemini（/v1beta/openai）与 Groq（/openai/v1）的
- * 请求体、响应体、错误结构完全同构（POST /chat/completions, Bearer 鉴权），
- * 子类只差 base-url / api-key / model 三项配置。
- * 请求/响应 JSON 均用 ObjectMapper 手动序列化解析，不依赖 RestClient 的转换器自动探测。
- * 错误判定：429（含 Retry-After 提示）、5xx、连接/读取超时 → 可重试；
- * 401/403（Key 无效）与响应结构异常 → 不可重试，直接换渠道。
+ * OpenAI 兼容渠道基类（Gemini / Groq 共用，策略模式的模板骨架）。
+ * 模型实例为 LlmConfig 声明的**全局 Bean**（geminiChatModel / groqChatModel），
+ * 渠道类经 @Qualifier + ObjectProvider 注入：Bean 未装配（base-url 未配置）时
+ * getIfAvailable() 返回 null，健康检查判定不可用、调度器跳过该节点。
+ * maxRetries 已在全局 Bean 上固定为 0，429/5xx 立即抛出、由 LlmChainRouter 快速流转。
+ * 异常体系：底层抛 OpenAI SDK 的 com.openai.errors.*，本类统一映射为
+ * LlmProviderException（retryable=429/5xx/网络 IO；401/403/其它 4xx=确定性失败）。
  */
-@Slf4j
 public abstract class AbstractOpenAiCompatibleLlmService implements LlmService {
 
     private final String providerName;
     private final LlmProperties.Provider props;
-    private final RestClient restClient;
-    private final ObjectMapper objectMapper;
+    private final ObjectProvider<OpenAiChatModel> chatModelProvider;
 
-    protected AbstractOpenAiCompatibleLlmService(String providerName,
-                                                 LlmProperties.Provider props,
-                                                 ObjectMapper objectMapper) {
+    protected AbstractOpenAiCompatibleLlmService(String providerName, LlmProperties.Provider props,
+            ObjectProvider<OpenAiChatModel> chatModelProvider) {
         this.providerName = providerName;
         this.props = props;
-        this.objectMapper = objectMapper;
-        // 客户端构建统一收敛在 HttpUtil
-        this.restClient = HttpUtil.jdkRestClient(props.getConnectTimeout(), props.getReadTimeout());
+        this.chatModelProvider = chatModelProvider;
     }
 
     @Override
-    public String providerName() {
+    public final String providerName() {
         return providerName;
     }
 
     @Override
     public boolean isAvailable() {
         return props.isEnabled()
+                && StringUtils.hasText(props.getBaseUrl())
                 && StringUtils.hasText(props.getApiKey())
-                && StringUtils.hasText(props.getBaseUrl());
+                && StringUtils.hasText(props.getModel())
+                && chatModelProvider.getIfAvailable() != null;
     }
 
     @Override
     public String chat(String systemPrompt, String userMessage) {
+        OpenAiChatModel chatModel = chatModelProvider.getIfAvailable();
+        if (chatModel == null) {
+            throw new LlmProviderException(providerName + " 未启用（缺少连接配置，模型 Bean 未装配）", false);
+        }
         try {
-            Map<String, Object> request = new LinkedHashMap<>();
-            request.put("model", props.getModel());
-            request.put("messages", List.of(
-                    Map.of("role", "system", "content", systemPrompt),
-                    Map.of("role", "user", "content", userMessage)));
-            request.put("temperature", 0);
-            request.put("stream", false);
+            ChatResponse response = chatModel.call(new Prompt(List.of(
+                    new SystemMessage(systemPrompt),
+                    new UserMessage(userMessage))));
+            return extractContent(response);
 
-            byte[] respBytes = restClient.post()
-                    .uri(HttpUtil.trimTrailingSlash(props.getBaseUrl()) + "/chat/completions")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + props.getApiKey())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(objectMapper.writeValueAsBytes(request))
-                    .retrieve()
-                    .body(byte[].class);
-
-            return parseContent(HttpUtil.toUtf8String(respBytes));
-
-        } catch (RestClientResponseException e) {
-            throw classify(e);
-        } catch (LlmProviderException e) {
-            throw e;
-        } catch (Exception e) {
+        } catch (RateLimitException e) {
+            throw new LlmProviderException(providerName + " 触发限流, http=429", true, e);
+        } catch (InternalServerException e) {
+            throw new LlmProviderException(providerName + " 服务端异常, http=" + e.statusCode(), true, e);
+        } catch (UnexpectedStatusCodeException e) {
+            int status = e.statusCode();
+            throw new LlmProviderException(providerName + " 请求异常, http=" + status,
+                    status >= 500 || status == 429, e);
+        } catch (UnauthorizedException | PermissionDeniedException e) {
+            throw new LlmProviderException(providerName + " 鉴权失败(Key 无效或过期), http=" + e.statusCode(), false, e);
+        } catch (OpenAIIoException | OpenAIRetryableException e) {
             // 连接/读取超时与其它网络 IO 统一按可重试处理
+            throw new LlmProviderException(providerName + " 请求异常: " + HttpUtil.rootMessage(e), true, e);
+        } catch (OpenAIServiceException e) {
+            // 其余 4xx（BadRequest/NotFound/Unprocessable 等）属确定性失败，直接换渠道
+            throw new LlmProviderException(providerName + " 请求被拒绝: " + HttpUtil.rootMessage(e), false, e);
+        } catch (Exception e) {
+            // 响应解码失败等未知异常按可重试处理，交由下一渠道兜底
             throw new LlmProviderException(providerName + " 请求异常: " + HttpUtil.rootMessage(e), true, e);
         }
     }
 
-    /** 解析 OpenAI 兼容响应 choices[0].message.content；content 为空返回 ""（业务空结果） */
-    private String parseContent(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new LlmProviderException(providerName + " 返回空响应", true);
+    /** 提取 choices[0].message.content；content 缺失返回 ""（业务空结果），整体缺 choices 视为渠道异常 */
+    private String extractContent(ChatResponse response) {
+        if (response == null || response.getResult() == null) {
+            throw new LlmProviderException(providerName + " 响应缺少 choices.message.content", true);
         }
-        Map<String, Object> json = readJson(body);
-        // 部分网关会以 200 + error 体返回失败，优先检查
-        if (json.get("error") instanceof Map<?, ?> error) {
-            throw new LlmProviderException(providerName + " 返回错误: " + error.get("message"), true);
-        }
-        if (json.get("choices") instanceof List<?> choices && !choices.isEmpty()
-                && choices.getFirst() instanceof Map<?, ?> first
-                && first.get("message") instanceof Map<?, ?> message) {
-            Object content = message.get("content");
-            return content == null ? "" : String.valueOf(content).trim();
-        }
-        throw new LlmProviderException(providerName + " 响应缺少 choices.message.content", true);
-    }
-
-    private LlmProviderException classify(RestClientResponseException e) {
-        int status = e.getStatusCode().value();
-        if (status == 429) {
-            String retryAfter = e.getResponseHeaders().getFirst(HttpHeaders.RETRY_AFTER);
-            return new LlmProviderException(providerName + " 触发限流, http=429"
-                    + (retryAfter != null ? ", retry-after=" + retryAfter : ""), true, e);
-        }
-        if (status >= 500) {
-            return new LlmProviderException(providerName + " 服务端异常, http=" + status, true, e);
-        }
-        if (status == 401 || status == 403) {
-            return new LlmProviderException(providerName + " 鉴权失败(Key 无效或过期), http=" + status, false, e);
-        }
-        return new LlmProviderException(providerName + " 请求被拒绝, http=" + status, false, e);
-    }
-
-    private Map<String, Object> readJson(String body) {
-        try {
-            return objectMapper.readValue(body, new TypeReference<Map<String, Object>>() {});
-        } catch (Exception e) {
-            throw new LlmProviderException(providerName + " 响应非 JSON", true, e);
-        }
+        AssistantMessage output = response.getResult().getOutput();
+        String text = output == null ? null : output.getText();
+        return text == null ? "" : text.trim();
     }
 }

@@ -47,8 +47,8 @@ OCR 链路：`OcrExecutor` 由 Spring AI `ChatClient` 实现多模态调用（ma
 
 | | 实现 |
 |---|---|
-| 模型调用 | Spring AI `ChatClient` 多模态 media API |
-| 接入配置 | `spring.ai.openai.*`（Gemini OpenAI 兼容端点） |
+| 模型调用 | Spring AI `ChatClient` 多模态 media API（OCR）；`OpenAiChatModel`（LLM 文本链路） |
+| 接入配置 | `spring.ai.openai.*`（Gemini OpenAI 兼容端点；`max-retries=0` 交由责任链降级） |
 | JSON 解析 | Jackson 3（tools.jackson）`ObjectMapper` |
 
 模块额外运行 CLS 爬虫调度（`@EnableScheduling`）：

@@ -26,14 +26,6 @@ spring:
       ddl-auto: none
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
-  ai:
-    openai:
-      api-key: ${GEMINI_API_KEY:dummy-gemini-key}
-      base-url: https://generativelanguage.googleapis.com/v1beta/openai
-      chat:
-        options:
-          model: gemini-3.6-flash
-          temperature: 0.0
   cache:
     type: caffeine
     caffeine:
@@ -104,20 +96,18 @@ llm:
   max-attempts: 1
   retry-backoff: 300ms
   gemini:
-    # 首选渠道（OpenAI 兼容端点）：复用 spring.ai 的 GEMINI_API_KEY
+    # 首选渠道（Gemini OpenAI 兼容端点）；Key/baseUrl 未配置时健康检查自动跳过
     enabled: ${LLM_GEMINI_ENABLED:true}
     base-url: https://generativelanguage.googleapis.com/v1beta/openai
     api-key: ${GEMINI_API_KEY:}
     model: gemini-3.6-flash
-    connect-timeout: 5s
     read-timeout: 20s
   groq:
-    # 备用渠道（OpenAI 兼容端点）：免费层模型会轮换下线，model 保持可配置
+    # 备用渠道（Groq OpenAI 兼容端点，Llama 开源模型极速推理）；Key 未配置时健康检查自动跳过
     enabled: ${LLM_GROQ_ENABLED:true}
     base-url: https://api.groq.com/openai/v1
     api-key: ${GROQ_API_KEY:}
-    model: llama-3.3-70b-versatile
-    connect-timeout: 5s
+    model: openai/gpt-oss-120b
     read-timeout: 20s
   fallback:
     # 兜底哑响应：不调用任何模型，明确告知降级；enabled=false 时全链失败抛 503

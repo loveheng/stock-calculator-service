@@ -7,16 +7,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * LLM 多渠道识别参数（llm 前缀）。
+ * LLM 多渠道参数（llm 前缀）。
  * 渠道优先级固定为 gemini -> groq -> fallback，由各策略类的 @Order 决定；
- * enabled=false 或缺少 Key 的渠道会被 LlmChainRouter 的健康检查跳过。
+ * enabled=false 或缺少 Key/baseUrl 的渠道会被 LlmChainRouter 的健康检查跳过。
+ * Gemini / Groq 均为 OpenAI 兼容端点，连接参数结构一致（Provider）。
  */
 @Data
 @ConfigurationProperties(prefix = "llm")
 public class LlmProperties {
 
     /**
-     * 链路内单渠道最大尝试次数。默认 1：Gemini/Groq 免费层的 429 属 RPM/TPM 窗口限流，
+     * 链路内单渠道最大尝试次数。默认 1：免费层的 429 属 RPM/TPM 窗口限流，
      * 短退避重试大概率仍失败且占窗口，直接流转下一渠道性价比更高。
      */
     private int maxAttempts = 1;
@@ -30,27 +31,24 @@ public class LlmProperties {
 
     private final Fallback fallback = new Fallback();
 
-    /** OpenAI 兼容渠道通用参数（Gemini / Groq 共用一套字段） */
+    /** OpenAI 兼容渠道连接参数（Gemini / Groq 同构） */
     @Data
     public static class Provider {
 
         /** 渠道总开关 */
         private boolean enabled = true;
 
-        /** OpenAI 兼容 baseUrl（不含 /chat/completions），如 https://api.groq.com/openai/v1 */
-        private String baseUrl = "";
+        /** OpenAI 兼容端点地址 */
+        private String baseUrl;
 
-        /** Bearer 鉴权 Key */
+        /** API Key（免费层额度绑定渠道，日志脱敏） */
         @ToString.Exclude
-        private String apiKey = "";
+        private String apiKey;
 
-        /** 模型名：免费层模型会轮换下线（尤其 Groq），必须可配置勿硬编码承诺 */
-        private String model = "";
+        /** 模型名 */
+        private String model;
 
-        /** 连接超时（java.net.http.HttpClient） */
-        private Duration connectTimeout = Duration.ofSeconds(5);
-
-        /** 读取超时 */
+        /** 单次请求超时（超出视为渠道故障，交由责任链流转下一渠道） */
         private Duration readTimeout = Duration.ofSeconds(20);
     }
 
@@ -61,6 +59,7 @@ public class LlmProperties {
         private boolean enabled = true;
 
         /** 降级哑响应模板：不调用任何模型，明确告知调用方结果未经 AI 处理 */
+        @ToString.Exclude
         private String response = "[降级响应] AI 渠道暂不可用，本次结果未经模型处理，请稍后重试。";
     }
 }

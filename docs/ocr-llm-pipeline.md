@@ -1,9 +1,9 @@
 # 智能图片分析：多渠道 OCR + 免费 LLM 全链路管道
 
-> 版本：v1.0（2026-09-01）
+> 版本：v1.1（2026-09-01）
 > 定位：`/api/import` 下「图片 → OCR 提取文本 → 清洗组装 → LLM 处理 → 业务结果」全链路的实现文档，覆盖 OCR 多渠道责任链、LLM 多渠道责任链与门面编排三层。
 > 配套代码：`stock-calculator-main` 模块 `com.zzh.stock_calculator.llm` / `com.zzh.stock_calculator.vision`
-> 状态：已实现并通过单测与本地桩测试（共 38 用例）；端点示例为契约示例，未含真实外部 API 冒烟记录。
+> 状态：已实现并通过单测与本地桩测试（共 64 用例）；端点示例为契约示例，未含真实外部 API 冒烟记录。
 
 ---
 
@@ -12,7 +12,7 @@
 | # | 决策点 | 结论 |
 |---|--------|------|
 | P1 | LLM 包归属 | LLM 是通用能力（非 vision 专属），独立顶级领域包 `llm`；OCR 留 `vision`。跨域只允许引用对方**基包**类型（`LlmChainRouter` 置于 `llm` 基包即模块 API），ModulithVerifyTest 守护 |
-| P2 | LLM 协议 | Gemini（`/v1beta/openai`）与 Groq（`/openai/v1`）均为 OpenAI 兼容协议，抽 `AbstractOpenAiCompatibleLlmService` 基类；手写 JDK 原生 `HttpClient`（Connect 5s / Read 20s），不用 Spring AI 多实例（免费层渠道的错误分类与超时需要完全可控） |
+| P2 | LLM 协议 | 传输层用 Spring AI 2.x 标准 Builder：**模型为 LlmConfig 声明的全局 Bean，每渠道一个 `OpenAiChatModel` 实例**，连接参数（base-url/api-key/model/超时/maxRetries）全部落在 `OpenAiChatOptions` 上——不显式传 `openAiClient` 时 `build()` 会按 options 自动装配底层 OkHttp 客户端（源码实证），`maxRetries=0` 保住「429 不在 SDK 内静默重试」语义；渠道类只做消息编排/结果提取/错误分类（共用 `AbstractOpenAiCompatibleLlmService`）。Groq 双渠道由此恢复——「单实例只能绑定一套连接参数」的结论仍成立，解法是多实例而非运行时切换 |
 | P3 | 重试策略 | LLM 默认单渠道**不重试**（`llm.max-attempts: 1`）：429 属 RPM/TPM 窗口限流，短退避重试大概率仍失败且占窗口，重试预算花在「渠道切换」上；OCR 保留 2 次（429 多为瞬时/请求过快） |
 | P4 | 兜底定位 | `FallbackLlmService` 为诚实哑响应（`[降级响应]` 前缀固定模板，不调任何模型）；链尾放无模型规则引擎会编造结果，比诚实降级更危险。`llm.fallback.enabled=false` 时全链失败抛 503 |
 | P5 | 工厂模式 | 砍掉 `OcrServiceFactory` / `LlmServiceFactory`：Spring 注入 `List<T>` + `@Order` 已覆盖全部场景，工厂唯一增量是「按枚举指定单渠道」，无第二使用场景不做双层间接 |
@@ -28,7 +28,7 @@
 系统为「手机截图 → AI 文本处理」场景提供两层免费渠道池 + 自动降级：
 
 - **OCR 层**（vision 域）：Azure AI Vision（月 5000 次免费）→ OCR.space（月 25000 次免费）→ 本地 Gemini 兜底，提取图片纯文本；
-- **LLM 层**（llm 域）：Gemini → Groq（llama-3.3-70b）→ 哑响应兜底，对文本完成业务任务；
+- **LLM 层**（llm 域）：Gemini → Groq（均为 OpenAI 兼容端点，各持一个 Spring AI `OpenAiChatModel`）→ 哑响应兑底，对文本完成业务任务；
 - **门面层**（vision 域）：编排两层责任链 + 保守文本清洗 + 空文本拦截 + 阶段耗时统计。
 
 | 能力 | 定位 | 渠道 |
@@ -72,13 +72,13 @@ com.zzh.stock_calculator.llm                     # 顶级领域包（模块基�
 │   ├── LlmService.java                          # 策略接口：chat(systemPrompt, userMessage)
 │   ├── LlmProviderException.java                # 渠道级异常（retryable 标记）
 │   └── impl/
-│       ├── AbstractOpenAiCompatibleLlmService.java  # OpenAI 兼容基类
-│       ├── GeminiLlmService.java                # @Order(1) 首选
-│       ├── GroqLlamaService.java                # @Order(2) 备用
-│       └── FallbackLlmService.java              # @Order(3) 兜底哑响应
+│       ├── AbstractOpenAiCompatibleLlmService.java  # Gemini/Groq 共用基类：注入全局模型 Bean + 统一错误映射
+│       ├── GeminiLlmService.java                # @Order(1) 首选（@Qualifier geminiChatModel）
+│       ├── GroqLlamaService.java                # @Order(2) 备用（@Qualifier groqChatModel）
+│       └── FallbackLlmService.java              # @Order(3) 兑底哑响应
 └── config/
     ├── LlmProperties.java                       # llm.* 配置族
-    └── LlmConfig.java                           # @EnableConfigurationProperties
+    └── LlmConfig.java                           # @EnableConfigurationProperties + 全局模型 Bean（geminiChatModel/groqChatModel）
 
 com.zzh.stock_calculator.vision                  # 本轮新增文件
 ├── service/
@@ -140,25 +140,25 @@ com.zzh.stock_calculator.vision                  # 本轮新增文件
 - 命中：跳过全部渠道调用，日志 `OCR 文本缓存命中，跳过渠道调用`；
 - 隔离：本地 Gemini 兜底走 `OcrExecutor` 的 `@Cacheable`（genericVisionCache），缓存键加 `txt:` 前缀，与交易解析（键=裸 MD5）互不污染。
 
-### 4.4 OpenAI 兼容基类与错误分类
+### 4.4 Spring AI 传输层与错误分类
 
-`AbstractOpenAiCompatibleLlmService`：Gemini 与 Groq 的请求/响应/错误结构完全同构（`POST {baseUrl}/chat/completions`，Bearer 鉴权，`temperature=0`，`stream=false`），子类只差三项配置（base-url / api-key / model）。关键实现约束：
+Gemini / Groq 的模型为 `LlmConfig` 声明的**全局 Bean**（`geminiChatModel` / `groqChatModel`），连接参数（`llm.gemini.*` / `llm.groq.*`）全部通过 `OpenAiChatOptions` 提供；不显式传 `openAiClient` 时 `OpenAiChatModel.builder().build()` 会按 options 自动装配底层 OkHttp 客户端（Spring AI 2.0.1 源码实证）。渠道类经 `@Qualifier` + `ObjectProvider` 注入自己对应的模型实例，只负责消息编排、结果提取与错误分类。关键实现约束：
 
-- **HTTP**：客户端构建统一收敛在顶层 `util/HttpUtil.jdkRestClient(connect, read)`——JDK 原生 `HttpClient`（connectTimeout 在 builder）+ `JdkClientHttpRequestFactory`（readTimeout 在 factory），显式配置 Connect 5s / Read 20s，vision/llm 各渠道（`AzureOcrService` / `OcrSpaceService` / `AbstractOpenAiCompatibleLlmService`）共用；错误分类（429/5xx/401/403）属渠道业务语义，留在各渠道策略内实现；同步调用跑在虚拟线程上（项目已开 `spring.threads.virtual.enabled`），无平台线程阻塞问题；
-- **JSON**：请求 `objectMapper.writeValueAsBytes` 手动序列化、响应手动解析，不依赖 RestClient 转换器自动探测；响应按 UTF-8 字节读取，规避中文乱码；
-- **model 可配置**：Groq 免费层模型会轮换下线，`llm.groq.model` 必须保持配置化，勿硬编码承诺。
+- **HTTP**：传输层完全交由 Spring AI（`OpenAiChatModel` → `OpenAiSetup` → OpenAI 官方 Java SDK + OkHttp）；options 的 `maxRetries(0)` 让 429/5xx 立即抛出、由责任链快速流转兑底；`timeout(20s)` 为单一超时（SDK 不区分 connect/read）；
+- **多渠道 = 多实例 + 全局 Bean**：一个 `OpenAiChatModel` 只绑定一套连接参数（`call` 路径不读运行时 options 的 baseUrl/apiKey），因此每渠道一个 Bean；Bean 方法按 base-url 是否配置做 `@ConditionalOnProperty` 条件装配，未配置不建 Bean，渠道健康检查自动跳过；`geminiChatModel` 标 `@Primary`——vision 旧链路（/ocr-parse 的 `ChatClient.Builder`）按唯一 ChatModel 解析时复用同一实例，Gemini 连接参数因此全工程只有 `llm.gemini.*` 一处（`spring.ai.openai.*` 已删除）；
+- **错误分类**：底层抛 OpenAI SDK 的 `com.openai.errors.*`，渠道内按异常类型映射为 `LlmProviderException`（分类逻辑属渠道业务语义）；
+- **model 可配置**：`llm.*.model` 配置化 + 固定 `temperature(0.0)`，勿硬编码承诺。
 
 错误分类表（统一收敛为 `LlmProviderException`）：
 
 | 响应/错误 | retryable | 调度行为 |
 |---|---|---|
-| HTTP 429（Retry-After 头捕获进异常消息） | true | 流转下一渠道 |
-| HTTP 5xx | true | 流转下一渠道 |
+| HTTP 429（SDK 异常） | true | 流转下一渠道 |
+| HTTP 5xx（SDK 异常） | true | 流转下一渠道 |
 | HTTP 401/403（Key 无效或过期） | false | 不重试，流转 |
-| HTTP 200 + error 体（网关伪成功） | true | 流转 |
 | 非 JSON 响应（如 HTML 网关页） | true | 流转 |
-| 缺少 choices.message.content | true | 流转 |
-| 连接/读取超时、其它网络 IO | true | 流转 |
+| 缺少 choices/响应体解码失败 | true | 流转 |
+| 连接/读取超时、其它网络 IO（SDK IO 异常） | true | 流转 |
 | content 为空 | —（非异常） | 返回 `""`（业务空结果） |
 
 ### 4.5 PromptFormatter 保守清洗
@@ -299,18 +299,18 @@ llm:
   max-attempts: 1
   retry-backoff: 300ms
   gemini:
+    # 首选渠道（Gemini OpenAI 兼容端点）；Key/baseUrl 未配置时健康检查自动跳过
     enabled: ${LLM_GEMINI_ENABLED:true}
     base-url: https://generativelanguage.googleapis.com/v1beta/openai
     api-key: ${GEMINI_API_KEY:}
     model: gemini-3.6-flash
-    connect-timeout: 5s
     read-timeout: 20s
   groq:
+    # 备用渠道（Groq OpenAI 兼容端点，Llama 开源模型极速推理）；Key 未配置时健康检查自动跳过
     enabled: ${LLM_GROQ_ENABLED:true}
     base-url: https://api.groq.com/openai/v1
     api-key: ${GROQ_API_KEY:}
     model: llama-3.3-70b-versatile
-    connect-timeout: 5s
     read-timeout: 20s
   fallback:
     enabled: ${LLM_FALLBACK_ENABLED:true}
@@ -321,8 +321,8 @@ llm:
 
 | 变量 | 作用 | 缺省行为 |
 |---|---|---|
-| `GEMINI_API_KEY` | spring.ai 与 llm.gemini **共用同一 Key** | 未设 → gemini 渠道跳过 |
-| `GROQ_API_KEY` | llm.groq | 未设 → groq 渠道跳过 |
+| `GEMINI_API_KEY` | llm.gemini（LLM 首选渠道唯一 Key 源；vision 旧链路经 @Primary geminiChatModel 复用同一配置） | 未设 → gemini 渠道被健康检查跳过 |
+| `GROQ_API_KEY` | llm.groq（LLM 备用） | 未设 → 渠道被健康检查跳过 |
 | `OCRSPACE_API_KEY` | vision.ocr.ocrspace | 未设 → 用 yml 内置免费 Key |
 | `AZURE_OCR_ENABLED` / `_ENDPOINT` / `_API_KEY` | vision.ocr.azure | 默认关闭 |
 | `LLM_GEMINI_ENABLED` / `LLM_GROQ_ENABLED` / `LLM_FALLBACK_ENABLED` | 渠道开关 | 均默认 true |
@@ -339,7 +339,8 @@ llm:
 | OCR 全渠道失败 | 503「所有 OCR 渠道均不可用：azure(...)；ocrspace(...)」 |
 | OCR 成功但图中无文字 | 422 空文本拦截（不进 LLM） |
 | Gemini 429（RPM 窗口） | warn 日志 → 流转 Groq（默认不重试） |
-| Gemini + Groq 全败 | fallback 哑响应：`[降级响应]` 开头模板，调用方可识别 |
+| Gemini 失败（5xx/401/超时） | 流转 Groq |
+| Groq 429/5xx/401/超时 | fallback 哑响应：`[降级响应]` 开头模板，调用方可识别 |
 | fallback 关闭且全败 | 503「所有 LLM 渠道均不可用」 |
 | Prompt 空白 | 400 |
 
@@ -347,15 +348,14 @@ llm:
 
 ## 8. 扩展新渠道指南
 
-以新增 OpenAI 兼容渠道（如硅基流动/智谱）为例：
+LLM 层扩展新渠道（照抄 Groq 模式，全程只用 Spring AI 公开 API）：
 
-1. 新建 `llm/service/impl/XxxLlmService extends AbstractOpenAiCompatibleLlmService`，构造器传入渠道名、`LlmProperties` 新增的 Provider 配置块、`ObjectMapper`；
-2. 类上 `@Component` + `@Order(n)` 插入优先级（数字越小越优先）；
-3. `LlmProperties` 增加 `private final Provider xxx = new Provider();`；
-4. `application.yml` 增加对应配置块（Key 用环境变量占位符）；
-5. 测试：按 `OpenAiCompatibleLlmServiceTest` 复制 HttpServer 桩用例（429/5xx/401/非 JSON），`LlmChainRouterTest` 补充新渠道顺序用例。
+1. `LlmProperties` 新增 `Provider` 配置块 + `application.yml` 对应配置（Key 用环境变量占位符）；
+2. `LlmConfig` 增加全局 `@Bean("xxxChatModel")`（复用 `buildChatModel(...)`）+ 新建 `llm/service/impl/XxxLlmService extends AbstractOpenAiCompatibleLlmService`，构造器 `super("xxx", properties.getXxx(), chatModel)` 并以 `@Qualifier("xxxChatModel")` 注入——错误分类全部复用基类；
+3. 类上 `@Component` + `@Order(n)` 插入优先级；
+4. 测试：按 `GroqLlamaServiceTest` 复制 HttpServer 桩用例（429/401/解析），`LlmChainRouterTest` 补充新渠道顺序用例。
 
-非 OpenAI 兼容协议（如原生 SDK）则直接实现 `LlmService` 三方法，其余步骤相同。
+OCR 层扩展新渠道不受上述限制：直接实现 `OcrService` 三方法，注册 `@Component` + `@Order(n)` 即可。
 
 ---
 
@@ -366,8 +366,9 @@ llm:
 | `OcrChainManagerTest` | 9 | OCR 链：优先级/可重试流转/不可重试/健康跳过/空结果/缓存命中/全败 503 |
 | `AzureOcrServiceExtractContentTest` | 9 | extractContent 纯解析：4.x/v3.2 各代 content 路径/blocks 逐行兑底/生产实测回归（无 content 字段）/真·空图不告警/结构未命中 WARN/error 体分类 |
 | `LlmChainRouterTest` | 10 | LLM 链：优先级/429 快速流转/可配置重试/兑底/全败 503/空 Prompt/降级模板识别 |
-| `LlmChannelWiringTest` | 1 | llm 渠道真实装配（ApplicationContextRunner 最小上下文，防嵌套配置类被误当独立 bean 注入） |
-| `OpenAiCompatibleLlmServiceTest` | 8 | JDK HttpServer 本地桩（真实 HTTP 往返）：Bearer 鉴权/内容解析/429/5xx/401/非 JSON/缺 choices/读超时 |
+| `LlmChannelWiringTest` | 2 | llm 渠道真实装配（ApplicationContextRunner 最小上下文）：嵌套配置类注入 / 全局模型 Bean 条件装配 / @Qualifier+ObjectProvider 注入 / 健康检查判定 |
+| `GeminiLlmServiceTest` | 7 | JDK HttpServer 本地桩 + 渠道自建 OpenAiChatModel 真实 HTTP 往返：Bearer 鉴权/内容解析/429/5xx/401/非 JSON/缺 choices |
+| `GroqLlamaServiceTest` | 3 | Groq 渠道同款桩：Bearer 鉴权/模型名传递/429/401（其余路径与 Gemini 共用基类已覆盖） |
 | `PromptFormatterTest` | 9 | 清洗规则与模板（通用 + 交易提取/审查模式） |
 | `ImageTextProcessingFacadeTest` | 9 | 编排顺序/空文本拦截/异常透传/默认指令/结果缓存命中/强制刷新审查模式/降级不缓存/解析失败不缓存 |
 | `TradeDraftParserTest` | 5 | 围栏清理/二维数组映射/脏行隔离/非 JSON 500/空结果语义 |
@@ -375,10 +376,10 @@ llm:
 
 ```sh
 ./mvnw compile -q
-./mvnw test -q '-Dtest=AzureOcrServiceExtractContentTest,OcrChainManagerTest,LlmChainRouterTest,LlmChannelWiringTest,OpenAiCompatibleLlmServiceTest,PromptFormatterTest,ImageTextProcessingFacadeTest,TradeDraftParserTest,ModulithVerifyTest' '-DfailIfNoTests=false'
+./mvnw test -q '-Dtest=AzureOcrServiceExtractContentTest,OcrChainManagerTest,LlmChainRouterTest,LlmChannelWiringTest,GeminiLlmServiceTest,GroqLlamaServiceTest,PromptFormatterTest,ImageTextProcessingFacadeTest,TradeDraftParserTest,ModulithVerifyTest' '-DfailIfNoTests=false'
 ```
 
-以上 62 用例全部通过（2026-09-01 单轮验证）；`OpenAiCompatibleLlmServiceTest` 为本地桩的真实 HTTP 测试，未打真实外部 API。
+以上 65 用例全部通过（2026-09-01 全局模型 Bean 轮验证）；`GeminiLlmServiceTest` / `GroqLlamaServiceTest` 为本地桩的真实 HTTP 测试，未打真实外部 API。
 
 ---
 
@@ -397,11 +398,11 @@ llm:
 
 ## 11. 已知限制与注意事项
 
-1. **Groq 模型轮换**：免费层可用模型会下线，`llm.groq.model` 保持配置化，失效时改 yml；
-2. **双 Gemini 额度**：OCR 兜底与 LLM 首选同为 Gemini，极端场景（azure+ocrspace 双挂）同一图会调 Gemini 两次（提文本 + 处理文本）——发生率低，P2 可加门面级 OCR 兜底开关；
+1. **双真实渠道**：LLM 层 Gemini + Groq 两个免费渠道，稳定性由 OCR 层多渠道 + LLM 兑底哑响应保障；Groq 免费层限流较紧，高峰期可能更快落到 fallback；
+2. **双 Gemini 额度**：OCR 兑底与 LLM 首选同为 Gemini，极端场景（azure+ocrspace 双挂）同一图会调 Gemini 两次（提文本 + 处理文本）——发生率低，P2 可加门面级 OCR 兑底开关；
 3. **降级可识别**：全链降级结果以 `[降级响应]` 前缀标识，前端可按前缀提示用户；
 4. **明文 Key**：`OCRSPACE_API_KEY` 默认值仍内置 yml（开箱可用），仓库公开前建议改为空默认值 + 纯环境变量；
 5. **LLM 无结果缓存**：同图同任务重复请求会重复消耗免费额度（P2 预留）；
 6. **最坏耗时**：约等于 Σ(启用渠道数 × connect+read 超时 × max-attempts) + 退避 + Azure 轮询，个人场景低概率触顶；前端/网关超时建议 ≥90s，或按需调低各渠道 read-timeout；
 7. **网络代理（生产实测）**：本机直连 `generativelanguage.googleapis.com` 不通（connect timeout），必须走代理——JVM 需真实系统属性 `-Dhttps.proxyHost=... -Dhttps.proxyPort=...`（IDEA 里放 **VM options**，放 Program arguments 无效，`HttpClient` 经 `ProxySelector.getDefault()` 读取）；代理故障时 Gemini 免费层偶发 503 high demand，重试可过；`api.groq.com` 与 global Azure 端点直连可达；
-8. **验证口径**：2026-09-01 已完成真实端到端冒烟——真实交易截图 `/api/import/process-image?useCache=false`：azure OCR（blocks 兜底路径提取 656 字符）→ gemini（走代理，16936ms）→ 解析 9 笔交易草稿全部正确；`/api/import/ocr-text` 同图命中修复后返回完整文本；Gemini/Groq/OCR.space 真实端点均已在真实链路中验证。
+8. **验证口径**：2026-09-01 真实端到端冒烟（azure OCR blocks 兑底路径 656 字符 → gemini 16936ms → 9 笔交易草稿全部正确）发生在旧手写 HTTP 传输层上；其后传输层收敛为 Spring AI（OpenAI SDK + options 多实例），真实 API 冒烟待重做；`api.groq.com` 历史直连可达，Groq 渠道 2026-09-01 随 options 多实例方案恢复。

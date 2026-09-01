@@ -1,20 +1,22 @@
 package com.zzh.stock_calculator.llm.service.impl;
 
 import com.zzh.stock_calculator.llm.config.LlmProperties;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.ObjectMapper;
 
 /**
- * Groq 渠道（备用策略，@Order(2)）。
- * 走 Groq 的 OpenAI 兼容端点（/openai/v1/chat/completions），极速推理开源模型（默认 llama-3.3-70b）。
- * 免费层可用模型会轮换下线，model 必须保持配置化（llm.groq.model）。
+ * Groq 渠道（备用策略，@Order(2)）：Groq 的 OpenAI 兼容端点（Llama 开源模型极速推理），
+ * 注入全局模型 Bean groqChatModel（连接参数见 llm.groq.*），错误分类复用基类模板。
  */
 @Component
 @Order(1)
 public class GroqLlamaService extends AbstractOpenAiCompatibleLlmService {
 
-    public GroqLlamaService(LlmProperties properties, ObjectMapper objectMapper) {
-        super("groq", properties.getGroq(), objectMapper);
+    public GroqLlamaService(LlmProperties properties,
+            @Qualifier("groqChatModel") ObjectProvider<OpenAiChatModel> chatModel) {
+        super("groq", properties.getGroq(), chatModel);
     }
 }
