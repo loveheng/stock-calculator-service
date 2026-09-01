@@ -12,6 +12,7 @@ import com.zzh.stock_calculator.llm.config.LlmProperties;
 import com.zzh.stock_calculator.llm.service.LlmProviderException;
 import com.zzh.stock_calculator.llm.service.LlmService;
 import com.zzh.stock_calculator.util.HttpUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -32,6 +33,7 @@ import java.util.List;
  * 异常体系：底层抛 OpenAI SDK 的 com.openai.errors.*，本类统一映射为
  * LlmProviderException（retryable=429/5xx/网络 IO；401/403/其它 4xx=确定性失败）。
  */
+@Slf4j
 public abstract class AbstractOpenAiCompatibleLlmService implements LlmService {
 
     private final String providerName;
@@ -82,13 +84,17 @@ public abstract class AbstractOpenAiCompatibleLlmService implements LlmService {
         } catch (UnauthorizedException | PermissionDeniedException e) {
             throw new LlmProviderException(providerName + " 鉴权失败(Key 无效或过期), http=" + e.statusCode(), false, e);
         } catch (OpenAIIoException | OpenAIRetryableException e) {
-            // 连接/读取超时与其它网络 IO 统一按可重试处理
+            // 连接/读取超时与其它网络 IO 统一按可重试处理；完整堆栈含底层 cause（代理/超时/DNS 定位必需）
+            log.warn("LLM 渠道网络 IO 失败，完整堆栈：", e);
             throw new LlmProviderException(providerName + " 请求异常: " + HttpUtil.rootMessage(e), true, e);
         } catch (OpenAIServiceException e) {
             // 其余 4xx（BadRequest/NotFound/Unprocessable 等）属确定性失败，直接换渠道
             throw new LlmProviderException(providerName + " 请求被拒绝: " + HttpUtil.rootMessage(e), false, e);
         } catch (Exception e) {
-            // 响应解码失败等未知异常按可重试处理，交由下一渠道兜底
+            // 响应解码失败等未知异常按可重试处理，交由下一渠道兜底；
+            // SDK 的 JsonHandler 会把解析期 Exception 包装成 OpenAIInvalidDataException("Error reading response")，
+            // 不打完整堆栈则根因不可见（如 native 下的反序列化反射缺口）
+            log.warn("LLM 渠道未分类异常，完整堆栈：", e);
             throw new LlmProviderException(providerName + " 请求异常: " + HttpUtil.rootMessage(e), true, e);
         }
     }

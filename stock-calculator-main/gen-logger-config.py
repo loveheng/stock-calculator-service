@@ -20,6 +20,18 @@ Also includes hibernate DTD/XSD schema resources (LocalXmlResourceResolver
 static-init resolves them; native images exclude resources by default):
    XmlInfrastructureException: Unable to locate schema [...] via classpath
 
+3. openai-java (the Spring AI 2.x OpenAI HTTP client) ships agent-recorded
+   metadata covering introspection (queryAllDeclaredMethods), fields and the
+   constructors/getters its own recordings exercised — but NOT the private
+   Jackson any-setter putAdditionalProperty(String, JsonValue), which only
+   fires when a response contains a field the SDK does not model:
+       MissingReflectionRegistrationError: Cannot reflectively invoke method
+       'private final void ...putAdditionalProperty(...)'
+   Model classes are uniform generated code, so every openai jar's class files
+   are scanned for the method-name constant and the any-setter is registered
+   explicitly (registrations on classes that merely reference the constant are
+   silently tolerated, same as the no-arg ctor entries below).
+
 Scans every jar on the native classpath (target/cp.txt), registers all found
 generated logger classes plus EXTRA_CLASSES (filtered to classes that actually
 exist on the classpath, so it survives hibernate version changes). Output is a
@@ -124,6 +136,33 @@ for j in open(cp).read().strip().split(':'):
                 if line and not line.startswith('#'):
                     service_providers.add(line)
 
+OPENAI_ANY_SETTER = {
+    'name': 'putAdditionalProperty',
+    'parameterTypes': ['java.lang.String', 'com.openai.core.JsonValue'],
+}
+
+def scan_openai_any_setter():
+    # class bytecode carries the method-name constant whenever the class
+    # DECLARES or references the any-setter; native-image silently tolerates
+    # registrations for absent members, so no proper method-table parse needed
+    found = set()
+    for j in open(cp).read().strip().split(':'):
+        j = j.strip()
+        if not j.endswith('.jar') or not os.path.exists(j):
+            continue
+        if 'openai' not in os.path.basename(j).lower():
+            continue
+        try:
+            z = zipfile.ZipFile(j)
+        except Exception:
+            continue
+        for n in z.namelist():
+            if n.endswith('.class') and b'putAdditionalProperty' in z.read(n):
+                found.add(n[:-6].replace('/', '.'))
+    return found
+
+openai_any_setter = scan_openai_any_setter()
+
 def extra_on_classpath(c):
     # array types like 'Foo[]' exist only through their component class
     comp = c[:-2] if c.endswith('[]') else c
@@ -206,6 +245,24 @@ for fq in classes:
             if (c['name'], tuple(c['parameterTypes'])) not in have:
                 methods.append(c)
 
+# an explicit methods entry is what makes INVOCATION work (the SDK's embedded
+# queryAllDeclared* flags only enable introspection); merge into whatever entry
+# already exists (agent-recorded or generated above) so each type appears once
+merged_by_type = {}
+for e in merged:
+    merged_by_type.setdefault(type_of(e), e)
+sig = (OPENAI_ANY_SETTER['name'], tuple(OPENAI_ANY_SETTER['parameterTypes']))
+for fq in sorted(openai_any_setter):
+    e = merged_by_type.get(fq)
+    if e is None:
+        merged_by_type[fq] = {'type': fq, 'methods': [dict(OPENAI_ANY_SETTER)]}
+        merged.append(merged_by_type[fq])
+        continue
+    methods = e.setdefault('methods', [])
+    have = {(m.get('name'), tuple(m.get('parameterTypes', []))) for m in methods}
+    if sig not in have:
+        methods.append(dict(OPENAI_ANY_SETTER))
+
 res_patterns = {e.get('pattern') or e.get('glob') for e in agent_meta.get('resources', [])}
 merged_res = list(agent_meta.get('resources', []))
 # NOTE: must use the 'glob' key — GraalVM 25 silently ignores 'pattern' entries in
@@ -236,5 +293,6 @@ with open(os.path.join(out_dir, 'resource-config.json'), 'w') as f:
         {'pattern': 'META-INF/services/org\\.hibernate\\.bytecode\\.spi\\.BytecodeProvider'},
     ]}}, f, indent=2)
 print(f'gen-logger-config: registered {len(merged)} reflection entries '
-      f'(+{len(merged) - len(agent_meta.get("reflection", []))} from generator) and '
+      f'(+{len(merged) - len(agent_meta.get("reflection", []))} from generator, '
+      f'{len(openai_any_setter)} openai any-setter classes) and '
       f'{len(merged_res)} resource patterns; BytecodeProvider service excluded')
