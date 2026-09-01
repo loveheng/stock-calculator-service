@@ -32,6 +32,21 @@ static-init resolves them; native images exclude resources by default):
    explicitly (registrations on classes that merely reference the constant are
    silently tolerated, same as the no-arg ctor entries below).
 
+4. Same root cause one level later: Spring AI's OpenAiChatModel.from() converts
+   ChatCompletion._additionalProperties() (Map<String, JsonValue>) through
+   Jackson 3 (tools.jackson) convertValue, whose BeanPropertyWriter fetches
+   methods from com.openai.core.JsonField (isMissing()) reflectively via
+   MethodHandles — the lambda only catches Exception, and
+   MissingReflectionRegistrationError is an Error, so it kills the request.
+   Registering single methods here would just shift the crash to the next one,
+   so every class under com.openai.core. (the JsonField/JsonValue family and
+   friends, ~205 classes) gets ALL its declared methods registered as explicit
+   invocable entries via a small class-file parser (constant pool + method
+   table; no javap dependency, works in CI). Models classes are deliberately
+   NOT blanket-registered: they deserialize via constructors (the jar's own
+   classic-format metadata covers those) plus the any-setter scan, and their
+   getters are called directly (no reflection), so they add nothing but size.
+
 Scans every jar on the native classpath (target/cp.txt), registers all found
 generated logger classes plus EXTRA_CLASSES (filtered to classes that actually
 exist on the classpath, so it survives hibernate version changes). Output is a
@@ -40,7 +55,7 @@ agent emits) written to target/classes/META-INF/native-image/, where native-imag
 auto-detects it. Existing entries from other config dirs (e.g. agent capture) are
 merged when native-image runs, not here.
 """
-import json, os, sys, zipfile
+import json, os, struct, sys, zipfile
 
 EXTRA_CLASSES = [
     # naming strategies (yml configures physical-strategy by name)
@@ -163,6 +178,129 @@ def scan_openai_any_setter():
 
 openai_any_setter = scan_openai_any_setter()
 
+PRIM_TYPES = {'B': 'byte', 'C': 'char', 'D': 'double', 'F': 'float',
+              'I': 'int', 'J': 'long', 'S': 'short', 'Z': 'boolean'}
+
+def descriptor_param_types(desc):
+    # '(Ljava/lang/String;J[[I)V' -> ['java.lang.String', 'long', 'int[][]']
+    end = desc.find(')')
+    if end < 0:
+        raise ValueError('bad method descriptor')
+    body = desc[1:end]
+    out = []
+    k = 0
+    while k < len(body):
+        dims = 0
+        while k < len(body) and body[k] == '[':
+            dims += 1
+            k += 1
+        c = body[k]
+        k += 1
+        if c == 'L':
+            semi = body.find(';', k)
+            if semi < 0:
+                raise ValueError('bad method descriptor')
+            base = body[k:semi].replace('/', '.')
+            k = semi + 1
+        else:
+            base = PRIM_TYPES[c]
+        out.append(base + '[]' * dims)
+    return out
+
+def parse_class_methods(data):
+    """Declared methods of a class file as (name, (param types...)) tuples.
+
+    Minimal JVM spec walk: magic+version, constant pool (long/double take two
+    slots), flags/this/super, interfaces, then the fields and methods tables
+    (skipping each member's attributes). Enough for name+descriptor extraction;
+    any surprise raises and the caller skips that class.
+    """
+    def u2(off):
+        return struct.unpack_from('>H', data, off)[0]
+
+    pos = 8
+    cp_count = u2(pos)
+    pos += 2
+    utf8 = {}
+    idx = 1
+    while idx < cp_count:
+        tag = data[pos]
+        pos += 1
+        if tag == 1:
+            ln = u2(pos)
+            pos += 2
+            utf8[idx] = data[pos:pos + ln]
+            pos += ln
+        elif tag in (7, 8, 16, 19, 20):
+            pos += 2
+        elif tag == 15:
+            pos += 3
+        elif tag in (3, 4, 9, 10, 11, 12, 17, 18):
+            pos += 4
+        elif tag in (5, 6):
+            pos += 8
+            idx += 1
+        else:
+            raise ValueError('unknown constant pool tag ' + str(tag))
+        idx += 1
+    pos += 6  # access_flags + this_class + super_class
+    pos += 2 + 2 * u2(pos)  # interfaces
+    methods = []
+    for section in (0, 1):  # 0 = fields (parsed, discarded), 1 = methods
+        count = u2(pos)
+        pos += 2
+        collected = []
+        for _i in range(count):
+            name_i, desc_i, attr_n = u2(pos + 2), u2(pos + 4), u2(pos + 6)
+            pos += 8
+            for _a in range(attr_n):
+                alen = struct.unpack_from('>I', data, pos + 2)[0]
+                pos += 6 + alen
+            if section != 1:
+                continue
+            name = utf8.get(name_i, b'').decode('utf-8', 'replace')
+            if name == '<clinit>':
+                continue
+            try:
+                params = descriptor_param_types(
+                    utf8.get(desc_i, b'').decode('utf-8', 'replace'))
+            except (ValueError, KeyError, IndexError):
+                continue
+            collected.append((name, tuple(params)))
+        if section == 1:
+            methods = collected
+    return methods
+
+def scan_openai_core_methods():
+    # all declared methods of every class under com/openai/core/ in every
+    # openai jar on the classpath -> explicit invocable registration
+    found = {}
+    for j in open(cp).read().strip().split(':'):
+        j = j.strip()
+        if not j.endswith('.jar') or not os.path.exists(j):
+            continue
+        if 'openai' not in os.path.basename(j).lower():
+            continue
+        try:
+            z = zipfile.ZipFile(j)
+        except Exception:
+            continue
+        for n in z.namelist():
+            if not n.endswith('.class'):
+                continue
+            fqn = n[:-6].replace('/', '.')
+            if not fqn.startswith('com.openai.core.'):
+                continue
+            try:
+                ms = parse_class_methods(z.read(n))
+            except Exception:
+                continue
+            if ms:
+                found.setdefault(fqn, set()).update(ms)
+    return found
+
+openai_core_methods = scan_openai_core_methods()
+
 def extra_on_classpath(c):
     # array types like 'Foo[]' exist only through their component class
     comp = c[:-2] if c.endswith('[]') else c
@@ -187,10 +325,15 @@ classes = sorted(set(present) | set(logger_classes) | (service_providers & all_n
 # purpose (like the graalvm reachability-metadata project does); re-record with
 # native-image-agent when hibernate/dependency upgrades change the boot path.
 agent_meta = {'reflection': [], 'resources': []}
-agent_dir = next((d for d in ('agent-config', 'target/agent-config')
-                  if os.path.exists(os.path.join(d, 'reachability-metadata.json'))), None)
-if agent_dir:
-    agent_meta = json.load(open(os.path.join(agent_dir, 'reachability-metadata.json')))
+# 'agent-config-llm' holds an optional recording of a full OCR+LLM round trip
+# (mock OpenAI server, see record-agent.sh AGENT_OUT); merged as a UNION with
+# the committed boot-path recording so neither can clobber the other.
+agent_dirs = [d for d in ('agent-config-llm', 'agent-config', 'target/agent-config')
+              if os.path.exists(os.path.join(d, 'reachability-metadata.json'))]
+for d in agent_dirs:
+    m = json.load(open(os.path.join(d, 'reachability-metadata.json')))
+    agent_meta['reflection'].extend(m.get('reflection', []))
+    agent_meta['resources'].extend(m.get('resources', []))
 
 def type_of(entry):
     t = entry.get('type')
@@ -199,10 +342,38 @@ def type_of(entry):
 def entry_methods(e):
     return e.setdefault('methods', []) if isinstance(e, dict) else []
 
+def union_members(dst, src):
+    # two agent recordings may both contain a type: union methods (full
+    # signature) and fields so neither side loses registrations
+    sm = src.get('methods')
+    if sm:
+        dm = dst.setdefault('methods', [])
+        have = {(m.get('name'), tuple(m.get('parameterTypes', []))) for m in dm}
+        for m in sm:
+            sig = (m.get('name'), tuple(m.get('parameterTypes', [])))
+            if sig not in have:
+                dm.append(m)
+                have.add(sig)
+    sf = src.get('fields')
+    if sf:
+        df = dst.setdefault('fields', [])
+        havef = {tuple(sorted(f.items())) for f in df}
+        for f in sf:
+            key = tuple(sorted(f.items()))
+            if key not in havef:
+                df.append(f)
+                havef.add(key)
+
 existing = {}
+merged = []
 for e in agent_meta.get('reflection', []):
-    existing[type_of(e)] = e
-merged = list(agent_meta.get('reflection', []))
+    t = type_of(e)
+    seen = existing.get(t)
+    if seen is None:
+        existing[t] = e
+        merged.append(e)
+    else:
+        union_members(seen, e)
 logger_set = set(logger_classes)
 
 # jboss-logging generated logger classes have exactly one constructor, taking
@@ -263,6 +434,27 @@ for fq in sorted(openai_any_setter):
     if sig not in have:
         methods.append(dict(OPENAI_ANY_SETTER))
 
+# blanket: every declared method of every com.openai.core class becomes an
+# explicit invocable entry (query* flags alone only allow introspection).
+# Deterministic superset of what any tracing-agent recording could capture for
+# this package — provider responses with arbitrary unmodeled fields all funnel
+# through JsonField/JsonValue serialization, so one broad registration beats
+# whack-a-mole per reported method.
+openai_method_count = 0
+for fq in sorted(openai_core_methods):
+    e = merged_by_type.get(fq)
+    if e is None:
+        e = {'type': fq, 'methods': []}
+        merged_by_type[fq] = e
+        merged.append(e)
+    methods = e.setdefault('methods', [])
+    have = {(m.get('name'), tuple(m.get('parameterTypes', []))) for m in methods}
+    for name, params in sorted(openai_core_methods[fq]):
+        if (name, params) not in have:
+            methods.append({'name': name, 'parameterTypes': list(params)})
+            have.add((name, params))
+            openai_method_count += 1
+
 res_patterns = {e.get('pattern') or e.get('glob') for e in agent_meta.get('resources', [])}
 merged_res = list(agent_meta.get('resources', []))
 # NOTE: must use the 'glob' key — GraalVM 25 silently ignores 'pattern' entries in
@@ -292,7 +484,9 @@ with open(os.path.join(out_dir, 'resource-config.json'), 'w') as f:
     ], 'excludes': [
         {'pattern': 'META-INF/services/org\\.hibernate\\.bytecode\\.spi\\.BytecodeProvider'},
     ]}}, f, indent=2)
+print(f'gen-logger-config: agent dirs merged: {agent_dirs or "(none)"}')
 print(f'gen-logger-config: registered {len(merged)} reflection entries '
       f'(+{len(merged) - len(agent_meta.get("reflection", []))} from generator, '
-      f'{len(openai_any_setter)} openai any-setter classes) and '
+      f'{len(openai_any_setter)} openai any-setter classes, '
+      f'{len(openai_core_methods)} openai core classes / +{openai_method_count} methods) and '
       f'{len(merged_res)} resource patterns; BytecodeProvider service excluded')

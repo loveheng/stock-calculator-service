@@ -53,12 +53,16 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(length).decode('utf-8', 'ignore')
         content = OCR_TEXT if 'image_url' in body else DRAFT_JSON
+        payload = completion(content)
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(content)))
+        # Content-Length must match the FULL completion payload — declaring the
+        # inner content length truncates the body for the client and leaves
+        # unread bytes that break the keep-alive connection (ConnectionReset)
+        self.send_header('Content-Length', str(len(payload)))
         self.end_headers()
-        self.wfile.write(completion(content))
-        print(f'mock: {self.path} <- {"OCR" if "image_url" in body else "LLM"} response (200)', flush=True)
+        self.wfile.write(payload)
+        print(f'mock: {self.path} <- {"OCR" if "image_url" in body else "LLM"} response (200, {len(payload)}B)', flush=True)
 
     def log_message(self, *args):
         pass
