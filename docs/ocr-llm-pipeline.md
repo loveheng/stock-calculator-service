@@ -17,9 +17,9 @@
 | P4 | 兜底定位 | `FallbackLlmService` 为诚实哑响应（`[降级响应]` 前缀固定模板，不调任何模型）；链尾放无模型规则引擎会编造结果，比诚实降级更危险。`llm.fallback.enabled=false` 时全链失败抛 503 |
 | P5 | 工厂模式 | 砍掉 `OcrServiceFactory` / `LlmServiceFactory`：Spring 注入 `List<T>` + `@Order` 已覆盖全部场景，工厂唯一增量是「按枚举指定单渠道」，无第二使用场景不做双层间接 |
 | P6 | 清洗原则 | `PromptFormatter` 保守清洗（零宽字符、行尾空白、压缩连续空行），**不做**正则智能断句/合并行——对表格类 OCR 文本有破坏性（数字与列错位） |
-| P7 | 缓存 | OCR 层 MD5→文本 Caffeine 缓存（命中省免费额度）；LLM 层结果缓存暂不实现（P2 待定，同图同任务重复请求会重复耗额度） |
+| P7 | 缓存 | OCR 层 MD5→文本 **Redis** 缓存（`vision:ocr:text:<MD5>`，命中省免费额度，重启不清零，决策 B12 前为 Caffeine）；LLM 层结果缓存暂不实现（P2 待定，同图同任务重复请求会重复耗额度） |
 | P8 | 交易解析不迁移 | `/ocr-parse` 继续走 Gemini 多模态直读（表格结构识别远优于「OCR 扁平文本→LLM 重建」），与 `/image-ai` 并存、定位不同 |
-| P9 | 结果缓存与强制刷新 | `/process-image` 新增「图片哈希→交易草稿」结果缓存（`vision.ai.*`，Caffeine 30m/128）；`useCache=false` 淘汰缓存并以审查模式 Prompt 重新处理。OCR 文本缓存刻意独立保留——同图重识别零增益只耗免费额度，重新处理的杠杆是提示词增强；降级模板输出不解析不缓存（`LlmChainRouter.isDegradedResponse` 识别） |
+| P9 | 结果缓存与强制刷新 | `/process-image` 新增「图片哈希→交易草稿」结果缓存（`vision.ai.*`，**Redis** key=`vision:ai:draft:<MD5>`，TTL 30m；决策 B12 前为 Caffeine 30m/128）；`useCache=false` 淘汰缓存并以审查模式 Prompt 重新处理。OCR 文本缓存刻意独立保留——同图重识别零增益只耗免费额度，重新处理的杠杆是提示词增强；降级模板输出不解析不缓存（`LlmChainRouter.isDegradedResponse` 识别） |
 
 ---
 
@@ -50,7 +50,7 @@ flowchart TD
     U["POST /api/import/image-ai (file + task)"] --> PRE["图片校验与预处理"]
     PRE --> F["ImageTextProcessingFacade 门面编排"]
     F --> S1["1. OCR 责任链 azure → ocrspace → local-gemini"]
-    S1 --> CACHE[("MD5 哈希缓存 Caffeine 30m/256")]
+    S1 --> CACHE[("Redis vision:ocr:text:<MD5> 30m")]
     S1 -->|全败| X1["BusinessException 503"]
     S1 --> S2["2. PromptFormatter 保守清洗"]
     S2 -->|清洗后为空| X2["BusinessException 422 空文本拦截"]
@@ -127,7 +127,7 @@ com.zzh.stock_calculator.vision                  # 本轮新增文件
 |---|---|---|
 | 单渠道尝试次数 `max-attempts` | 2 | **1** |
 | 依据 | OCR 429 多为瞬时/请求过快，短重试有效 | LLM 429 属 RPM/TPM **窗口限流**，短退避重试大概率仍失败且占窗口 |
-| 结果缓存 | 有（MD5→文本，30m/256） | 暂无（P2 预留） |
+| 结果缓存 | 有（Redis `vision:ocr:text:<MD5>`，TTL 30m） | 暂无（P2 预留） |
 | 渠道异常 | `OcrChannelException` | `LlmProviderException` |
 | 全败 | 503，message 汇总原因 | 503，message 汇总原因 |
 
@@ -135,10 +135,10 @@ com.zzh.stock_calculator.vision                  # 本轮新增文件
 
 ### 4.3 OCR 图片哈希缓存
 
-- 键：`MD5(图片字节)`（Spring `DigestUtils`）；值：识别文本（含空结果 `""`，空图同样省额度）；
-- 实现：Caffeine `maximumSize=256, expireAfterWrite=30m`（`vision.ocr.cache-max-size` / `cache-ttl` 可调）；
+- 实现：**Redis**（决策 B12，`VisionCacheStore` 接口 + `RedisVisionCacheStore`），key=`vision:ocr:text:<MD5>`，TTL `vision.ocr.cache-ttl`（默认 30m），应用重启不清零；
 - 命中：跳过全部渠道调用，日志 `OCR 文本缓存命中，跳过渠道调用`；
-- 隔离：本地 Gemini 兜底走 `OcrExecutor` 的 `@Cacheable`（genericVisionCache），缓存键加 `txt:` 前缀，与交易解析（键=裸 MD5）互不污染。
+- 降级：Redis 不可用时 get 视作未命中回源渠道链、put/evict 静默跳过（识别主链路不因缓存故障失败）；
+- 隔离：本地 Gemini 兜底走 `OcrExecutor` 的 Redis 结果缓存（key=`vision:executor:<cacheKey>`，TTL 24h），缓存键加 `txt:` 前缀，与交易解析（键=裸 MD5）互不污染。
 
 ### 4.4 Spring AI 传输层与错误分类
 
@@ -197,8 +197,10 @@ Prompt 组装：System 侧为通用约束（仅依据文本作答、严禁编造
 
 | 缓存层 | Key -> Value | 归属 | 强制刷新时 |
 |---|---|---|---|
-| OCR 文本缓存 | MD5(图) -> 识别文本 | `OcrChainManager` 内置 | **保留命中**——同图重识别零增益只耗免费额度 |
-| 交易草稿结果缓存 | MD5(图) -> List<TradeDraftItem> | 门面内置（`vision.ai.*`） | 淘汰后重算 |
+| OCR 文本缓存 | `vision:ocr:text:<MD5>` -> 识别文本（Redis） | `OcrChainManager` 内置 | **保留命中**——同图重识别零增益只耗免费额度 |
+| 交易草稿结果缓存 | `vision:ai:draft:<MD5>` -> List&lt;TradeDraftItem&gt;（JSON，Redis） | 门面内置（`vision.ai.*`） | 淘汰后重算 |
+
+两层缓存均走 `VisionCacheStore`（Redis 实现，决策 B12）：应用重启不清零；Redis 不可用时自动降级（未命中回源、写入跳过），主链路不阻塞。
 
 useCache 语义：
 

@@ -13,7 +13,7 @@ import org.springframework.util.DigestUtils;
  * 本地兜底渠道（@Order(3)，责任链最后一个节点）。
  * 复用进程内已集成的谷歌 Gemini 多模态模型（大语言模型仍选择谷歌的模型）做纯文字 OCR：
  * 无需额外第三方 Key、无新增依赖，作为前两个外部渠道全部限流/宕机时的最终兜底。
- * 经由 {@link OcrExecutor} 的 @Cacheable 缓存边界调用，cacheKey 加 "txt:" 前缀，
+ * 经由 {@link OcrExecutor} 的 Redis 结果缓存调用（决策 B12），cacheKey 加 "txt:" 前缀，
  * 与交易结构化解析（key=图片裸 MD5）隔离，避免同一图片两条链路互相污染缓存。
  */
 @Slf4j

@@ -18,10 +18,7 @@ public class OcrProperties {
     /** 默认识别语言（OCR.space 语言码：chs=简体中文） */
     private String language = "chs";
 
-    /** 图片哈希文本缓存容量上限（key=图片 MD5） */
-    private int cacheMaxSize = 256;
-
-    /** 缓存写入后存活时长（命中直接返回，节省免费渠道额度） */
+    /** 图片哈希文本缓存的 Redis 存活时长（key=vision:ocr:text:<MD5>，命中直接返回，节省免费渠道额度） */
     private Duration cacheTtl = Duration.ofMinutes(30);
 
     /** 单渠道最大尝试次数（仅对可重试异常生效：429/5xx/超时） */

@@ -1,7 +1,5 @@
 package com.zzh.stock_calculator.vision.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.vision.config.OcrProperties;
 import lombok.extern.slf4j.Slf4j;
@@ -23,8 +21,8 @@ import java.util.List;
  * </ul>
  * 辅助优化特性（集成于本调度器）：
  * <ul>
- *   <li>图片哈希缓存：MD5(图片字节) -> 识别文本，Caffeine 实现（TTL + 容量上限），
- *       命中直接返回，不消耗任何渠道额度；</li>
+ *   <li>图片哈希缓存：MD5(图片字节) -> 识别文本，Redis 实现（决策 B12，key=vision:ocr:text:&lt;MD5&gt;），
+ *       命中直接返回，不消耗任何渠道额度；应用重启不清零；</li>
  *   <li>超时与重试控制：连接/读取超时由各渠道的 JDK HttpClient 显式配置；
  *       重试次数与退避间隔在本类统一控制，渠道实现无感知。</li>
  * </ul>
@@ -33,17 +31,16 @@ import java.util.List;
 @Component
 public class OcrChainManager {
 
+    private static final String CACHE_KEY_PREFIX = "vision:ocr:text:";
+
     private final List<OcrService> channels;
     private final OcrProperties properties;
-    private final Cache<String, String> textCache;
+    private final VisionCacheStore textCache;
 
-    public OcrChainManager(List<OcrService> channels, OcrProperties properties) {
+    public OcrChainManager(List<OcrService> channels, OcrProperties properties, VisionCacheStore textCache) {
         this.channels = List.copyOf(channels);
         this.properties = properties;
-        this.textCache = Caffeine.newBuilder()
-                .maximumSize(properties.getCacheMaxSize())
-                .expireAfterWrite(properties.getCacheTtl())
-                .build();
+        this.textCache = textCache;
         log.info("OCR 责任链装配完成，渠道优先级：{}",
                 this.channels.stream().map(OcrService::channelName).toList());
     }
@@ -69,8 +66,9 @@ public class OcrChainManager {
                 ? properties.getLanguage()
                 : language.trim();
         String hash = DigestUtils.md5DigestAsHex(imageBytes);
+        String cacheKey = CACHE_KEY_PREFIX + hash;
 
-        String cached = textCache.getIfPresent(hash);
+        String cached = textCache.get(cacheKey);
         if (cached != null) {
             log.info("OCR 文本缓存命中，跳过渠道调用 (hash={})", hash);
             return cached;
@@ -103,7 +101,7 @@ public class OcrChainManager {
                 String result = text == null ? "" : text;
                 log.info("OCR 识别成功 (channel={}, hash={}, cost={}ms, textLength={})",
                         channel.channelName(), hash, System.currentTimeMillis() - start, result.length());
-                textCache.put(hash, result);
+                textCache.put(CACHE_KEY_PREFIX + hash, result, properties.getCacheTtl());
                 return result;
             } catch (OcrChannelException e) {
                 boolean willRetry = attempt < maxAttempts && e.isRetryable();

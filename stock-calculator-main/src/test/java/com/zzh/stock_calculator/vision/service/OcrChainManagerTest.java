@@ -9,7 +9,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -41,13 +43,21 @@ class OcrChainManagerTest {
 
     private OcrChainManager chain;
 
+    /** 内存假缓存：绕开 Redis，验证缓存命中/写入行为本身 */
+    private static class InMemoryVisionCacheStore implements VisionCacheStore {
+        final Map<String, String> store = new HashMap<>();
+        @Override public String get(String key) { return store.get(key); }
+        @Override public void put(String key, String value, Duration ttl) { store.put(key, value); }
+        @Override public void evict(String key) { store.remove(key); }
+    }
+
     @BeforeEach
     void setUp() {
         OcrProperties props = new OcrProperties();
         props.setMaxAttempts(2);
         props.setRetryBackoff(Duration.ofMillis(1));
         // 按预设优先级装配：azure -> ocrspace -> local（与 Spring @Order 注入顺序一致）
-        chain = new OcrChainManager(List.of(azure, ocrSpace, local), props);
+        chain = new OcrChainManager(List.of(azure, ocrSpace, local), props, new InMemoryVisionCacheStore());
     }
 
     @Test

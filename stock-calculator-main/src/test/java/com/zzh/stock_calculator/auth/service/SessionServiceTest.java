@@ -14,7 +14,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,11 +41,21 @@ class SessionServiceTest {
 
     @Mock private AuthSessionRepository authSessionRepository;
 
+    private InMemorySessionCacheStore cacheStore;
     private SessionService sessionService;
 
     @BeforeEach
     void setUp() {
-        sessionService = new SessionService(authSessionRepository, new AuthProperties());
+        cacheStore = new InMemorySessionCacheStore();
+        sessionService = new SessionService(authSessionRepository, new AuthProperties(), cacheStore);
+    }
+
+    /** 内存假缓存：绕开 Redis，验证 cache-aside 行为本身 */
+    private static class InMemorySessionCacheStore implements SessionCacheStore {
+        final Map<String, AuthSessionEntity> store = new HashMap<>();
+        @Override public AuthSessionEntity get(String tokenHash) { return store.get(tokenHash); }
+        @Override public void put(String tokenHash, AuthSessionEntity session, Duration ttl) { store.put(tokenHash, session); }
+        @Override public void evict(String tokenHash) { store.remove(tokenHash); }
     }
 
     private AuthSessionEntity session(String tokenHash, OffsetDateTime createdAt,
@@ -219,5 +231,91 @@ class SessionServiceTest {
         assertEquals(1, revoked);
         assertNull(currentSession.getRevokedAt(), "当前会话不应被吊销");
         assertNotNull(otherSession.getRevokedAt(), "其他会话应被吊销");
+    }
+
+    @Test
+    void resolveTwiceServesSecondFromCache() {
+        String token = "cache-hit-token";
+        OffsetDateTime now = OffsetDateTime.now();
+        AuthSessionEntity entity = session(AuthCryptoUtil.sha256Hex(token),
+                now.minusHours(1), now.plus(Duration.ofDays(6)).plusHours(1), now.minusHours(1));
+        when(authSessionRepository.findByTokenHash(AuthCryptoUtil.sha256Hex(token)))
+                .thenReturn(Optional.of(entity));
+
+        AuthSessionEntity first = sessionService.resolve(token);
+        AuthSessionEntity second = sessionService.resolve(token);
+
+        assertSame(entity, second);
+        verify(authSessionRepository, never()).save(any());
+        org.mockito.Mockito.verify(authSessionRepository, org.mockito.Mockito.times(1))
+                .findByTokenHash(AuthCryptoUtil.sha256Hex(token)); // 第二次完全由缓存承接
+        assertEquals(entity.getTokenHash(), first.getTokenHash());
+    }
+
+    @Test
+    void revokeEvictsCachedSession() {
+        String tokenHash = AuthCryptoUtil.sha256Hex("revoke-evict-token");
+        OffsetDateTime now = OffsetDateTime.now();
+        AuthSessionEntity entity = session(tokenHash, now.minusDays(1), now.plusDays(6), now.minusDays(1));
+        when(authSessionRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(entity));
+
+        sessionService.resolve("revoke-evict-token");
+        assertEquals(1, cacheStore.store.size());
+
+        sessionService.revokeByTokenHash(tokenHash);
+
+        assertTrue(cacheStore.store.isEmpty(), "吊销后缓存必须立即驱逐");
+    }
+
+    @Test
+    void cachedExpiredSessionRejectedAndEvicted() {
+        OffsetDateTime now = OffsetDateTime.now();
+        AuthSessionEntity stale = session(AuthCryptoUtil.sha256Hex("stale"),
+                now.minusDays(8), now.minusSeconds(1), now.minusDays(1));
+        // 模拟「写入时有效、读取时已过期」的残留缓存项（cache() 本身拒绝缓存无效会话）
+        cacheStore.store.put(stale.getTokenHash(), stale);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> sessionService.resolve("stale"));
+
+        assertEquals(401, ex.getCode());
+        assertTrue(cacheStore.store.isEmpty(), "失效缓存项应被立即驱逐");
+        verify(authSessionRepository, never()).findByTokenHash(any()); // 全程未回源
+    }
+
+    @Test
+    void renewalEvictsCacheForFreshSnapshot() {
+        String token = "renew-evict-token";
+        OffsetDateTime now = OffsetDateTime.now();
+        // total = 9 天，last_seen 距今 5 天 > TTL/2 → 续期
+        AuthSessionEntity entity = session(AuthCryptoUtil.sha256Hex(token),
+                now.minusDays(8), now.plusDays(1), now.minusDays(5));
+        when(authSessionRepository.findByTokenHash(AuthCryptoUtil.sha256Hex(token)))
+                .thenReturn(Optional.of(entity));
+
+        sessionService.resolve(token);
+
+        assertTrue(cacheStore.store.isEmpty(), "续期后驱逐缓存，下次回源取新版本");
+        verify(authSessionRepository).save(entity);
+    }
+
+    @Test
+    void resolveToleratesCacheSnapshotWithoutCreatedAt() {
+        String token = "snapshot-no-createdAt";
+        OffsetDateTime now = OffsetDateTime.now();
+        // 回归：旧版 issue() 预热发生在事务提交前，@CreationTimestamp 未生效，缓存快照 createdAt 为 null
+        AuthSessionEntity snapshot = AuthSessionEntity.builder()
+                .userId(USER_ID)
+                .tokenHash("")
+                .scope(SessionService.SCOPE_FULL)
+                .expiresAt(now.plusDays(6))
+                .lastSeenAt(now.minusMinutes(5))
+                .build();
+        cacheStore.store.put(AuthCryptoUtil.sha256Hex(token), snapshot);
+
+        AuthSessionEntity resolved = sessionService.resolve(token);
+
+        assertSame(snapshot, resolved);
+        verify(authSessionRepository, never()).findByTokenHash(any()); // 全程由缓存承接
+        verify(authSessionRepository, never()).save(any()); // 无 TTL 基准则跳过续期，不得 NPE
     }
 }

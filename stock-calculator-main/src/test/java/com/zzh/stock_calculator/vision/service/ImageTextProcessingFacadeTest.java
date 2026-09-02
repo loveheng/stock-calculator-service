@@ -15,7 +15,10 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -49,11 +52,19 @@ class ImageTextProcessingFacadeTest {
 
     private ImageTextProcessingFacade facade;
 
+    /** 内存假缓存：绕开 Redis，验证缓存命中/淘汰行为本身 */
+    private static class InMemoryVisionCacheStore implements VisionCacheStore {
+        final Map<String, String> store = new HashMap<>();
+        @Override public String get(String key) { return store.get(key); }
+        @Override public void put(String key, String value, Duration ttl) { store.put(key, value); }
+        @Override public void evict(String key) { store.remove(key); }
+    }
+
     @BeforeEach
     void setUp() {
-        // PromptFormatter 与结果缓存用真实实现，校验真实数据流与缓存行为
+        // PromptFormatter、Jackson 与结果缓存用真实实现，校验真实数据流（含 JSON 往返）与缓存行为
         facade = new ImageTextProcessingFacade(ocrChainManager, new PromptFormatter(), llmChainRouter,
-                tradeDraftParser, new VisionAiProperties());
+                tradeDraftParser, new VisionAiProperties(), new ObjectMapper(), new InMemoryVisionCacheStore());
     }
 
     // ========== 通用文本分析管道（processImageToAiResult） ==========

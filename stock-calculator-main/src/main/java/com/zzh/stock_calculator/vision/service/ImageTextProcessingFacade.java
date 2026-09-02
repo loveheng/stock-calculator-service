@@ -1,7 +1,5 @@
 package com.zzh.stock_calculator.vision.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.llm.LlmChainRouter;
 import com.zzh.stock_calculator.vision.config.VisionAiProperties;
@@ -9,6 +7,8 @@ import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.DigestUtils;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -29,27 +29,32 @@ import java.util.List;
 public class ImageTextProcessingFacade {
 
     private static final String DEFAULT_TASK = "请整理并总结文本中的关键信息。";
+    private static final String DRAFT_CACHE_KEY_PREFIX = "vision:ai:draft:";
 
     private final OcrChainManager ocrChainManager;
     private final PromptFormatter promptFormatter;
     private final LlmChainRouter llmChainRouter;
     private final TradeDraftParser tradeDraftParser;
-    /** 图片 MD5 -> 交易草稿结果缓存（最终 AI 结果层，命中零 OCR/LLM 消耗；与 OCR 文本缓存相互独立） */
-    private final Cache<String, List<TradeDraftItem>> draftCache;
+    private final VisionAiProperties properties;
+    /** 结构化结果 <-> JSON（与 TradeDraftParser 同用 Boot 自动装配的 Jackson 3 Bean） */
+    private final ObjectMapper objectMapper;
+    /** 图片 MD5 -> 交易草稿结果缓存（Redis，决策 B12；命中零 OCR/LLM 消耗，与 OCR 文本缓存相互独立） */
+    private final VisionCacheStore draftCache;
 
     public ImageTextProcessingFacade(OcrChainManager ocrChainManager,
                                      PromptFormatter promptFormatter,
                                      LlmChainRouter llmChainRouter,
                                      TradeDraftParser tradeDraftParser,
-                                     VisionAiProperties properties) {
+                                     VisionAiProperties properties,
+                                     ObjectMapper objectMapper,
+                                     VisionCacheStore draftCache) {
         this.ocrChainManager = ocrChainManager;
         this.promptFormatter = promptFormatter;
         this.llmChainRouter = llmChainRouter;
         this.tradeDraftParser = tradeDraftParser;
-        this.draftCache = Caffeine.newBuilder()
-                .maximumSize(properties.getResultCacheMaxSize())
-                .expireAfterWrite(properties.getResultCacheTtl())
-                .build();
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+        this.draftCache = draftCache;
     }
 
     /**
@@ -111,14 +116,14 @@ public class ImageTextProcessingFacade {
         String hash = DigestUtils.md5DigestAsHex(imageBytes);
 
         if (useCache) {
-            List<TradeDraftItem> cached = draftCache.getIfPresent(hash);
+            List<TradeDraftItem> cached = readDraftCache(hash);
             if (cached != null) {
                 log.info("交易草稿缓存命中，直接返回 (hash={}, size={}, cost={}ms)",
                         hash, cached.size(), System.currentTimeMillis() - start);
                 return cached;
             }
         } else {
-            draftCache.invalidate(hash);
+            draftCache.evict(DRAFT_CACHE_KEY_PREFIX + hash);
             log.info("交易草稿缓存已淘汰，启用审查模式重新处理 (hash={})", hash);
         }
 
@@ -150,10 +155,35 @@ public class ImageTextProcessingFacade {
 
         // 5. 解析 + 写缓存（业务空结果 [] 同样缓存）
         List<TradeDraftItem> drafts = tradeDraftParser.parse(result);
-        draftCache.put(hash, drafts);
+        writeDraftCache(hash, drafts);
 
         log.info("图片→交易草稿 全链路完成 (hash={}, useCache={}, ocrCost={}ms, formatCost={}ms, llmCost={}ms, total={}ms, drafts={})",
                 hash, useCache, ocrCost, formatCost, llmCost, System.currentTimeMillis() - start, drafts.size());
         return drafts;
+    }
+
+    /** 读结果缓存：JSON 反序列化失败（如结构漂移）视作未命中并驱逐脏数据，不阻塞重算 */
+    private List<TradeDraftItem> readDraftCache(String hash) {
+        String json = draftCache.get(DRAFT_CACHE_KEY_PREFIX + hash);
+        if (json == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<TradeDraftItem>>() {});
+        } catch (Exception e) {
+            log.warn("交易草稿缓存反序列化失败，视作未命中并驱逐 (hash={}: {})", hash, e.getMessage());
+            draftCache.evict(DRAFT_CACHE_KEY_PREFIX + hash);
+            return null;
+        }
+    }
+
+    /** 写结果缓存：序列化失败仅打日志（成功解析结果丢失缓存只是多耗一次额度） */
+    private void writeDraftCache(String hash, List<TradeDraftItem> drafts) {
+        try {
+            draftCache.put(DRAFT_CACHE_KEY_PREFIX + hash,
+                    objectMapper.writeValueAsString(drafts), properties.getResultCacheTtl());
+        } catch (Exception e) {
+            log.warn("交易草稿缓存写入失败 (hash={}: {})", hash, e.getMessage());
+        }
     }
 }

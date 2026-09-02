@@ -61,7 +61,7 @@
 | `POST /recovery/request` | 10 次/小时 | 3 次/小时 |
 | `POST /recovery/verify` | 20 次/小时 | 10 次/小时 |
 
-注意：限流为内存计数（Caffeine），**应用重启清零**；认证端点（3/4/5/8）无限流（由会话本身保护）。
+注意：限流计数存 **Redis**（`INCR` + 首次 `EXPIRE` 固定窗口，key 前缀 `rl:*`），**应用重启不清零**，多实例部署天然共享；Redis 不可用时 fail-open 放行并告警（可用性优先）。认证端点（3/4/5/8）无限流（由会话本身保护）。
 
 ---
 
@@ -295,6 +295,7 @@ sequenceDiagram
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | 必须注入，否则找回链路 500 |
 | `MAIL_FROM` | 可选发件人，空则用 SMTP 默认值 |
 | DB | `POSTGRES_URL` / `POSTGRES_USER` / `POSTGRES_PASS`（默认 localhost/scs） |
+| Redis | `REDIS_HOST` / `REDIS_PORT`（默认 localhost:6379）：会话热读缓存 + 限流计数。不可用时自动降级（会话回源 DB、限流 fail-open 放行），认证主链路不阻塞；docker-compose.yml 已含 redis 服务（AOF 持久化） |
 
 ---
 
@@ -323,3 +324,26 @@ sequenceDiagram
 1. **P0** `save()` 不即时 flush → 首建/更新响应携带 null/旧版本号 → 改 `saveAndFlush()`；
 2. **P0** 版本号时区表示不稳定（Hibernate 生成 `+08:00` vs JDBC 读回 `Z`）→ If-Match 字符串比较误判 409 → 输出规范 UTC + 按时刻比较；
 3. **P0** OTP 失败计数随事务回滚，「5 次锁死」永不生效 → verify 链路去除外层事务，计数独立提交。
+
+---
+
+## 10. Redis 缓存层冒烟记录（2026-09-02，真实 Redis + 真实 DB + 真实 HTTP）
+
+决策 B11 落地后的专项冒烟：
+
+| # | 用例 | 结果 |
+|---|---|---|
+| 1 | 注册/登录 → `auth:sess:<tokenHash>` 预热，TTL ≈ 300s（min(300, 剩余有效期)） | ✅ |
+| 2 | Hash 字段完整（userId/scope/expiresAt/lastSeenAt/createdAt，epoch millis 字符串） | ✅ |
+| 3 | 缓存命中免查库（单测覆盖）+ 二次请求 key 保留（不续期不驱逐） | ✅ |
+| 4 | logout → key 立即驱逐（EXISTS→0），原 token 401 | ✅ |
+| 5 | recovery/confirm 改密 → 他端会话吊销 + key 逐个驱逐，新全量会话预热 | ✅ |
+| 6 | **限流重启存活**：同邮箱 3 次 /recovery/request → 重启应用 → 第 4 次 429 | ✅（痛点消除） |
+| 7 | **Redis 停机降级**：登录回源 DB 成功，日志 fail-open 告警（2s 快速超时） | ✅ |
+| 8 | AOF 持久化：Redis 重启后未过期 key 恢复 | ✅ |
+| 9 | cache-aside 回填：回源后 put 成功（Redis 就绪竞态下静默跳过、重试即回填，符合降级设计） | ✅ |
+| 10 | 单测全绿：SessionServiceTest 16 + RateLimitServiceTest 4 + 其余 auth 测试 | ✅ 45 个 |
+
+实测中发现并修复的缺陷（均已回归验证）：
+
+1. **P0** `issue()` 预热发生在事务提交前，`@CreationTimestamp` 尚未生成 → 缓存快照 `createdAt=null`（Redis 往返空串转 null）→ 缓存命中路径 `Duration.between(null,…)` NPE 500。修复：`issue()` 显式补 `createdAt(now)`；`resolve()` 对缺失 createdAt 的快照跳过续期（无 TTL 基准，防御旧残留在缓存中的快照）。新增回归测试 `resolveToleratesCacheSnapshotWithoutCreatedAt`。

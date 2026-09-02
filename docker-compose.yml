@@ -10,3 +10,52 @@ services:
       - POSTGRES_DB=scs
     volumes:
       - /data/postgres/data:/var/lib/postgresql:Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # E2EE 用户服务缓存层（决策 B11）：会话热读缓存 + 限流计数；
+  # AOF 持久化保证限流计数等缓存数据重启不丢；Postgres 仍是会话唯一事实源
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - /data/redis/data:/data:Z
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 应用本体（CI 推送的 GraalVM Native 镜像）。.env 经 env_file 全量注入容器：
+  # GEMINI_API_KEY、GROQ_API_KEY、AZURE_OCR_API_KEY、OCRSPACE_API_KEY、SMTP_*、
+  # CRAWLER_ADMIN_TOKEN 等直接写 .env 即可（Spring 宽松绑定也能覆盖任意配置项）；
+  # 另有三个 compose 变量：APP_PORT（宿主端口）、APP_IMAGE_TAG（镜像 tag）、
+  # APP_ARGS（附加启动参数，空格分隔）。
+  app:
+    image: ghcr.io/loveheng/stock-calculator-service:${APP_IMAGE_TAG:-1942570}
+    ports:
+      - "${APP_PORT:-18080}:18080"
+    env_file:
+      - .env
+    environment:
+      # 容器内固定连 compose 内的 postgres / redis（优先级高于 env_file）
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/scs
+      POSTGRES_USER: root
+      # 与 postgres 服务共用 .env 中的同一个口令变量
+      POSTGRES_PASS: ${POSTGRES_PASSWORD:?请在项目根 .env 中设置 POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    # 启动参数：.env 中 APP_ARGS=--crawler.enabled=false 即可追加程序参数
+    entrypoint: ["/bin/sh", "-c", "exec /application/stock-calculator-service ${APP_ARGS:-}"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped

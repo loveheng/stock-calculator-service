@@ -257,11 +257,28 @@ docker run -d --name stock-calculator-jvm \
   stock-calculator:jvm
 ```
 
-### 本地基础设施（docker-compose.yml）
+### Docker Compose（基础设施 + 应用本体）
 
-根目录的 `docker-compose.yml` 提供 **本地开发基础设施**（非应用本体）：
+根目录的 `docker-compose.yml` 同时提供本地基础设施与应用本体：
 
 - `pgvector/pgvector:pg16` — 爬虫入库所需（库名 `scs`，口令从 `.env` 注入）
+- `redis:7-alpine` — 会话缓存与限流计数（AOF 持久化）
+- `ghcr.io/loveheng/stock-calculator-service` — 应用本体（GraalVM Native 镜像，默认 tag `1942570`）
+
+应用容器等 postgres / redis 健康检查通过后启动，启动/连接变量均在项目根 `.env` 中配置：
+
+```dotenv
+POSTGRES_PASSWORD=...             # 必填：Postgres 与应用共用口令
+GEMINI_API_KEY=...                # 可选：LLM 渠道 Key（GROQ_API_KEY、AZURE_OCR_API_KEY、SMTP_* 等同理）
+CRAWLER_ADMIN_TOKEN=...           # 可选：/api/admin/sync 管理端点令牌
+APP_PORT=18080                    # 可选：宿主机端口（默认 18080）
+APP_IMAGE_TAG=1942570             # 可选：应用镜像 tag（默认 1942570）
+APP_ARGS=--crawler.enabled=false  # 可选：附加 Spring Boot 启动参数（空格分隔）
+```
+
+```bash
+docker compose up -d
+```
 
 ### CI/CD 自动构建
 
@@ -397,7 +414,7 @@ stock-calculator-service/
 │   └── Dockerfile.native              # 仅拷贝二进制的最小镜像
 ├── postgres/                          # schema.sql / data.sql（建表 DDL，需手动执行）
 ├── Dockerfile                         # JVM 镜像（构建 main 模块）
-├── docker-compose.yml                 # 本地基础设施：postgres
+├── docker-compose.yml                 # postgres / redis + 应用本体（Native 镜像）
 └── .github/workflows/docker-image.yml # CI：Native 镜像构建并推送 GHCR
 ```
 

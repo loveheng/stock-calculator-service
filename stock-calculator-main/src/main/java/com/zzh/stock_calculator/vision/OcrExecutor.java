@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.vision;
 /**
  * 通用视觉模型执行器（带缓存拦截）。
- * 独立成接口的原因：① @Cacheable 缓存边界——必须经代理调用，同类内部直调会失效；
+ * 独立成接口的原因：① 缓存拦截在实现层完成（Redis，决策 B12），调用方无感；
  * ② JSON 反序列化留在调用方（GeminiTradeVisionServiceImpl），接口契约只有「图进、文本出」。
  * 唯一实现：GeminiOcrExecutorImpl（Spring AI ChatClient）；原 native（RestClient）实现已随
  * native 模块删除（2026-08-31）。

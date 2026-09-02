@@ -21,6 +21,8 @@
 | B8 | 响应契约 | 沿用项目惯例：ApiResponse 信封 + 业务码，HTTP 200 承载业务错误；唯一例外：拦截器对未认证请求写 HTTP 401 + 信封体 |
 | B9 | 限流实现 | Caffeine（main 模块已有依赖）；限流拦截器放 main 模块，common 不新增依赖 |
 | B10 | native 隔离 | 鉴权相关 Bean 标注 @ConditionalOnProperty("app.auth.enabled")，仅 main 变体开启；防止 common 层鉴权组件污染 native 变体（历史已有 JPA 泄漏教训） |
+| B11 | 存储分层 | PostgreSQL 唯一事实源 + Redis 热读缓存（cache-aside：resolve 缓存优先→回源回填，TTL=min(300s, 剩余有效期)，吊销/续期写库后立即驱逐）；限流计数同步迁 Redis（INCR 固定窗口，重启不清零，消除 B9 的 P2 取舍）；Redis 故障降级：会话回源 DB、限流 fail-open 放行，不阻塞认证主链路；spring-boot-starter-data-redis 仅引入 main 模块 |
+| B12 | 内存缓存退场 | 全应用内存缓存代码移除（Caffeine 依赖、spring-boot-starter-cache、@EnableCaching、spring.cache 配置全部删除），视觉识别结果同步迁 Redis（决策 B11 的延伸）：OCR 文本 `vision:ocr:text:<MD5>` / 交易草稿 `vision:ai:draft:<MD5>`（JSON）/ 多模态执行器 `vision:executor:<cacheKey>`（TTL 24h 沿用原 genericVisionCache 语义），统一经 `VisionCacheStore` 接口（Redis 实现，故障降级同 B11），详见 docs/ocr-llm-pipeline.md |
 
 ---
 

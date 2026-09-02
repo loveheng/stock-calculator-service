@@ -32,4 +32,7 @@ public class AuthProperties {
 
     /** OTP 同邮箱发送冷却（秒，对齐前端 60s 倒计时） */
     private int otpCooldownSeconds = 60;
+
+    /** 会话热读缓存 TTL（秒，决策 B11）：上限即直改 DB 绕过驱逐时，吊销传播的最坏延迟 */
+    private int sessionCacheTtlSeconds = 300;
 }

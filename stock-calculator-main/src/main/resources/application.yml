@@ -26,10 +26,6 @@ spring:
       ddl-auto: none
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
-  cache:
-    type: caffeine
-    caffeine:
-      spec: maximumSize=300,expireAfterWrite=24h
   task:
     scheduling:
       pool:
@@ -51,6 +47,13 @@ spring:
           auth: true
           starttls:
             enable: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # 短超时：Redis 故障时快速降级（会话回源 DB、限流放行），不阻塞主链路
+      connect-timeout: 2s
+      timeout: 2s
 
 crawler:
   enabled: true
@@ -61,8 +64,7 @@ vision:
   ocr:
     # 默认识别语言（OCR.space 语言码：chs=简体中文）
     language: chs
-    # 图片哈希 -> 识别文本缓存（命中直接返回，节省免费渠道额度）
-    cache-max-size: 256
+    # 图片哈希 -> 识别文本缓存（Redis，key=vision:ocr:text:<MD5>；命中直接返回节省免费额度，重启不清零）
     cache-ttl: 30m
     # 单渠道最大尝试次数与退避间隔（仅对 429/5xx/超时可重试异常生效）
     max-attempts: 2
@@ -87,8 +89,7 @@ vision:
       connect-timeout: 5s
       read-timeout: 30s
   ai:
-    # 智能图片分析门面：图片哈希 -> 交易草稿 AI 结果缓存（命中零 OCR/LLM 消耗，useCache=false 时淘汰）
-    result-cache-max-size: 128
+    # 智能图片分析门面：图片哈希 -> 交易草稿 AI 结果缓存（Redis，key=vision:ai:draft:<MD5>；命中零 OCR/LLM 消耗，useCache=false 时淘汰）
     result-cache-ttl: 30m
 
 llm:
