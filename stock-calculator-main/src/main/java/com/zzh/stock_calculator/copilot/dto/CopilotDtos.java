@@ -72,6 +72,28 @@ public final class CopilotDtos {
         private Long oldestId;
     }
 
+    // ==================== SSE 流式事件负载 ====================
+
+    /** delta 事件负载：{"text":"<增量token>"} */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DeltaEvent {
+        private String text;
+    }
+
+    /** error 事件负载：LLM 流中异常，前端按可重发处理（userMsg 已标 failed，走续跑分支） */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ErrorEvent {
+        private int code;
+        private String subCode;
+        private String message;
+    }
+
     // ==================== Prompt 模版在线管理 ====================
 
     @Data

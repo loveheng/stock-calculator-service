@@ -9,10 +9,15 @@ import com.zzh.stock_calculator.copilot.entity.AiChatMessage;
 import com.zzh.stock_calculator.copilot.repository.AiChatMessageRepository;
 import com.zzh.stock_calculator.copilot.repository.AiChatSessionRepository;
 import com.zzh.stock_calculator.copilot.service.AiChatOrchestrationService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import tools.jackson.databind.ObjectMapper;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,13 +33,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CopilotController {
 
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+
     private final AiChatOrchestrationService orchestrationService;
     private final AiChatSessionRepository sessionRepository;
     private final AiChatMessageRepository messageRepository;
 
     // ==================== POST /threads/{scopeId}/messages ====================
 
-    /** 用户发起 AI 提问 */
+    /**
+     * 用户发起 AI 提问（JSON 阻塞路径：无 Accept: text/event-stream 时命中）。
+     */
     @PostMapping("/threads/{scopeId}/messages")
     public ApiResponse<AskResponse> sendMessage(@PathVariable("scopeId") String scopeId,
                                                  @RequestAttribute("authUserId") String userId,
@@ -52,6 +61,43 @@ public class CopilotController {
             log.error("Unexpected error: ", e);
             return ApiResponse.fail(500, "服务器内部错误");
         }
+    }
+
+    /**
+     * SSE 流式提问变体：Accept: text/event-stream 命中（headers 条件优先级高于无条件的 JSON 变体）。
+     * 阶段一在返回 emitter 前同步执行；失败回落恒 200 JSON 信封——Accept 仅 text/event-stream 时
+     * 异常 advice 的 JSON 会因内容协商 406，故这里手工以 application/json 写出同一信封
+     * （前端按响应 Content-Type 识别回落）。
+     */
+    @PostMapping(value = "/threads/{scopeId}/messages",
+            headers = "Accept=text/event-stream",
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter sendMessageStream(@PathVariable("scopeId") String scopeId,
+                                        @RequestAttribute("authUserId") String userId,
+                                        @RequestBody AskRequest req,
+                                        HttpServletResponse response) throws java.io.IOException {
+        try {
+            return orchestrationService.askStream(userId, scopeId, req);
+        } catch (IllegalArgumentException e) {
+            log.warn("Bad Request: {}", e.getMessage());
+            return writeJsonFallback(response, ApiResponse.fail(400, e.getMessage()));
+        } catch (com.zzh.stock_calculator.common.BusinessException e) {
+            log.warn("Business error: code={}, msg={}", e.getCode(), e.getMessage());
+            return writeJsonFallback(response, ApiResponse.fail(e.getCode(), e.getMessage()));
+        } catch (Exception e) {
+            log.error("Unexpected error: ", e);
+            return writeJsonFallback(response, ApiResponse.fail(500, "服务器内部错误"));
+        }
+    }
+
+    /** 阶段一失败回落：手工写既有 JSON 信封并提交响应，返回 null 表示响应已处理 */
+    private SseEmitter writeJsonFallback(HttpServletResponse response, ApiResponse<?> body) throws java.io.IOException {
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.getWriter().write(JSON_MAPPER.writeValueAsString(body));
+        response.getWriter().flush();
+        return null;
     }
 
     // ==================== GET /threads/{scopeId}/messages ====================

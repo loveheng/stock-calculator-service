@@ -129,7 +129,9 @@ copilot:
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
       api-key: ${DEEPSEEK_API_KEY:}
       model: ${DEEPSEEK_MODEL:deepseek-chat}
-      read-timeout: 60s
+      # read-timeout 经 OpenAiChatOptions.timeout 映射为 OkHttp callTimeout（整次请求上限，含流式全程）；
+      # callLlm 底层走 SSE 流式（中转渠道网关 60s 掐非流式），实测该渠道长文生成可达 253s，故放宽到 300s
+      read-timeout: 300s
 
 app:
   auth:

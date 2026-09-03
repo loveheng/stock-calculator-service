@@ -188,3 +188,32 @@ CREATE INDEX IF NOT EXISTS idx_ai_chat_message_session_id
     ON ai_chat_message(session_id, id DESC) WHERE deleted_at = 0;
 CREATE INDEX IF NOT EXISTS idx_ai_chat_message_cid
     ON ai_chat_message(client_message_id) WHERE client_message_id IS NOT NULL;
+
+-- =====================================================================
+-- Copilot Prompt 模版（P1 配置驱动路由）：DB 为唯一准源，启动由 CopilotPromptSync
+-- 全量镜像至 Redis（copilot:prompt:{tag}），运行时解析器只读 Redis。
+-- 与实体 @UniqueConstraint / @Index 名称严格对齐（Hibernate ddl-auto=none，建表仅靠本脚本）。
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS copilot_prompt_template (
+    id      BIGSERIAL PRIMARY KEY,
+    tag     VARCHAR(100) NOT NULL,
+    content TEXT         NOT NULL,
+    ctime   BIGINT       NOT NULL,
+    mtime   BIGINT       NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_copilot_prompt_template_tag
+    ON copilot_prompt_template(tag);
+
+CREATE TABLE IF NOT EXISTS copilot_prompt_template_history (
+    id        BIGSERIAL PRIMARY KEY,
+    tag       VARCHAR(100) NOT NULL,
+    rev       INTEGER      NOT NULL,
+    content   TEXT         NOT NULL,
+    operation VARCHAR(16)  NOT NULL,
+    ctime     BIGINT       NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cpt_history_tag_rev
+    ON copilot_prompt_template_history(tag, rev);
+CREATE INDEX IF NOT EXISTS idx_cpt_history_tag_ctime
+    ON copilot_prompt_template_history(tag, ctime DESC);
