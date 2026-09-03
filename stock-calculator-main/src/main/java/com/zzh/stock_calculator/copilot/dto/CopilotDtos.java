@@ -25,6 +25,8 @@ public final class CopilotDtos {
         private String contextSummary;   // ephemeral JSON（不落库）
         private String contextOverview;  // 落库标量 JSON
         private String timeAnchor;       // 时间截面标记
+        /** 区块级聚焦 ID（如 home:short_term）：仅参与 Prompt 模版路由编排，不落库、不打日志；缺省 = 整页口径 */
+        private String focusBlockId;
     }
 
     @Data
@@ -68,5 +70,40 @@ public final class CopilotDtos {
         private java.util.List<MessageItem> messages;
         private Boolean hasMore;
         private Long oldestId;
+    }
+
+    // ==================== Prompt 模版在线管理 ====================
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PromptTemplateItem {
+        private Long id;
+        private String tag;
+        private String content;
+        private Long ctime;
+        private Long mtime;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PromptUpsertRequest {
+        private String content;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PromptTemplateHistoryItem {
+        private Long id;
+        private String tag;
+        private Integer rev;
+        private String content;
+        private String operation;
+        private Long ctime;
     }
 }

@@ -6,4 +6,6 @@ spring:
     password: ${POSTGRES_PASS:}
   sql:
     init:
-      mode: never
+      # data.sql 默认数据播种（copilot prompt 模版等）：必须 always，否则外置 PG 默认不执行；
+      # 脚本内 ON CONFLICT DO NOTHING 保证幂等（缺才插，不覆盖已有行）。回滚此行 = 停用播种。
+      mode: always

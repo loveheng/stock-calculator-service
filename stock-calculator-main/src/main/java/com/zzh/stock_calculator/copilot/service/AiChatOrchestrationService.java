@@ -9,6 +9,7 @@ import com.zzh.stock_calculator.copilot.repository.AiChatMessageRepository;
 import com.zzh.stock_calculator.copilot.repository.AiChatSessionRepository;
 import com.zzh.stock_calculator.copilot.config.DeepSeekProperties;
 import com.zzh.stock_calculator.copilot.service.store.AiChatSessionStore;
+import com.zzh.stock_calculator.copilot.util.CopilotPromptResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -44,6 +45,7 @@ public class AiChatOrchestrationService {
     private final AiChatSessionStore sessionStore;
     private final AiChatMessageRepository messageRepository;
     private final AiChatSessionRepository sessionRepository;
+    private final CopilotPromptResolver promptResolver;
     private final com.zzh.stock_calculator.copilot.util.AiChatRateLimiter rateLimiter;
     private final DeepSeekProperties deepSeekProps;
     private final PlatformTransactionManager txnMgr; // for LLM failure recovery
@@ -58,6 +60,7 @@ public class AiChatOrchestrationService {
     public AiChatOrchestrationService(AiChatSessionStore sessionStore,
                                       AiChatMessageRepository messageRepository,
                                       AiChatSessionRepository sessionRepository,
+                                      CopilotPromptResolver promptResolver,
                                       com.zzh.stock_calculator.copilot.util.AiChatRateLimiter rateLimiter,
                                       DeepSeekProperties deepSeekProps,
                                       PlatformTransactionManager txnMgr,
@@ -65,6 +68,7 @@ public class AiChatOrchestrationService {
         this.sessionStore = sessionStore;
         this.messageRepository = messageRepository;
         this.sessionRepository = sessionRepository;
+        this.promptResolver = promptResolver;
         this.rateLimiter = rateLimiter;
         this.deepSeekProps = deepSeekProps;
         this.txnMgr = txnMgr;
@@ -89,6 +93,10 @@ public class AiChatOrchestrationService {
         }
         if (!StringUtils.hasText(req.getQuestion())) {
             throw new BusinessException(400, "问题内容不能为空");
+        }
+        if (StringUtils.hasText(req.getFocusBlockId()) && req.getFocusBlockId().trim().length() > 100) {
+            // focusBlockId 拼入 Redis key，限长与 scopeId 列宽(100)一致，防脏数据滥用 key 空间
+            throw new BusinessException(400, "focusBlockId 过长（上限 100 字符）");
         }
         // 1. 限流检查
         rateLimiter.check(userId);
@@ -136,7 +144,7 @@ public class AiChatOrchestrationService {
         // Step B: 懒清理 & 组装 prompt
         softDeleteOverflowIfNeeded(userMsg.getSessionId());
         List<AiChatMessage> recentHistory = getRecentHistory(userMsg.getSessionId());
-        Prompt prompt = buildPrompt(userMsg.getContent(), recentHistory, req);
+        Prompt prompt = buildPrompt(userMsg.getContent(), recentHistory, req, scopeId);
 
         // Step C: === LLM 调用在事务外 ===
         ChatResponse response;
@@ -167,7 +175,7 @@ public class AiChatOrchestrationService {
 
         // 组装 prompt + LLM 调用（LLM 在事务外）
         List<AiChatMessage> recentHistory = getRecentHistory(existingUserMsg.getSessionId());
-        Prompt prompt = buildPrompt(existingUserMsg.getContent(), recentHistory, req);
+        Prompt prompt = buildPrompt(existingUserMsg.getContent(), recentHistory, req, scopeId);
 
         ChatResponse response;
         try {
@@ -287,9 +295,11 @@ public class AiChatOrchestrationService {
      * 快照只进 SystemMessage：历史回放永远纯文本问答，杜绝旧快照与新数据混淆（D7 漂移对策）。
      * 时间隔离（P0）：历史轮次带时间前缀 + 新鲜度裁决规则 —— 历史数字仅为当时状态，
      * 与本次实时快照冲突时以本次为准，防数据变动后旧回答污染新结论。
+     * 区块级模版路由（P1）：只替换开头人设段，快照/新鲜度规则等全局段恒保留。
      */
-    private Prompt buildPrompt(String currentQuestion, List<AiChatMessage> history, AskRequest req) {
-        StringBuilder systemPrompt = new StringBuilder("你是一个金融交易助手，请基于用户提供的数据做出专业分析。");
+    private Prompt buildPrompt(String currentQuestion, List<AiChatMessage> history, AskRequest req, String scopeId) {
+        String persona = promptResolver.resolve(scopeId, req.getFocusBlockId());
+        StringBuilder systemPrompt = new StringBuilder(persona);
         String contextSummary = req.getContextSummary();
         String contextOverview = req.getContextOverview();
         if (contextSummary != null && !contextSummary.isBlank()) {
