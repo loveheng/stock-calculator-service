@@ -26,6 +26,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -257,15 +260,33 @@ public class AiChatOrchestrationService {
 
     // ==================== LLM Integration ====================
 
-    /** 获取最近 N 条活跃消息 */
+    /**
+     * 获取最近 N 条活跃消息（仓储按 id 倒序取窗口，此处反转为正序再喂 Prompt）。
+     * 仓储 LIMIT 6 ORDER BY id DESC（最新在前）；LLM 需要真实时间线（旧→新），
+     * 倒序会让模型把最新轮次当最旧上下文，多轮因果全错 —— 修复：调用方从未执行约定的反转。
+     */
     private List<AiChatMessage> getRecentHistory(Long sessionId) {
-        return messageRepository.findRecentActiveBySessionId(sessionId)
+        List<AiChatMessage> recent = messageRepository.findRecentActiveBySessionId(sessionId)
                 .stream().filter(m -> "ok".equals(m.getStatus())).collect(java.util.stream.Collectors.toList());
+        java.util.Collections.reverse(recent);
+        return recent;
+    }
+
+    /** 历史轮次时间前缀格式（服务器本地时区，仅到分钟） */
+    private static final DateTimeFormatter HISTORY_TIME_FMT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+
+    /** epoch 秒 → "MM-dd HH:mm"（null 安全，作历史轮次前缀） */
+    private String formatCtime(Long ctime) {
+        if (ctime == null) return "";
+        return HISTORY_TIME_FMT.format(Instant.ofEpochSecond(ctime).atZone(ZoneId.systemDefault()));
     }
 
     /**
-     * 构建 Prompt：系统指令（含当次 ephemeral 页面快照）+ 历史 ok 消息 + 当前提问。
+     * 构建 Prompt：系统指令（当次 ephemeral 页面快照 + 数据新鲜度规则）
+     *            + 历史 ok 消息（带采集时间前缀，正序） + 当前提问。
      * 快照只进 SystemMessage：历史回放永远纯文本问答，杜绝旧快照与新数据混淆（D7 漂移对策）。
+     * 时间隔离（P0）：历史轮次带时间前缀 + 新鲜度裁决规则 —— 历史数字仅为当时状态，
+     * 与本次实时快照冲突时以本次为准，防数据变动后旧回答污染新结论。
      */
     private Prompt buildPrompt(String currentQuestion, List<AiChatMessage> history, AskRequest req) {
         StringBuilder systemPrompt = new StringBuilder("你是一个金融交易助手，请基于用户提供的数据做出专业分析。");
@@ -278,11 +299,16 @@ public class AiChatOrchestrationService {
         } else if (contextOverview != null && !contextOverview.isBlank()) {
             systemPrompt.append("\n\n【用户当前页面核心指标（JSON）】\n").append(contextOverview);
         }
+        systemPrompt.append("\n\n【数据新鲜度规则】\n")
+                .append("历史对话中的所有数字与结论仅为当时快照状态，不代表当前；")
+                .append("若与本次提供的实时页面快照冲突，一律以本次实时快照为准，")
+                .append("并主动向用户指出数据相比历史对话已发生变化。");
         List<org.springframework.ai.chat.messages.Message> messages = new ArrayList<>();
         messages.add(new SystemMessage(systemPrompt.toString()));
         for (AiChatMessage m : history) {
-            if ("user".equals(m.getRole())) messages.add(new UserMessage(m.getContent()));
-            else if ("assistant".equals(m.getRole())) messages.add(new AssistantMessage(m.getContent()));
+            String prefix = "[" + formatCtime(m.getCtime()) + "] ";
+            if ("user".equals(m.getRole())) messages.add(new UserMessage(prefix + m.getContent()));
+            else if ("assistant".equals(m.getRole())) messages.add(new AssistantMessage(prefix + m.getContent()));
         }
         messages.add(new UserMessage(currentQuestion));
         return new Prompt(messages);
