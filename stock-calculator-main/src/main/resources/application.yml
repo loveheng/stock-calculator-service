@@ -115,6 +115,17 @@ llm:
     enabled: ${LLM_FALLBACK_ENABLED:true}
     response: "[降级响应] AI 渠道暂不可用，本次结果未经模型处理，请稍后重试。"
 
+copilot:
+  enabled: true   # Copilot AI 功能总开关
+  llm:
+    deepseek:
+      # Copilot 专用 DeepSeek 渠道；base-url 未配置时模型 Bean 不装配，ask 接口返回 503
+      enabled: ${DEEPSEEK_ENABLED:true}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model: ${DEEPSEEK_MODEL:deepseek-chat}
+      read-timeout: 60s
+
 app:
   auth:
     # E2EE 用户服务总开关：native 变体的 application.yml 不配置此项，即整体关闭

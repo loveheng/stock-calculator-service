@@ -149,3 +149,42 @@ CREATE TABLE IF NOT EXISTS public.otp_codes (
 	CONSTRAINT otp_codes_pkey PRIMARY KEY (id)
 );
 CREATE INDEX IF NOT EXISTS idx_otp_codes_email ON public.otp_codes USING btree (email);
+
+-- ============================================================
+-- Copilot AI 聊天表（schema 新增，P1）
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS ai_chat_session (
+    id                BIGSERIAL PRIMARY KEY,
+    user_id           VARCHAR(64)  NOT NULL,
+    scope_id          VARCHAR(100) NOT NULL,
+    title             VARCHAR(100) NOT NULL,
+    last_message_at   BIGINT,
+    ctime             BIGINT       NOT NULL,
+    deleted_at        BIGINT       DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_chat_session_user_scope
+    ON ai_chat_session(user_id, scope_id) WHERE deleted_at = 0;
+
+CREATE TABLE IF NOT EXISTS ai_chat_message (
+    id                BIGSERIAL PRIMARY KEY,
+    session_id        BIGINT       NOT NULL,
+    role              VARCHAR(10)  NOT NULL,
+    content           TEXT         NOT NULL,
+    client_message_id VARCHAR(40),
+    status            VARCHAR(20)  DEFAULT 'ok',
+    context_overview  VARCHAR(255),
+    time_anchor       VARCHAR(100),
+    channel           VARCHAR(30),
+    model             VARCHAR(50),
+    prompt_tokens     INTEGER,
+    completion_tokens INTEGER,
+    ctime             BIGINT       NOT NULL,
+    deleted_at        BIGINT       DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_chat_message_client_id
+    ON ai_chat_message(client_message_id) WHERE client_message_id IS NOT NULL AND deleted_at = 0;
+CREATE INDEX IF NOT EXISTS idx_ai_chat_message_session_id
+    ON ai_chat_message(session_id, id DESC) WHERE deleted_at = 0;
+CREATE INDEX IF NOT EXISTS idx_ai_chat_message_cid
+    ON ai_chat_message(client_message_id) WHERE client_message_id IS NOT NULL;

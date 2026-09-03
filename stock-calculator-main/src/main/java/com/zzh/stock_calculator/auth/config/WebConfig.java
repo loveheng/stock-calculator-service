@@ -28,6 +28,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(authInterceptor).addPathPatterns(
                 "/api/auth/profile/**",
                 "/api/auth/logout",
-                "/api/auth/recovery/confirm");
+                "/api/auth/recovery/confirm",
+                "/api/copilot/**");
     }
 }
