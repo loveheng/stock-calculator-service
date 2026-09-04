@@ -217,3 +217,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_cpt_history_tag_rev
     ON copilot_prompt_template_history(tag, rev);
 CREATE INDEX IF NOT EXISTS idx_cpt_history_tag_ctime
     ON copilot_prompt_template_history(tag, ctime DESC);
+
+
+-- ============================================================
+-- 服务端密文同步（docs/server-sync-backend-design.md §3 / D5 / D8 / D10 / D11 / E1 / E7）
+-- ============================================================
+
+-- DROP TABLE IF EXISTS public.user_sync_history;
+-- DROP TABLE IF EXISTS public.user_sync_data;
+
+CREATE TABLE IF NOT EXISTS public.user_sync_data (
+	user_id           varchar(64) NOT NULL,
+	encrypted_payload text NOT NULL,
+	version           int8 NOT NULL,
+	payload_hash      varchar(64) NULL,
+	payload_bytes     int4 NOT NULL,
+	created_at        timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	updated_at        timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT user_sync_data_pkey PRIMARY KEY (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.user_sync_history (
+	id                bigserial NOT NULL,
+	user_id           varchar(64) NOT NULL,
+	version           int8 NOT NULL,
+	encrypted_payload text NOT NULL,
+	payload_bytes     int4 NOT NULL,
+	created_at        timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT user_sync_history_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_user_sync_history UNIQUE (user_id, version)
+);
+
+-- 回滚：DROP TABLE IF EXISTS public.user_sync_history; DROP TABLE IF EXISTS public.user_sync_data;
+-- 历史裁剪规则（service 层）：成功写入 newVersion 后 DELETE version < newVersion - 5，保留恰 5 份（D8）
+-- 历史唯一冲突由 INSERT … ON CONFLICT DO NOTHING 吸收（E7，整库回滚场景）

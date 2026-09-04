@@ -29,6 +29,7 @@ public class WebConfig implements WebMvcConfigurer {
                 "/api/auth/profile/**",
                 "/api/auth/logout",
                 "/api/auth/recovery/confirm",
-                "/api/copilot/**");
+                "/api/copilot/**",
+                "/api/sync/**");   // 服务端密文同步（design E3：缺失则端点无鉴权裸奔）
     }
 }
