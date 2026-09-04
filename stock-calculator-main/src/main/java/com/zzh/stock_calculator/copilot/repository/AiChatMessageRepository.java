@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,7 +39,8 @@ public interface AiChatMessageRepository extends JpaRepository<AiChatMessage, Lo
     /** 幂等检查：按 cid 查找最早一条消息（用于级联删除前查旧记录） */
     Optional<AiChatMessage> findFirstByClientMessageIdOrderByIdAsc(String clientMessageId);
 
-    /** user 行状态机翻转（v1.5.1）：pending→ok / pending→failed / failed→pending */
+    /** user 行状态机翻转（v1.5.1）：pending→ok / pending→failed / failed→pending。@Modifying 无默认事务，由注解提供 */
+    @Transactional
     @Modifying
     @Query("UPDATE AiChatMessage m SET m.status = :status WHERE m.id = :id")
     void updateStatus(@Param("id") Long id, @Param("status") String status);
@@ -52,7 +54,8 @@ public interface AiChatMessageRepository extends JpaRepository<AiChatMessage, Lo
     /** 总消息数（含已软删的） */
     long countTotalBySessionId(Long sessionId);
 
-    /** 懒清理：软删超出容量部分（JPQL 不支持子查询 LIMIT，必须用原生 SQL） */
+    /** 懒清理：软删超出容量部分（JPQL 不支持子查询 LIMIT，必须用原生 SQL）。@Modifying 无默认事务，由注解提供 */
+    @Transactional
     @Modifying
     @Query(value = "UPDATE ai_chat_message SET deleted_at = :now WHERE id IN " +
                    "(SELECT id FROM ai_chat_message WHERE session_id = :sessionId " +
@@ -64,7 +67,8 @@ public interface AiChatMessageRepository extends JpaRepository<AiChatMessage, Lo
 
     // ==================== 级联软删除 ====================
 
-    /** 当 session 被软删时，将关联 messages 也标记 deleted_at */
+    /** 当 session 被软删时，将关联 messages 也标记 deleted_at。@Modifying 无默认事务，由注解提供 */
+    @Transactional
     @Modifying
     @Query("UPDATE AiChatMessage m SET m.deletedAt = :now WHERE m.sessionId = :sessionId AND m.deletedAt = 0")
     int cascadeDeleteBySessionId(@Param("sessionId") Long sessionId, @Param("now") Long now);

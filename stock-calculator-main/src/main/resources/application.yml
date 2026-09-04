@@ -50,6 +50,11 @@ spring:
       mail:
         smtp:
           auth: true
+          # JavaMail 默认无限等待；事务内发信（OtpService）遇 SMTP 挂起会无限占用
+          # DB 连接直至拖垮连接池。值必须为整型毫秒（JavaMail 属性不认 5s 这种时长写法）。
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
           starttls:
             enable: true
   data:

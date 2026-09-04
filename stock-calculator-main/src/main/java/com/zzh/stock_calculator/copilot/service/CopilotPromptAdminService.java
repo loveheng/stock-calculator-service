@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -51,7 +53,8 @@ public class CopilotPromptAdminService {
 
     /**
      * 新增/更新模版（tag 已存在则覆盖 content 并刷新 mtime），返回保存后的实体。
-     * 主表写入与历史留痕同一事务；Redis 同步在事务性 DB 写之后执行。
+     * 主表写入与历史留痕同一事务；Redis 同步推迟到事务提交后（afterCommit），
+     * 消除「DB 回滚但缓存已改」的分歧窗口。
      */
     @Transactional
     public CopilotPromptTemplate upsert(String tag, String content) {
@@ -68,13 +71,13 @@ public class CopilotPromptAdminService {
                         .tag(t).content(c).ctime(now).mtime(now).build());
         CopilotPromptTemplate saved = repository.save(entity);
         appendHistory(t, c, OP_UPSERT, now);
-        syncRedis(t, c);
+        afterCommitSync(() -> syncRedis(t, c));
         log.info("copilot prompt 模版已保存: tag={}, mtime={}", t, saved.getMtime());
         return saved;
     }
 
     /**
-     * 删除模版：删主表行（历史留痕记录被删内容）+ DEL Redis key；
+     * 删除模版：删主表行（历史留痕记录被删内容）+ DEL Redis key（推迟到事务提交后执行）；
      * @return DB 中是否存在该行
      */
     @Transactional
@@ -87,7 +90,7 @@ public class CopilotPromptAdminService {
                     return true;
                 })
                 .orElse(false);
-        delRedis(t);
+        afterCommitSync(() -> delRedis(t));
         if (existed) {
             log.info("copilot prompt 模版已删除: tag={}", t);
         }
@@ -119,6 +122,24 @@ public class CopilotPromptAdminService {
             redisTemplate.delete(CopilotPromptResolver.KEY_PREFIX + tag);
         } catch (Exception e) {
             log.warn("prompt 模版删除 Redis key 失败（重启后自动补齐）: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 事务提交后再执行 Redis 副作用：提交前写/删缓存存在「DB 回滚但缓存已改」的
+     * 分歧窗口（且 Redis I/O 占用 DB 连接），故注册 afterCommit 回调。
+     * 无活动事务时立即执行（兜底：正常调用链均在 @Transactional 内，单测直调走此分支）。
+     */
+    private void afterCommitSync(Runnable redisAction) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    redisAction.run();
+                }
+            });
+        } else {
+            redisAction.run();
         }
     }
 

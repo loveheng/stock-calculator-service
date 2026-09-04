@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -43,12 +44,14 @@ class OtpServiceTest {
     @Mock private OtpCodeRepository otpCodeRepository;
     @Mock private UserRepository userRepository;
     @Mock private MailService mailService;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private OtpService otpService;
 
     @BeforeEach
     void setUp() {
-        otpService = new OtpService(otpCodeRepository, userRepository, mailService, new AuthProperties());
+        otpService = new OtpService(otpCodeRepository, userRepository, mailService,
+                new AuthProperties(), transactionManager);
     }
 
     private OtpCodeEntity pendingOtp(String code, OffsetDateTime expiresAt, int attempts) {

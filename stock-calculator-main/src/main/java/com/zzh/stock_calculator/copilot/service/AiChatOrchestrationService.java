@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
@@ -38,6 +39,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -115,8 +117,9 @@ public class AiChatOrchestrationService {
      * SSE 流式提问：与 {@link #ask} 共用阶段一（beginAsk），失败抛 BusinessException
      * 由控制器回落 JSON 信封（此时尚未开始流式响应，可安全回落）；
      * 阶段二改为订阅 LLM 流：delta 逐 chunk 透传 → done 携带归档后的权威全文 → complete 关流。
-     * 流中 LLM 异常/归档失败：REQUIRES_NEW 标记 userMsg.status→failed（前端按可重发处理）
-     * + error 事件后关流。红线不变：LLM 与 DB 事务解耦，contextSummary 只进 Prompt（不落库不打日志）。
+     * 流中 LLM 异常/归档失败/客户端断开/超时：标记 userMsg.status→failed（前端按可重发处理，
+     * 断开后同 cid 可立即重发续跑，不必等 pending 窗口 60s）+ error 事件后关流。
+     * 红线不变：LLM 与 DB 事务解耦，contextSummary 只进 Prompt（不落库不打日志）。
      */
     public SseEmitter askStream(String userId, String scopeId, AskRequest req) {
         PendingAsk pending = beginAsk(userId, scopeId, req);
@@ -129,6 +132,7 @@ public class AiChatOrchestrationService {
         StringBuilder fullText = new StringBuilder();
         AtomicReference<Usage> usageRef = new AtomicReference<>();
         AtomicReference<Disposable> subRef = new AtomicReference<>();
+        AtomicBoolean archivedRef = new AtomicBoolean(); // 归档成功后置位，防止断开回调把 ok 改写为 failed
 
         Disposable disposable = chatModel.stream(pending.prompt()).subscribe(
                 chunk -> {
@@ -155,6 +159,7 @@ public class AiChatOrchestrationService {
                     try {
                         // 阶段二：归档 assistant + userMsg.status→ok（新事务），content 以累计全文为权威
                         AskResponse resp = persistAssistant(pending.userMsg(), fullText.toString(), usageRef.get());
+                        archivedRef.set(true);
                         safeSend(emitter, subRef, SseEmitter.event()
                                 .name("done").data(resp, MediaType.APPLICATION_JSON));
                         emitter.complete(); // 发完 done 必须关闭流
@@ -169,16 +174,24 @@ public class AiChatOrchestrationService {
                 });
         subRef.set(disposable);
 
-        // 客户端断开/容器超时 → 取消上游订阅（openai-java 流随之关闭）；userMsg 留 pending 走既有续跑状态机
+        // 客户端断开/容器超时 → 取消上游订阅（openai-java 流随之关闭），并把 userMsg 标记 failed：
+        // 断开即本次失败，同 cid 立即重发可走续跑，不必等 pending 窗口 60s。
+        // 注意 onCompletion 在正常完结时也会触发（此时已归档 ok），只有断开/超时路径才允许改状态。
         Runnable cancel = () -> {
             Disposable d = subRef.get();
             if (d != null && !d.isDisposed()) {
                 d.dispose();
             }
         };
+        Runnable cancelAndFail = () -> {
+            cancel.run();
+            if (!archivedRef.get()) {
+                markUserMessageFailed(pending.userMsg().getId());
+            }
+        };
         emitter.onCompletion(cancel);
-        emitter.onTimeout(cancel);
-        emitter.onError(t -> cancel.run());
+        emitter.onTimeout(cancelAndFail);
+        emitter.onError(t -> cancelAndFail.run());
         return emitter;
     }
 
@@ -253,7 +266,7 @@ public class AiChatOrchestrationService {
             log.warn("续跑时发现 session 不存在: userId={}, scopeId={}，回到新流程", userId, scopeId);
             return prepareNew(userId, scopeId, req);
         }
-        // 重挂互斥：status→pending
+        // 重挂互斥：status→pending（事务由仓储方法上的 @Transactional 提供）
         messageRepository.updateStatus(existingUserMsg.getId(), "pending");
         List<AiChatMessage> recentHistory = getRecentHistory(existingUserMsg.getSessionId());
         Prompt prompt = buildPrompt(existingUserMsg.getContent(), recentHistory, req, scopeId);
@@ -285,6 +298,18 @@ public class AiChatOrchestrationService {
 
     // ==================== Message Persistence ====================
 
+    /**
+     * REQUIRES_NEW 事务模板：仅用于「多写原子组」——userMsg+session 同事务落库、
+     * assistant 行+状态翻转同事务归档。私有方法自调用不经过 Spring 代理，
+     * @Transactional 会失效，故用编程式事务。
+     * 单条 @Modifying 写无需此模板：仓储方法已标注 @Transactional。
+     */
+    private TransactionTemplate requiresNewTxn() {
+        TransactionTemplate tx = new TransactionTemplate(txnMgr);
+        tx.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
+        return tx;
+    }
+
     /** 在独立事务中保存 User Message（status=pending），返回已提交的行（含生成主键） */
     private AiChatMessage saveUserMessageInTxn(AiChatSession session, AskRequest req) {
         String overview = req.getContextOverview();
@@ -299,9 +324,7 @@ public class AiChatOrchestrationService {
                 .contextOverview(overview).timeAnchor(req.getTimeAnchor())
                 .channel("deepseek").model(deepSeekProps.getModel())
                 .ctime(nowSec()).deletedAt(0L).build();
-        TransactionTemplate tx = new TransactionTemplate(txnMgr);
-        tx.setPropagationBehavior(org.springframework.transaction.annotation.Propagation.REQUIRES_NEW.value());
-        return tx.execute(status -> {
+        return requiresNewTxn().execute(status -> {
             messageRepository.save(msg);
             session.setLastMessageAt(msg.getCtime());
             sessionRepository.save(session);
@@ -309,15 +332,13 @@ public class AiChatOrchestrationService {
         });
     }
 
-    /** 异步回写 userMsg.status→failed（当 LLM 调用失败时） */
+    /**
+     * 异步回写 userMsg.status→failed（LLM 失败/归档失败/客户端断开时）。
+     * 调用方均为无外层事务的回调/catch 块，事务由仓储方法上的 @Transactional 提供。
+     */
     private void markUserMessageFailed(Long messageId) {
         try {
-            TransactionTemplate tx = new TransactionTemplate(txnMgr);
-            tx.setPropagationBehavior(org.springframework.transaction.annotation.Propagation.REQUIRES_NEW.value());
-            tx.execute(status -> {
-                messageRepository.updateStatus(messageId, "failed");
-                return null;
-            });
+            messageRepository.updateStatus(messageId, "failed");
             log.debug("标记 userMsg failed: messageId={}", messageId);
         } catch (Exception e) {
             log.error("标记 userMsg failed 异常: messageId={}", messageId, e);
@@ -330,6 +351,7 @@ public class AiChatOrchestrationService {
         long active = messageRepository.countActiveBySessionId(sessionId);
         if (active > maxMessages) {
             int overflow = (int) (active - maxMessages);
+            // 事务由仓储方法上的 @Transactional 提供
             messageRepository.softDeleteOverflow(sessionId, nowSec(), overflow);
             log.info("懒清理覆盖: sessionId={}, 溢出数={}", sessionId, overflow);
         }
@@ -447,9 +469,7 @@ public class AiChatOrchestrationService {
                 .channel("deepseek").model(deepSeekProps.getModel())
                 .promptTokens(promptTokens).completionTokens(completionTokens)
                 .ctime(nowSec()).deletedAt(0L).build();
-        TransactionTemplate tx = new TransactionTemplate(txnMgr);
-        tx.setPropagationBehavior(org.springframework.transaction.annotation.Propagation.REQUIRES_NEW.value());
-        tx.execute(status -> {
+        requiresNewTxn().execute(status -> {
             messageRepository.save(assistant);
             messageRepository.updateStatus(userMsg.getId(), "ok");
             return null;
