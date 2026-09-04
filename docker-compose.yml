@@ -8,8 +8,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?请在项目根 .env 中设置 POSTGRES_PASSWORD}
       - POSTGRES_USER=root
       - POSTGRES_DB=scs
+      - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
-      - /data/postgres/:/var/lib/postgresql:Z
+      - /data/postgres/data:/var/lib/postgresql/data/pgdata:Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U root"]
       interval: 10s
