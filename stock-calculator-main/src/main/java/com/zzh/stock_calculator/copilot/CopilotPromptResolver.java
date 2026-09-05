@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.copilot.util;
+package com.zzh.stock_calculator.copilot;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -23,6 +23,9 @@ import java.util.function.Function;
  * <p>容错：Redis 读失败 / key 未配置 / 值空白或超长一律静默落到下一级，
  * Redis 整体不可用或全部未命中 → 代码内兜底人设（{@link #FALLBACK_PERSONA}），
  * 绝不抛错阻断提问链路；全程不记日志（key 内含 focusBlockId，红线要求不打日志）。</p>
+ *
+ * <p>置于 copilot 基包作为模块 API（与 llm 的 LlmChainRouter 同理）：vision 等跨域方
+ * 经 {@link #resolveByTag} 按固定标签直读同一张模版表，复用播种 / 在线管理与热更机制。</p>
  */
 @Component
 public class CopilotPromptResolver {
@@ -69,6 +72,27 @@ public class CopilotPromptResolver {
             return FALLBACK_PERSONA;
         }
         return FALLBACK_PERSONA;
+    }
+
+    /**
+     * 按固定标签直读单条模版（跨域模块 API，无多级标签路由）：
+     * 未命中 / 空白 / 超长 / Redis 异常一律返回 null（fail-open），由调用方决定内置兜底内容。
+     */
+    public String resolveByTag(String tag) {
+        return resolveByTag(tag, key -> redisTemplate.opsForValue().get(key));
+    }
+
+    /** 纯函数核心（便于单测）：reader 为 Redis 读取函数（key → value，未命中返回 null） */
+    String resolveByTag(String tag, Function<String, String> reader) {
+        if (!StringUtils.hasText(tag)) {
+            return null;
+        }
+        try {
+            return normalize(reader.apply(KEY_PREFIX + tag.trim()));
+        } catch (Exception e) {
+            // Redis 不可用：fail-open 返回 null，兜底责任在调用方
+            return null;
+        }
     }
 
     /**

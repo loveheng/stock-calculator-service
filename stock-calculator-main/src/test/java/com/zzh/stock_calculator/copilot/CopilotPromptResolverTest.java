@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.copilot.util;
+package com.zzh.stock_calculator.copilot;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +12,7 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -167,5 +168,48 @@ class CopilotPromptResolverTest {
         when(redisTemplate.opsForValue()).thenThrow(new RedisConnectionFailureException("down"));
 
         assertEquals(FALLBACK, resolver().resolve("home:600519.SH", "home:short_term"));
+    }
+
+    // ==================== resolveByTag（固定标签直读，跨域模块 API） ====================
+
+    @Test
+    void resolveByTag_hitReturnsTrimmedValue() {
+        when(reader.apply("copilot:prompt:vision:trade:system")).thenReturn("  模版内容 \n");
+
+        assertEquals("模版内容", resolver().resolveByTag("vision:trade:system", reader));
+    }
+
+    @Test
+    void resolveByTag_missOrBlankTag_returnsNull() {
+        when(reader.apply("copilot:prompt:vision:trade:system")).thenReturn(null);
+
+        assertNull(resolver().resolveByTag("vision:trade:system", reader));
+        assertNull(resolver().resolveByTag("   ", reader));
+        assertNull(resolver().resolveByTag(null, reader));
+    }
+
+    @Test
+    void resolveByTag_blankOrOversizedValue_returnsNull() {
+        when(reader.apply("copilot:prompt:vision:trade:system")).thenReturn("   ");
+        when(reader.apply("copilot:prompt:vision:generic:system"))
+                .thenReturn("x".repeat(CopilotPromptResolver.MAX_TEMPLATE_LENGTH + 1));
+
+        assertNull(resolver().resolveByTag("vision:trade:system", reader));
+        assertNull(resolver().resolveByTag("vision:generic:system", reader));
+    }
+
+    @Test
+    void resolveByTag_redisFailure_returnsNullNotThrow() {
+        when(reader.apply(anyString())).thenThrow(new RedisConnectionFailureException("down"));
+
+        assertNull(resolver().resolveByTag("vision:trade:system", reader));
+    }
+
+    @Test
+    void productionResolveByTag_readsThroughStringRedisTemplate() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("copilot:prompt:vision:trade:system")).thenReturn("覆写模版");
+
+        assertEquals("覆写模版", resolver().resolveByTag("vision:trade:system"));
     }
 }

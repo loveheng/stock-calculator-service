@@ -11,7 +11,7 @@ import com.zzh.stock_calculator.copilot.repository.AiChatMessageRepository;
 import com.zzh.stock_calculator.copilot.repository.AiChatSessionRepository;
 import com.zzh.stock_calculator.copilot.config.DeepSeekProperties;
 import com.zzh.stock_calculator.copilot.service.store.AiChatSessionStore;
-import com.zzh.stock_calculator.copilot.util.CopilotPromptResolver;
+import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;

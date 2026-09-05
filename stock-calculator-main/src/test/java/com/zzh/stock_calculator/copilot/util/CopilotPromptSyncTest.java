@@ -1,5 +1,6 @@
 package com.zzh.stock_calculator.copilot.util;
 
+import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
 import com.zzh.stock_calculator.copilot.entity.CopilotPromptTemplate;
 import com.zzh.stock_calculator.copilot.repository.CopilotPromptTemplateRepository;
 import org.junit.jupiter.api.Test;

@@ -4,7 +4,7 @@ import com.zzh.stock_calculator.copilot.entity.CopilotPromptTemplate;
 import com.zzh.stock_calculator.copilot.entity.CopilotPromptTemplateHistory;
 import com.zzh.stock_calculator.copilot.repository.CopilotPromptTemplateHistoryRepository;
 import com.zzh.stock_calculator.copilot.repository.CopilotPromptTemplateRepository;
-import com.zzh.stock_calculator.copilot.util.CopilotPromptResolver;
+import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

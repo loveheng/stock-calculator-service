@@ -1,5 +1,6 @@
 package com.zzh.stock_calculator.copilot.util;
 
+import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
 import com.zzh.stock_calculator.copilot.repository.CopilotPromptTemplateRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;

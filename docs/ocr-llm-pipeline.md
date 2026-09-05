@@ -20,6 +20,7 @@
 | P7 | 缓存 | OCR 层 MD5→文本 **Redis** 缓存（`vision:ocr:text:<MD5>`，命中省免费额度，重启不清零，决策 B12 前为 Caffeine）；LLM 层结果缓存暂不实现（P2 待定，同图同任务重复请求会重复耗额度） |
 | P8 | 交易解析不迁移 | `/ocr-parse` 继续走 Gemini 多模态直读（表格结构识别远优于「OCR 扁平文本→LLM 重建」），与 `/image-ai` 并存、定位不同 |
 | P9 | 结果缓存与强制刷新 | `/process-image` 新增「图片哈希→交易草稿」结果缓存（`vision.ai.*`，**Redis** key=`vision:ai:draft:<MD5>`，TTL 30m；决策 B12 前为 Caffeine 30m/128）；`useCache=false` 淘汰缓存并以审查模式 Prompt 重新处理。OCR 文本缓存刻意独立保留——同图重识别零增益只耗免费额度，重新处理的杠杆是提示词增强；降级模板输出不解析不缓存（`LlmChainRouter.isDegradedResponse` 识别） |
+| P10 | Prompt 模板包归属 | vision System 侧模板入库热更后**不抽独立 `prompt` 包**：现仅 copilot / vision 两个消费方，跨域耦合面收敛为 copilot 基包 `CopilotPromptResolver.resolveByTag` 单类 API（P1 同款「基包类即模块 API」模式），ModulithVerifyTest 守护。抽包触发条件与迁移清单见 4.5「Prompt 热更」附注 |
 
 ---
 
@@ -82,7 +83,7 @@ com.zzh.stock_calculator.llm                     # 顶级领域包（模块基�
 
 com.zzh.stock_calculator.vision                  # 本轮新增文件
 ├── service/
-│   ├── PromptFormatter.java                     # 保守清洗 + 通用/交易两族 Prompt 模板（含审查模式增强段）
+│   ├── PromptFormatter.java                     # 保守清洗 + 通用/交易两族 Prompt 模板（System 侧 DB 可热更，内置常量兜底）
 │   ├── TradeDraftParser.java                    # 模型输出 -> List<TradeDraftItem>（围栏清理 + 脏行隔离，两管道共用）
 │   ├── ImageTextProcessingFacade.java           # 门面：编排 + 耗时打点 + 异常边界 + 交易草稿结果缓存
 │   └── OcrChainManager.java                     # OCR 责任链调度器（前轮已建，MD5 缓存在此）
@@ -175,6 +176,18 @@ Gemini / Groq 的模型为 `LlmConfig` 声明的**全局 Bean**（`geminiChatMod
 | ~~智能断句/合并行~~ | **明确不做**：正则无法可靠处理表格文本 |
 
 Prompt 组装：System 侧为通用约束（仅依据文本作答、严禁编造、容错 OCR 噪声、按指令格式输出）；User 侧为「任务指令 + 清洗后文本」模板（`【任务指令】/【待处理文本】` 两段式）。任务指令为空时门面使用默认指令「请整理并总结文本中的关键信息。」
+
+Prompt 热更：System 侧三段模板（通用 `vision:generic:system`、交易提取 `vision:trade:system`、审查增强 `vision:trade:review`）存 `copilot_prompt_template` 表（data.sql 播种、`/api/copilot/prompt/templates` 在线增改删），经 copilot 基包的 `CopilotPromptResolver.resolveByTag` 直读 Redis，未命中/Redis 不可用回落代码内置常量（fail-open）；User 侧组装脚手架不入库。改库后即时生效（旧结果缓存 TTL 内仍生效，用 `useCache=false` 强刷验证）；`vision:trade:system` 的 JSON 二维数组输出契约是 `TradeDraftParser` 解析依赖，改写须保持该格式行。
+
+**抽独立 prompt 包？暂不（2026-09，决策 P10）**——满足任一触发条件再抽：① 第三个域需读提示词（copilot 沦为依赖汇聚点）；② 写入路径需分化（如 JSON 契约校验进 admin 服务、vision 独立管理入口）；③ `/api/copilot/prompt` 管理 vision 模板的语义错位开始影响协作。届时迁移清单：
+
+| 项 | 内容 |
+|---|---|
+| 类迁移 | `CopilotPromptTemplate`/`History` 实体与 repository、AdminService/AdminController、Sync 迁入 `prompt` 域；多级标签链解析留在 copilot 本域，新域只留通用 byTag 存储 |
+| API 路径 | `/api/copilot/prompt/**` → `/api/prompt/**`，**AuthInterceptor 必须补挂新路径（安全项，不能漏）** |
+| 前端 | prompt 管理页 service 层同步改路径 |
+| 表改名 | `copilot_prompt_template` → `prompt_template`（schema.sql + data.sql + entity + 存量库迁移脚本） |
+| 验证 | ModulithVerifyTest 重过 + 测试目录镜像迁移 |
 
 ### 4.6 门面编排与异常边界
 
@@ -371,7 +384,7 @@ OCR 层扩展新渠道不受上述限制：直接实现 `OcrService` 三方法�
 | `LlmChannelWiringTest` | 2 | llm 渠道真实装配（ApplicationContextRunner 最小上下文）：嵌套配置类注入 / 全局模型 Bean 条件装配 / @Qualifier+ObjectProvider 注入 / 健康检查判定 |
 | `GeminiLlmServiceTest` | 7 | JDK HttpServer 本地桩 + 渠道自建 OpenAiChatModel 真实 HTTP 往返：Bearer 鉴权/内容解析/429/5xx/401/非 JSON/缺 choices |
 | `GroqLlamaServiceTest` | 3 | Groq 渠道同款桩：Bearer 鉴权/模型名传递/429/401（其余路径与 Gemini 共用基类已覆盖） |
-| `PromptFormatterTest` | 9 | 清洗规则与模板（通用 + 交易提取/审查模式） |
+| `PromptFormatterTest` | 13 | 清洗规则与模板（通用 + 交易提取/审查模式；DB 覆写优先/未命中回落） |
 | `ImageTextProcessingFacadeTest` | 9 | 编排顺序/空文本拦截/异常透传/默认指令/结果缓存命中/强制刷新审查模式/降级不缓存/解析失败不缓存 |
 | `TradeDraftParserTest` | 5 | 围栏清理/二维数组映射/脏行隔离/非 JSON 500/空结果语义 |
 | `ModulithVerifyTest` | 2 | 模块边界（vision→llm 基包单向依赖） |

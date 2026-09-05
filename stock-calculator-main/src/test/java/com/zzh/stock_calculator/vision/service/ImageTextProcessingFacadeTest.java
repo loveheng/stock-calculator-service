@@ -1,6 +1,7 @@
 package com.zzh.stock_calculator.vision.service;
 
 import com.zzh.stock_calculator.common.BusinessException;
+import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
 import com.zzh.stock_calculator.llm.LlmChainRouter;
 import com.zzh.stock_calculator.vision.config.VisionAiProperties;
 import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
@@ -50,6 +51,9 @@ class ImageTextProcessingFacadeTest {
     @Mock
     private TradeDraftParser tradeDraftParser;
 
+    @Mock
+    private CopilotPromptResolver promptResolver;
+
     private ImageTextProcessingFacade facade;
 
     /** 内存假缓存：绕开 Redis，验证缓存命中/淘汰行为本身 */
@@ -63,7 +67,8 @@ class ImageTextProcessingFacadeTest {
     @BeforeEach
     void setUp() {
         // PromptFormatter、Jackson 与结果缓存用真实实现，校验真实数据流（含 JSON 往返）与缓存行为
-        facade = new ImageTextProcessingFacade(ocrChainManager, new PromptFormatter(), llmChainRouter,
+        // mock resolver 未打桩返回 null → PromptFormatter 全部走内置常量（fail-open 默认态）
+        facade = new ImageTextProcessingFacade(ocrChainManager, new PromptFormatter(promptResolver), llmChainRouter,
                 tradeDraftParser, new VisionAiProperties(), new ObjectMapper(), new InMemoryVisionCacheStore());
     }
 

@@ -1,5 +1,7 @@
 package com.zzh.stock_calculator.vision.service;
 
+import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -9,9 +11,24 @@ import org.springframework.util.StringUtils;
  * 2. 保守清洗 OCR 噪声：去零宽字符/BOM、不换行空格转普通空格、行尾空白、压缩连续空行。
  *    刻意不做正则智能断句/合并行——对表格类 OCR 文本有破坏性（数字与列错位）；
  * 3. 将任务指令与清洗后文本组装为标准的 System / User Prompt（通用分析 + 交易流水提取两族模板）。
+ *
+ * <p>System 侧模板支持在线热更：DB 表 copilot_prompt_template（tag=vision:*，data.sql 播种、
+ * /api/copilot/prompt/templates 在线增改删）经 {@link CopilotPromptResolver#resolveByTag}
+ * 直读 Redis，未命中 / Redis 不可用回落本类内置常量（fail-open，行为等同改库前）；
+ * User 侧组装脚手架（任务指令 + 文本的固定骨架）不入库。</p>
  */
 @Component
+@RequiredArgsConstructor
 public class PromptFormatter {
+
+    /** 模版标签：通用分析 System Prompt（DB 可覆写，未配置回落内置常量） */
+    public static final String TAG_GENERIC_SYSTEM = "vision:generic:system";
+    /** 模版标签：交易流水提取 System Prompt（改写须保持 JSON 二维数组输出契约，TradeDraftParser 依赖） */
+    public static final String TAG_TRADE_SYSTEM = "vision:trade:system";
+    /** 模版标签：审查模式增强段（strictReview 时拼接在交易 System Prompt 之后） */
+    public static final String TAG_TRADE_REVIEW = "vision:trade:review";
+
+    private final CopilotPromptResolver promptResolver;
 
     private static final String SYSTEM_PROMPT = """
             你是一个严谨的文本分析引擎。用户将提供一段由 OCR 从图片中提取的原始文本（可能包含错字、断行、多余空格等识别噪声）。
@@ -86,9 +103,9 @@ public class PromptFormatter {
         return sb.toString().trim();
     }
 
-    /** 通用 System Prompt：角色约束 + OCR 噪声容错规则（任务指令放 User 侧） */
+    /** 通用 System Prompt：角色约束 + OCR 噪声容错规则（任务指令放 User 侧）；DB 可覆写（tag=vision:generic:system） */
     public String buildSystemPrompt() {
-        return SYSTEM_PROMPT;
+        return orFallback(promptResolver.resolveByTag(TAG_GENERIC_SYSTEM), SYSTEM_PROMPT);
     }
 
     /** User Prompt：业务任务指令 + 清洗后的 OCR 文本 */
@@ -97,11 +114,21 @@ public class PromptFormatter {
     }
 
     /**
-     * 交易流水提取 System Prompt。
+     * 交易流水提取 System Prompt（DB 可覆写：tag=vision:trade:system，审查段 tag=vision:trade:review）。
      * @param strictReview true=附加审查模式增强段（强制刷新场景：结果未被认可，要求逐字校对数字）
      */
     public String buildTradeSystemPrompt(boolean strictReview) {
-        return strictReview ? TRADE_SYSTEM_PROMPT + "\n" + TRADE_STRICT_REVIEW : TRADE_SYSTEM_PROMPT;
+        String base = orFallback(promptResolver.resolveByTag(TAG_TRADE_SYSTEM), TRADE_SYSTEM_PROMPT);
+        if (!strictReview) {
+            return base;
+        }
+        String review = orFallback(promptResolver.resolveByTag(TAG_TRADE_REVIEW), TRADE_STRICT_REVIEW);
+        return base + "\n" + review;
+    }
+
+    /** DB 未命中（null）时回落内置常量（fail-open） */
+    private static String orFallback(String value, String fallback) {
+        return value != null ? value : fallback;
     }
 
     /** 交易流水提取 User Prompt：仅承载清洗后的 OCR 文本（任务规范在 System 侧） */
