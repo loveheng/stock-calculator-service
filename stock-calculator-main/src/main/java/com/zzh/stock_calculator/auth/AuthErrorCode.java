@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.common;
+package com.zzh.stock_calculator.auth;
 
 /**
  * E2EE 用户服务业务码（docs/e2ee-auth-backend-design.md §D.4.1），配合 ApiResponse 信封使用。

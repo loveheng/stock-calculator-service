@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.auth.config;
 import com.zzh.stock_calculator.common.ApiResponse;
-import com.zzh.stock_calculator.common.AuthErrorCode;
 import com.zzh.stock_calculator.common.BusinessException;
+import com.zzh.stock_calculator.auth.AuthErrorCode;
 import com.zzh.stock_calculator.auth.entity.AuthSessionEntity;
 import com.zzh.stock_calculator.auth.service.SessionService;
 import jakarta.servlet.http.HttpServletRequest;

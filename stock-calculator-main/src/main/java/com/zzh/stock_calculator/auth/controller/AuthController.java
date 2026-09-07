@@ -1,7 +1,6 @@
 package com.zzh.stock_calculator.auth.controller;
 import com.zzh.stock_calculator.common.ApiResponse;
-import com.zzh.stock_calculator.common.AuthErrorCode;
-import com.zzh.stock_calculator.common.ProfileConflictException;
+import com.zzh.stock_calculator.auth.AuthErrorCode;
 import com.zzh.stock_calculator.auth.dto.AuthSessionResponse;
 import com.zzh.stock_calculator.auth.dto.LoginRequest;
 import com.zzh.stock_calculator.auth.dto.ProfileResponse;
@@ -11,6 +10,7 @@ import com.zzh.stock_calculator.auth.dto.RecoveryEmailRequest;
 import com.zzh.stock_calculator.auth.dto.RecoveryVerifyRequest;
 import com.zzh.stock_calculator.auth.dto.RegisterRequest;
 import com.zzh.stock_calculator.auth.service.AuthService;
+import com.zzh.stock_calculator.auth.service.ProfileConflictException;
 import com.zzh.stock_calculator.auth.service.ProfileService;
 import com.zzh.stock_calculator.auth.service.RateLimitService;
 import com.zzh.stock_calculator.auth.util.AuthCryptoUtil;

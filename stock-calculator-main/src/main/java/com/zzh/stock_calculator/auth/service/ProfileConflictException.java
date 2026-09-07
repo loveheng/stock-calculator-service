@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.common;
+package com.zzh.stock_calculator.auth.service;
 
 import lombok.Getter;
 

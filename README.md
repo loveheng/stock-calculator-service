@@ -35,7 +35,7 @@ flowchart LR
     C --> F[OcrExecutor]
     F -->|图像+Prompt| G[Gemini API]
     G -->|结构化 JSON| F
-    F -->|缓存命中| H[Caffeine Cache]
+    F -->|缓存命中| H[Redis Cache]
     C --> I[结构化 TradeDraftItem]
     I --> J[ApiResponse 返回]
 
@@ -69,7 +69,7 @@ flowchart LR
 2. `ImagePreprocessService` 对图片进行格式/大小/尺寸校验
 3. `GeminiTradeVisionServiceImpl` 触发 OCR 识别流程
 4. `GeminiOcrExecutorImpl`（Spring AI ChatClient）调用 Gemini 多模态模型（`gemini-3.6-flash`），解析返回的 JSON 二维数组
-5. 结果通过 Caffeine 本地缓存缓存 24 小时，相同图片重复请求直接命中缓存
+5. 识别结果写入 Redis 结果缓存（key=vision:executor:<MD5>，TTL 24h），相同图片重复请求直接命中缓存
 6. 原始 JSON 数组映射为强类型 `TradeDraftItem` 列表返回
 
 爬虫链路：`TaskService` → `CommonHttpService`（`ClsSignUtil` 参数签名）→ 解析快讯（字典/关联分离）→ `saveArticleWithRelations` 单事务入库。
@@ -87,7 +87,7 @@ flowchart LR
 | ORM | Spring Data JPA（Hibernate） | 7.4.x（爬虫） |
 | 数据库 | PostgreSQL（JSONB） | 必需 |
 | 序列化 | Jackson 3（tools.jackson） | — |
-| 缓存 | Caffeine（300 条 / 24h） | 由 Spring Boot 管理 |
+| 缓存 | Redis 7（OCR/视觉结果、会话热读、限流计数） | docker-compose 提供 |
 | 虚拟线程 | Project Loom | 已启用 |
 | HTTP 客户端 | Spring RestClient | 由 Spring Boot 管理 |
 | 多模态 AI | Google Gemini API | gemini-3.6-flash |
@@ -114,9 +114,9 @@ flowchart LR
 
 ### 3. 智能缓存
 
-- 基于 Caffeine 本地缓存，最大 300 条记录，有效期 24 小时
-- 缓存键：图片预处理后的 MD5 哈希值
-- 相同图片重复请求直接返回缓存结果，节省 API 调用成本
+- 基于 Redis 的分层结果缓存：AI 交易草稿（`vision:ai:draft:<MD5>`，TTL 30m）、OCR 文本（`vision:ocr:text:<MD5>`，TTL 30m）、视觉识别结果（`vision:executor:<MD5>`，TTL 24h）
+- 缓存键：图片内容的 MD5 哈希值，重启不清零
+- 缓存读写失败静默降级，不阻塞主链路；相同图片重复请求直接返回缓存结果，节省 API/模型调用成本
 
 ### 4. 虚拟线程
 
@@ -329,9 +329,6 @@ spring:
   threads:
     virtual:
       enabled: true                # 虚拟线程
-  cache:
-    caffeine:
-      spec: maximumSize=300,expireAfterWrite=24h  # OCR 缓存
   main:
     lazy-initialization: true      # 延迟初始化（降低启动内存）
 ```

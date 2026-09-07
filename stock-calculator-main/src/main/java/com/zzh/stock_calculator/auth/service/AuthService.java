@@ -1,6 +1,6 @@
 package com.zzh.stock_calculator.auth.service;
-import com.zzh.stock_calculator.common.AuthErrorCode;
 import com.zzh.stock_calculator.common.BusinessException;
+import com.zzh.stock_calculator.auth.AuthErrorCode;
 import com.zzh.stock_calculator.auth.config.AuthProperties;
 import com.zzh.stock_calculator.auth.dto.AuthSessionResponse;
 import com.zzh.stock_calculator.auth.dto.LoginRequest;

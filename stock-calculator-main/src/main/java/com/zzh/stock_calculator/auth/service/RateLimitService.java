@@ -1,6 +1,6 @@
 package com.zzh.stock_calculator.auth.service;
 
-import com.zzh.stock_calculator.common.AuthErrorCode;
+import com.zzh.stock_calculator.auth.AuthErrorCode;
 import com.zzh.stock_calculator.common.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -1,6 +1,5 @@
 package com.zzh.stock_calculator.auth.service;
 import com.zzh.stock_calculator.common.BusinessException;
-import com.zzh.stock_calculator.common.ProfileConflictException;
 import com.zzh.stock_calculator.auth.dto.ProfileResponse;
 import com.zzh.stock_calculator.auth.dto.ProfileUpsertRequest;
 import com.zzh.stock_calculator.auth.entity.UserProfileEntity;

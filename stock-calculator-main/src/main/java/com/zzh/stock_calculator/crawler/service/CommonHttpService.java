@@ -1,5 +1,6 @@
 package com.zzh.stock_calculator.crawler.service;
 import com.zzh.stock_calculator.util.HttpUtil;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import org.springframework.core.ParameterizedTypeReference;
@@ -9,13 +10,10 @@ import org.springframework.web.client.RestClient;
 import java.util.Map;
 
 @Component
+@RequiredArgsConstructor
 public class CommonHttpService {
 
     private final RestClient restClient;
-
-    public CommonHttpService(RestClient restClient) {
-        this.restClient = restClient;
-    }
 
     /**
      * 通用 GET 请求
