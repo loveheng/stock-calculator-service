@@ -212,4 +212,62 @@ class CopilotPromptResolverTest {
 
         assertEquals("覆写模版", resolver().resolveByTag("vision:trade:system"));
     }
+
+    // ==================== resolveTaskTemplate（taskType 路由，长度上限放宽） ====================
+
+    @Test
+    void resolveTaskTemplate_overChatLimitWithinTaskLimit_returnsValue() {
+        // 聊天链上限 4096 会拒载的长模版（执行契约 + 字段字典体量），任务链放宽到 16384 后命中
+        String template = "x".repeat(CopilotPromptResolver.MAX_TEMPLATE_LENGTH + 1);
+        when(reader.apply("copilot:prompt:copilot_custom_stat_gen")).thenReturn(template);
+
+        assertEquals(template, resolver().resolveTaskTemplate("copilot_custom_stat_gen", reader));
+    }
+
+    @Test
+    void resolveTaskTemplate_exactTaskLimit_returnsValue() {
+        String template = "x".repeat(CopilotPromptResolver.MAX_TASK_TEMPLATE_LENGTH);
+        when(reader.apply("copilot:prompt:copilot_custom_stat_gen")).thenReturn(template);
+
+        assertEquals(template, resolver().resolveTaskTemplate("copilot_custom_stat_gen", reader));
+    }
+
+    @Test
+    void resolveTaskTemplate_overTaskLimit_returnsNull() {
+        when(reader.apply("copilot:prompt:copilot_custom_stat_gen"))
+                .thenReturn("x".repeat(CopilotPromptResolver.MAX_TASK_TEMPLATE_LENGTH + 1));
+
+        assertNull(resolver().resolveTaskTemplate("copilot_custom_stat_gen", reader));
+    }
+
+    @Test
+    void resolveTaskTemplate_missOrBlankTag_returnsNull() {
+        when(reader.apply("copilot:prompt:copilot_custom_stat_gen")).thenReturn(null);
+
+        assertNull(resolver().resolveTaskTemplate("copilot_custom_stat_gen", reader));
+        assertNull(resolver().resolveTaskTemplate("   ", reader));
+        assertNull(resolver().resolveTaskTemplate(null, reader));
+    }
+
+    @Test
+    void resolveTaskTemplate_redisFailure_returnsNullNotThrow() {
+        when(reader.apply(anyString())).thenThrow(new RedisConnectionFailureException("down"));
+
+        assertNull(resolver().resolveTaskTemplate("copilot_custom_stat_gen", reader));
+    }
+
+    @Test
+    void resolveTaskTemplate_tagTrimmedBeforeKeyBuild() {
+        when(reader.apply("copilot:prompt:copilot_custom_stat_gen")).thenReturn("任务模版");
+
+        assertEquals("任务模版", resolver().resolveTaskTemplate("  copilot_custom_stat_gen  ", reader));
+    }
+
+    @Test
+    void productionResolveTaskTemplate_readsThroughStringRedisTemplate() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("copilot:prompt:copilot_custom_stat_gen")).thenReturn("任务模版");
+
+        assertEquals("任务模版", resolver().resolveTaskTemplate("copilot_custom_stat_gen"));
+    }
 }

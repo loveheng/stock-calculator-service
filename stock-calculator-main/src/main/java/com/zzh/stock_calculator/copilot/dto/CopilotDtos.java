@@ -27,6 +27,9 @@ public final class CopilotDtos {
         private String timeAnchor;       // 时间截面标记
         /** 区块级聚焦 ID（如 home:short_term）：仅参与 Prompt 模版路由编排，不落库、不打日志；缺省 = 整页口径 */
         private String focusBlockId;
+        /** 任务类型（custom-stats-api.md §2.1）：custom_stat = 自定义统计代码生成，路由专用提示词模版；
+         *  缺省/未知值 = 现有聊天模版，行为零变化。仅参与模版路由编排，不落库、不打日志 */
+        private String taskType;
     }
 
     @Data
@@ -43,6 +46,19 @@ public final class CopilotDtos {
         private String userContextOverview;
         private String userTimeAnchor;
         private Long ctime;
+        /** 结构化动作（从 LLM 输出的动作块容错提取，ephemeral：不落库不打日志）；无块/解析失败 = null。
+         *  前端按白名单 + 形状守卫消费（utils/copilotActions 纪律），后端不校验 payload 内容 */
+        private java.util.List<CopilotActionItem> actions;
+    }
+
+    /** 结构化动作条目（透传形状：type + 原始 payload）；payload 保持原始 JSON 结构，后端不做语义校验 */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CopilotActionItem {
+        private String type;
+        private Object payload;
     }
 
     @Data

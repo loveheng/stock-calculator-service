@@ -20,7 +20,8 @@ port = '19999' if mode == 'smoke' else '19997'
 secs = '8' if mode == 'smoke' else '90'
 log = '/tmp/ni-run.log' if mode == 'smoke' else '/tmp/ni-run90.log'
 with open(log, 'w') as f:
-    subprocess.run(['timeout', '--signal=TERM', secs,
+    # --kill-after=3: 二进制若忽略 TERM（如旧产物无 exit handlers），3 秒后升级 SIGKILL，保证子进程必死
+    subprocess.run(['timeout', '--signal=TERM', '--kill-after=3', secs,
                     './target/stock-calculator-service', f'--server.port={port}'],
                    env=env, stdout=f, stderr=subprocess.STDOUT)
 

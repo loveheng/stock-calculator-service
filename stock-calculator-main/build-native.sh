@@ -128,6 +128,7 @@ if ! native-image \
   -H:+AddAllCharsets \
   -H:EnableURLProtocols=https \
   -H:+ReportUnsupportedElementsAtRuntime \
+  --install-exit-handlers \
   --initialize-at-build-time=ch.qos.logback.classic,ch.qos.logback.core,org.slf4j,org.jboss.logging,net.bytebuddy \
   -o target/stock-calculator-service \
   -H:NumberOfThreads=8 \
@@ -147,7 +148,10 @@ file target/stock-calculator-service
 echo ""
 echo "==================== 启动测试 (8 秒) ===================="
 # 启动测试（8 秒）：能打印 Tomcat started 才算构建成功，失败直接退出非零
-timeout 8 ./target/stock-calculator-service --server.port=19999 > /tmp/ni-run.log 2>&1 || true
+# --kill-after=3: 二进制若忽略 TERM（如旧产物无 exit handlers），3 秒后升级 SIGKILL，保证时间窗有界
+timeout --kill-after=3 8 ./target/stock-calculator-service --server.port=19999 > /tmp/ni-run.log 2>&1 || true
+# 兜底清理：确保测试进程不残留（否则残留实例会占住 19999 端口干扰后续验证）
+pkill -9 -f 'target/stock-calculator-service --server.port=19999' 2>/dev/null || true
 if grep -qE 'Tomcat started|Started StockCalculator' /tmp/ni-run.log; then
   echo "✅ 启动测试通过！二进制文件: target/stock-calculator-service"
   echo "   （AOT 模式，启动通常 < 1 秒；完整启动日志: /tmp/ni-run.log）"

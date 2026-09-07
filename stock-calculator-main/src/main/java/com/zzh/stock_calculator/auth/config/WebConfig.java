@@ -30,6 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
                 "/api/auth/logout",
                 "/api/auth/recovery/confirm",
                 "/api/copilot/**",
-                "/api/sync/**");   // 服务端密文同步（design E3：缺失则端点无鉴权裸奔）
+                "/api/sync/**",     // 服务端密文同步（design E3：缺失则端点无鉴权裸奔）
+                "/api/custom-stats/**");   // 自定义统计定义持久化（D17：登录即可用，非 E2EE 通道）
     }
 }

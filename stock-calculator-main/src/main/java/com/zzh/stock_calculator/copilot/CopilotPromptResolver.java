@@ -39,6 +39,10 @@ public class CopilotPromptResolver {
     /** 单条模版长度上限：超长视为脏配置按未命中处理，防误配置撑爆输入 token（付费渠道） */
     public static final int MAX_TEMPLATE_LENGTH = 4096;
 
+    /** 任务型模版（taskType 路由，如 custom_stat 生成器）单条长度上限：内容含执行契约 + 字段字典，
+     *  体量远超聊天人设，沿用 {@link #MAX_TEMPLATE_LENGTH} 会静默拒载，故单独放宽 */
+    public static final int MAX_TASK_TEMPLATE_LENGTH = 16384;
+
     /** 代码内最后防线：Redis 不可用 / 全部未命中时的兜底人设（DB 是唯一数据来源，代码仅留此常量） */
     public static final String FALLBACK_PERSONA = "你是一个金融交易助手，请基于用户提供的数据做出专业分析。";
 
@@ -62,7 +66,7 @@ public class CopilotPromptResolver {
         List<String> tags = candidateTags(scopeId, focusBlockId);
         try {
             for (String tag : tags) {
-                String value = normalize(reader.apply(KEY_PREFIX + tag));
+                String value = normalize(reader.apply(KEY_PREFIX + tag), MAX_TEMPLATE_LENGTH);
                 if (value != null) {
                     return value;
                 }
@@ -84,13 +88,31 @@ public class CopilotPromptResolver {
 
     /** 纯函数核心（便于单测）：reader 为 Redis 读取函数（key → value，未命中返回 null） */
     String resolveByTag(String tag, Function<String, String> reader) {
+        return resolveByTag(tag, MAX_TEMPLATE_LENGTH, reader);
+    }
+
+    /**
+     * 任务型模版直读（taskType 路由专用，无多级标签路由）：与 {@link #resolveByTag(String)} 同源同容错
+     * （未命中 / 空白 / Redis 异常返回 null，fail-open），仅放宽单条长度上限至 {@link #MAX_TASK_TEMPLATE_LENGTH}。
+     */
+    public String resolveTaskTemplate(String tag) {
+        return resolveTaskTemplate(tag, key -> redisTemplate.opsForValue().get(key));
+    }
+
+    /** 纯函数核心（便于单测） */
+    String resolveTaskTemplate(String tag, Function<String, String> reader) {
+        return resolveByTag(tag, MAX_TASK_TEMPLATE_LENGTH, reader);
+    }
+
+    /** 固定标签直读核心：未命中 / 空白 / 超 maxLen / Redis 异常一律返回 null（fail-open），调用方决定兑底 */
+    private String resolveByTag(String tag, int maxLength, Function<String, String> reader) {
         if (!StringUtils.hasText(tag)) {
             return null;
         }
         try {
-            return normalize(reader.apply(KEY_PREFIX + tag.trim()));
+            return normalize(reader.apply(KEY_PREFIX + tag.trim()), maxLength);
         } catch (Exception e) {
-            // Redis 不可用：fail-open 返回 null，兜底责任在调用方
+            // Redis 不可用：fail-open 返回 null，兑底责任在调用方
             return null;
         }
     }
@@ -122,12 +144,12 @@ public class CopilotPromptResolver {
         return idx > 0 ? scopeId.substring(0, idx) : scopeId;
     }
 
-    /** 空白 / 超长视为未配置（返回 null），其余 trim */
-    private static String normalize(String value) {
+    /** 空白 / 超长视为未配置（返回 null），其余 trim；maxLen 由调用路径决定（聊天链 vs 任务型模版） */
+    private static String normalize(String value, int maxLength) {
         if (!StringUtils.hasText(value)) {
             return null;
         }
         String trimmed = value.trim();
-        return trimmed.length() <= MAX_TEMPLATE_LENGTH ? trimmed : null;
+        return trimmed.length() <= maxLength ? trimmed : null;
     }
 }

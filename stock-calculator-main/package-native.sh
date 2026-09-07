@@ -96,11 +96,14 @@ ls -lh "$BIN"
 file "$BIN"
 
 # 启动探测:让二进制自报 using Java 版本
-timeout 15 "$BIN" --server.port=19999 > /tmp/pkg-probe.log 2>&1 &
+# --kill-after=3: 二进制若忽略 TERM(旧产物无 exit handlers),3 秒后升级 SIGKILL
+timeout --kill-after=3 15 "$BIN" --server.port=19999 > /tmp/pkg-probe.log 2>&1 &
 PROBE_PID=$!
 sleep 6
 kill "$PROBE_PID" 2>/dev/null || true
 wait "$PROBE_PID" 2>/dev/null || true
+# 兜底清理:kill 只杀了 timeout 包装进程,二进制孙子进程需按名清理,否则残留实例会占住 19999 端口
+pkill -9 -f 'stock-calculator-service --server.port=19999' 2>/dev/null || true
 
 if grep -qi "using Java 25" /tmp/pkg-probe.log; then
   echo "  ✅ 二进制自报: $(grep -i 'using Java' /tmp/pkg-probe.log | head -1)"

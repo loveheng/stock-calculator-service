@@ -251,3 +251,25 @@ CREATE TABLE IF NOT EXISTS public.user_sync_history (
 -- 回滚：DROP TABLE IF EXISTS public.user_sync_history; DROP TABLE IF EXISTS public.user_sync_data;
 -- 历史裁剪规则（service 层）：成功写入 newVersion 后 DELETE version < newVersion - 5，保留恰 5 份（D8）
 -- 历史唯一冲突由 INSERT … ON CONFLICT DO NOTHING 吸收（E7，整库回滚场景）
+
+-- ============================================================
+-- 自定义统计定义持久化（D17 契约：docs/custom-stats-server-sync.md）
+-- 明文 JSONB 直存（非 E2EE 快照通道，登录 Bearer 即可用）；LWW 由客户端仲裁，
+-- 服务端不参与版本冲突处理；payload 内业务时间戳原样存取，服务端绝不改写
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.user_custom_stat (
+	id                bigserial NOT NULL,
+	user_id           varchar(64) NOT NULL,
+	def_id            varchar(64) NOT NULL,
+	payload           jsonb NOT NULL,
+	updated_at_client varchar(40) NOT NULL,
+	created_at        timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	updated_at        timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT user_custom_stat_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_user_custom_stat_user_def UNIQUE (user_id, def_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_custom_stat_user ON public.user_custom_stat USING btree (user_id);
+
+-- 回滚：DROP TABLE IF EXISTS public.user_custom_stat;
+-- 注：user_id 为 varchar(64)（auth 用户 UUID 文本）；D17 文档示例写 BIGINT 系前端笔误，
+--     对齐 user_sync_data / ai_chat_session 既有先例（E1）

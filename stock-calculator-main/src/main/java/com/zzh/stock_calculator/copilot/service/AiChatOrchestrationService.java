@@ -3,6 +3,7 @@ package com.zzh.stock_calculator.copilot.service;
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.copilot.dto.CopilotDtos.AskRequest;
 import com.zzh.stock_calculator.copilot.dto.CopilotDtos.AskResponse;
+import com.zzh.stock_calculator.copilot.dto.CopilotDtos.CopilotActionItem;
 import com.zzh.stock_calculator.copilot.dto.CopilotDtos.DeltaEvent;
 import com.zzh.stock_calculator.copilot.dto.CopilotDtos.ErrorEvent;
 import com.zzh.stock_calculator.copilot.entity.AiChatMessage;
@@ -12,6 +13,8 @@ import com.zzh.stock_calculator.copilot.repository.AiChatSessionRepository;
 import com.zzh.stock_calculator.copilot.config.DeepSeekProperties;
 import com.zzh.stock_calculator.copilot.service.store.AiChatSessionStore;
 import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
+import com.zzh.stock_calculator.copilot.util.CopilotStatActionExtractor;
+import com.zzh.stock_calculator.copilot.util.CopilotTaskPromptRenderer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -109,8 +112,14 @@ public class AiChatOrchestrationService {
             markUserMessageFailed(pending.userMsg().getId());
             throw e;
         }
-        // 阶段二：归档 assistant msg（新事务）
-        return persistAssistant(pending.userMsg(), textOf(response), usageOf(response));
+        // 动作块容错提取（无块/解析失败 = fail-open，原文归档）：
+        // 权威全文剔除动作块后归档，actions 仅随响应下发（不落库不打日志）
+        String rawText = textOf(response);
+        CopilotStatActionExtractor.Parsed output = CopilotStatActionExtractor.parse(rawText);
+        return persistAssistant(pending.userMsg(),
+                output != null ? output.cleanedText() : rawText,
+                usageOf(response),
+                output == null ? null : output.actions());
     }
 
     /**
@@ -133,6 +142,7 @@ public class AiChatOrchestrationService {
         AtomicReference<Usage> usageRef = new AtomicReference<>();
         AtomicReference<Disposable> subRef = new AtomicReference<>();
         AtomicBoolean archivedRef = new AtomicBoolean(); // 归档成功后置位，防止断开回调把 ok 改写为 failed
+        AtomicBoolean suppressRef = new AtomicBoolean(); // 动作块直传抑制位（见 chunk 回调）
 
         Disposable disposable = chatModel.stream(pending.prompt()).subscribe(
                 chunk -> {
@@ -144,6 +154,15 @@ public class AiChatOrchestrationService {
                         return;
                     }
                     fullText.append(delta);
+                    // 动作块（模版约定恒在回复末尾）不直传：开标签出现即停止 delta 转发，
+                    // 权威全文在 done 阶段剔除动作块后下发，避免聊天气泡闪烁机器 JSON；
+                    // done 的 content 为权威全文，流式尾部少量正文片段被 done 替换自愈
+                    if (!suppressRef.get() && fullText.indexOf(CopilotStatActionExtractor.OPEN_TAG) >= 0) {
+                        suppressRef.set(true);
+                    }
+                    if (suppressRef.get()) {
+                        return;
+                    }
                     safeSend(emitter, subRef, SseEmitter.event()
                             .name("delta").data(new DeltaEvent(delta), MediaType.APPLICATION_JSON));
                 },
@@ -157,8 +176,11 @@ public class AiChatOrchestrationService {
                 },
                 () -> {
                     try {
-                        // 阶段二：归档 assistant + userMsg.status→ok（新事务），content 以累计全文为权威
-                        AskResponse resp = persistAssistant(pending.userMsg(), fullText.toString(), usageRef.get());
+                        // 阶段二：动作块提取 + 归档 assistant + userMsg.status→ok（新事务），content 以剔除动作块后的全文为权威
+                        CopilotStatActionExtractor.Parsed output = CopilotStatActionExtractor.parse(fullText.toString());
+                        String authoritative = output != null ? output.cleanedText() : fullText.toString();
+                        AskResponse resp = persistAssistant(pending.userMsg(), authoritative, usageRef.get(),
+                                output == null ? null : output.actions());
                         archivedRef.set(true);
                         safeSend(emitter, subRef, SseEmitter.event()
                                 .name("done").data(resp, MediaType.APPLICATION_JSON));
@@ -212,6 +234,10 @@ public class AiChatOrchestrationService {
         if (StringUtils.hasText(req.getFocusBlockId()) && req.getFocusBlockId().trim().length() > 100) {
             // focusBlockId 拼入 Redis key，限长与 scopeId 列宽(100)一致，防脏数据滥用 key 空间
             throw new BusinessException(400, "focusBlockId 过长（上限 100 字符）");
+        }
+        if (StringUtils.hasText(req.getTaskType()) && req.getTaskType().trim().length() > 64) {
+            // taskType 仅参与模版路由（不拼 key），未知值宽松回落不报错；仅限长防滥用
+            throw new BusinessException(400, "taskType 过长（上限 64 字符）");
         }
         // 1. 限流检查
         rateLimiter.check(userId);
@@ -389,21 +415,30 @@ public class AiChatOrchestrationService {
      * 区块级模版路由（P1）：只替换开头人设段，快照/新鲜度规则等全局段恒保留。
      */
     private Prompt buildPrompt(String currentQuestion, List<AiChatMessage> history, AskRequest req, String scopeId) {
-        String persona = promptResolver.resolve(scopeId, req.getFocusBlockId());
-        StringBuilder systemPrompt = new StringBuilder(persona);
-        String contextSummary = req.getContextSummary();
-        String contextOverview = req.getContextOverview();
-        if (contextSummary != null && !contextSummary.isBlank()) {
-            systemPrompt.append("\n\n【用户当前页面数据快照（提问时刻采集）】\n")
-                    .append("以下为白名单业务数据 JSON，数值单位以 _units 字典为准，严禁臆造或换算数据中不存在的指标：\n")
-                    .append(contextSummary);
-        } else if (contextOverview != null && !contextOverview.isBlank()) {
-            systemPrompt.append("\n\n【用户当前页面核心指标（JSON）】\n").append(contextOverview);
+        // 任务型模版路由（custom_stat）：命中即整段替换系统提示词，人设/快照/新鲜度段不叠加；
+        // taskType 缺省/未知、模版未配置或读取异常 → null，回落既有聊天链路（行为零变化，宽松降级）
+        String taskSystem = CopilotTaskPromptRenderer.buildCustomStatSystemPrompt(
+                req.getTaskType(), req.getContextSummary(), currentQuestion,
+                tag -> promptResolver.resolveTaskTemplate(tag));
+        StringBuilder systemPrompt;
+        if (taskSystem != null) {
+            systemPrompt = new StringBuilder(taskSystem);
+        } else {
+            systemPrompt = new StringBuilder(promptResolver.resolve(scopeId, req.getFocusBlockId()));
+            String contextSummary = req.getContextSummary();
+            String contextOverview = req.getContextOverview();
+            if (contextSummary != null && !contextSummary.isBlank()) {
+                systemPrompt.append("\n\n【用户当前页面数据快照（提问时刻采集）】\n")
+                        .append("以下为白名单业务数据 JSON，数值单位以 _units 字典为准，严禁臆造或换算数据中不存在的指标：\n")
+                        .append(contextSummary);
+            } else if (contextOverview != null && !contextOverview.isBlank()) {
+                systemPrompt.append("\n\n【用户当前页面核心指标（JSON）】\n").append(contextOverview);
+            }
+            systemPrompt.append("\n\n【数据新鲜度规则】\n")
+                    .append("历史对话中的所有数字与结论仅为当时快照状态，不代表当前；")
+                    .append("若与本次提供的实时页面快照冲突，一律以本次实时快照为准，")
+                    .append("并主动向用户指出数据相比历史对话已发生变化。");
         }
-        systemPrompt.append("\n\n【数据新鲜度规则】\n")
-                .append("历史对话中的所有数字与结论仅为当时快照状态，不代表当前；")
-                .append("若与本次提供的实时页面快照冲突，一律以本次实时快照为准，")
-                .append("并主动向用户指出数据相比历史对话已发生变化。");
         List<org.springframework.ai.chat.messages.Message> messages = new ArrayList<>();
         messages.add(new SystemMessage(systemPrompt.toString()));
         for (AiChatMessage m : history) {
@@ -454,9 +489,11 @@ public class AiChatOrchestrationService {
 
     /**
      * 阶段二归档（新事务）：写 assistant 行 + userMsg.status→ok。
-     * content 由调用方提供权威全文（阻塞路径=聚合响应；流式路径=delta 累计），usage 可空则 token 计 0。
+     * content 由调用方提供权威全文（阻塞路径=聚合响应；流式路径=delta 累计，均已剔除动作块），
+     * usage 可空则 token 计 0；actions 仅随响应下发（ephemeral：不落库、不打日志）。
      */
-    private AskResponse persistAssistant(AiChatMessage userMsg, String content, Usage usage) {
+    private AskResponse persistAssistant(AiChatMessage userMsg, String content, Usage usage,
+                                         List<CopilotActionItem> actions) {
         int promptTokens = 0;
         int completionTokens = 0;
         if (usage != null) {
@@ -474,7 +511,7 @@ public class AiChatOrchestrationService {
             messageRepository.updateStatus(userMsg.getId(), "ok");
             return null;
         });
-        return buildAskResponse(userMsg, assistant);
+        return buildAskResponse(userMsg, assistant, actions);
     }
 
     // ==================== Utilities ====================
@@ -486,7 +523,8 @@ public class AiChatOrchestrationService {
         return elapsed >= PENDING_WINDOW_SECONDS;
     }
 
-    private AskResponse buildAskResponse(AiChatMessage user, AiChatMessage assistant) {
+    private AskResponse buildAskResponse(AiChatMessage user, AiChatMessage assistant,
+                                         List<CopilotActionItem> actions) {
         return AskResponse.builder()
                 .userMessageId(user.getId())
                 .assistantMessageId(assistant != null ? assistant.getId() : null)
@@ -496,7 +534,9 @@ public class AiChatOrchestrationService {
                 .channel(assistant != null ? assistant.getChannel() : null)
                 .userContextOverview(user.getContextOverview())
                 .userTimeAnchor(user.getTimeAnchor())
-                .ctime(assistant != null ? assistant.getCtime() : nowSec()).build();
+                .ctime(assistant != null ? assistant.getCtime() : nowSec())
+                .actions(actions)
+                .build();
     }
 
     private static String rootMsg(Throwable e) {
