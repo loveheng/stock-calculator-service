@@ -1,12 +1,15 @@
 package com.zzh.stock_calculator.vision.controller;
 import com.zzh.stock_calculator.common.ApiResponse;
 import com.zzh.stock_calculator.common.BusinessException;
+import com.zzh.stock_calculator.vision.dto.StockCandidate;
 import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
 import com.zzh.stock_calculator.vision.service.ImagePreprocessService;
 import com.zzh.stock_calculator.vision.service.ImageTextProcessingFacade;
 import com.zzh.stock_calculator.vision.service.OcrChainManager;
+import com.zzh.stock_calculator.vision.service.StockCodeResolver;
 import com.zzh.stock_calculator.vision.service.TradeVisionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,6 +29,8 @@ public class ImportController {
     private final ImagePreprocessService imagePreprocessService;
 
     private final ImageTextProcessingFacade imageTextProcessingFacade;
+
+    private final StockCodeResolver stockCodeResolver;
 
     @PostMapping("/ocr-parse")
     public ApiResponse<List<TradeDraftItem>> parseTradeScreenshot(@RequestParam("file") MultipartFile file) {
@@ -73,5 +78,17 @@ public class ImportController {
             @RequestParam(value = "useCache", required = false, defaultValue = "true") boolean useCache) {
         byte[] imageBytes = imagePreprocessService.validateAndProcess(file);
         return ApiResponse.success(imageTextProcessingFacade.processImageToTradeDrafts(imageBytes, useCache));
+    }
+
+    /**
+     * 股票代码候选搜索（前端人工兜底）：草稿确认页对未匹配项（stockCode=null）实时模糊搜索。
+     * 唯一命中时后端已在 /process-image 静默回填，本接口服务于多候选/零匹配的人工选择场景。
+     */
+    @GetMapping("/stock-candidates")
+    public ApiResponse<List<StockCandidate>> searchStockCandidates(@RequestParam("q") String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            throw new BusinessException(400, "搜索关键词不能为空");
+        }
+        return ApiResponse.success(stockCodeResolver.search(keyword.trim()));
     }
 }

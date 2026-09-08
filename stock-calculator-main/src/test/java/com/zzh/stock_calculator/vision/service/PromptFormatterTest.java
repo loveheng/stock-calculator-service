@@ -134,4 +134,15 @@ class PromptFormatterTest {
         assertTrue(message.contains("【待处理文本】"));
         assertTrue(message.contains("600745 中际旭创"));
     }
+
+    @Test
+    void buildTradeSystemPromptUsesFiveColumnContractWithoutCode() {
+        String prompt = formatter().buildTradeSystemPrompt(false);
+
+        // 新契约：名称在首位、无代码列；代码由后端 Smartbox 补全
+        assertTrue(prompt.contains("[[\"股票名称\",\"BUY/SELL\",成交价格,成交数量,\"成交时间\"]]"));
+        assertTrue(prompt.contains("不要在此处输出 6 位数字代码"));
+        assertTrue(prompt.contains("00:00:00"));
+        assertFalse(prompt.contains("股票代码"));
+    }
 }

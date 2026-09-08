@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 @Builder
@@ -26,6 +27,9 @@ public class TradeDraftItem {
     private Integer volume;       // 成交数量
 
     private String tradeTime;     // 成交时间，格式 YYYY-MM-DD HH:mm:ss
+
+    /** 股票代码候选：截图无代码且 Smartbox 多候选/零匹配时透传给前端人工选择；唯一匹配已回填后为空列表 */
+    private List<StockCandidate> candidates;
 
     @Builder.Default
     private TradeStatus status = TradeStatus.FILLED;        // 默认 FILLED

@@ -1,9 +1,9 @@
 # 智能图片分析：多渠道 OCR + 免费 LLM 全链路管道
 
-> 版本：v1.1（2026-09-01）
+> 版本：v1.2（2026-09-08）
 > 定位：`/api/import` 下「图片 → OCR 提取文本 → 清洗组装 → LLM 处理 → 业务结果」全链路的实现文档，覆盖 OCR 多渠道责任链、LLM 多渠道责任链与门面编排三层。
 > 配套代码：`stock-calculator-main` 模块 `com.zzh.stock_calculator.llm` / `com.zzh.stock_calculator.vision`
-> 状态：已实现并通过单测与本地桩测试（共 64 用例）；端点示例为契约示例，未含真实外部 API 冒烟记录。
+> 状态：已实现并通过单测与本地桩测试；端点示例为契约示例，未含真实外部 API 冒烟记录。
 
 ---
 
@@ -21,6 +21,7 @@
 | P8 | 交易解析不迁移 | `/ocr-parse` 继续走 Gemini 多模态直读（表格结构识别远优于「OCR 扁平文本→LLM 重建」），与 `/image-ai` 并存、定位不同 |
 | P9 | 结果缓存与强制刷新 | `/process-image` 新增「图片哈希→交易草稿」结果缓存（`vision.ai.*`，**Redis** key=`vision:ai:draft:<MD5>`，TTL 30m；决策 B12 前为 Caffeine 30m/128）；`useCache=false` 淘汰缓存并以审查模式 Prompt 重新处理。OCR 文本缓存刻意独立保留——同图重识别零增益只耗免费额度，重新处理的杠杆是提示词增强；降级模板输出不解析不缓存（`LlmChainRouter.isDegradedResponse` 识别） |
 | P10 | Prompt 模板包归属 | vision System 侧模板入库热更后**不抽独立 `prompt` 包**：现仅 copilot / vision 两个消费方，跨域耦合面收敛为 copilot 基包 `CopilotPromptResolver.resolveByTag` 单类 API（P1 同款「基包类即模块 API」模式），ModulithVerifyTest 守护。抽包触发条件与迁移清单见 4.5「Prompt 热更」附注 |
+| P11 | 缺码补全 | 交易截图常缺 6 位代码（仅名称）：解析后由 `SmartBoxStockCodeResolver`（腾讯 Smartbox 联想接口）补全——唯一候选（沪深过滤后）静默回填 `stockCode`；多候选/零匹配 `stockCode=null` + `candidates` 透传前端人工选择，绝不瞎猜。第一期仅对接 Smartbox，不引 crawler 字典跨域门面（旧名/改名走人工兜底）；提示词同步改为 5 列契约（无代码列，见 4.8）。结果缓存 read-through 惰性回填旧结构，`needsCodeEnrichment`（缺码且 candidates==null）判定防重复打 Smartbox |
 
 ---
 
@@ -218,9 +219,22 @@ Prompt 热更：System 侧三段模板（通用 `vision:generic:system`、交易
 useCache 语义：
 
 - `useCache=true`（默认）：命中结果缓存直接返回（零 OCR/LLM 消耗）；未命中走 OCR → 清洗 → LLM → 解析 → 写缓存；
-- `useCache=false`：淘汰结果缓存重新处理，且 System Prompt 追加**审查模式增强段**（逐字校对代码/数字、0/6/8 与 1/7 混淆、价格×数量交叉核对、宁少不编造）——这是 temperature=0 下驱动模型产出不同结果的唯一杠杆；空文本 422 拦截语义不变。
+- `useCache=false`：淘汰结果缓存重新处理，且 System Prompt 追加**审查模式增强段**（逐字校对名称与数字、0/6/8 与 1/7 混淆、价格×数量交叉核对、宁少不编造）——这是 temperature=0 下驱动模型产出不同结果的唯一杠杆；空文本 422 拦截语义不变。
 
 缓存写入时机：仅「成功解析」的结果入缓存（业务空结果 `[]` 同样缓存，与 OCR 链缓存 `""` 语义一致）；**降级模板输出**（经 `LlmChainRouter.isDegradedResponse` 识别，模板文本可配置故不硬编码前缀）与**解析失败**不缓存，避免污染。解析由 `TradeDraftParser` 承担（Markdown 围栏清理 + 二维数组映射 + 单行脏数据隔离跳过），与既有 `/ocr-parse` 的行映射语义一致。
+
+**缓存回填（read-through）**：读缓存命中时，若为旧结构草稿（缺码且 `candidates` 字段缺失，即 5 列提示词上线前写入的数据），先经 4.8 补全并重写缓存再返回，避免 TTL 内反复读到无码数据；已解析过的缺码草稿（`candidates` 已置空列表或候选列表）不重查，避免每次读缓存都打 Smartbox。
+
+### 4.8 股票代码补全（Smartbox）
+
+LLM 输出按 **5 列契约**（名称在前，无代码列）解析出的草稿若缺 6 位代码，由 `SmartBoxStockCodeResolver` 查询腾讯 Smartbox 联想接口（`https://smartbox.gtimg.cn/s3/?t=all&q=<URL编码名称>`，UTF-8）补全：
+
+- **清洗重试**：查询词先剥掉 `*ST`/`ST` 等非字母数字汉字字符（`*` 开头查询必返回空）后重试一次；GBK 编码查询无效，必须 UTF-8；
+- **市场过滤**：仅保留 `market ∈ {sh, sz}` 且 6 位数字代码的候选（剔除港股/美股/基金同名噪声，重名跨市场不再歧义）；
+- **匹配语义**：过滤后唯一候选 → 静默回填 `stockCode` 并置空候选列表；多候选/零匹配 → `stockCode` 保持 null，`candidates`（market/code/name/type）透传前端高亮选择——**绝不盲目瞎猜错码**；
+- **fail-open**：接口异常/瞬时失败返回空列表且**不缓存**（仅真实零匹配缓存），不阻塞主链路；同名去重（单次请求内只查一次）。
+
+前端契约：缺码行落入「未分配标的」分组并琥珀高亮，桌面行内「立即补码」按钮 / 移动端「缺少代码·补码」徽标 / 编辑抽屉提示条三处入口打开补码弹窗（z-60 盖过抽屉，关闭弹窗抽屉保留），弹窗内候选 chips 一键回填或 `StockAutocomplete` 名称/代码/拼音模糊搜索兜底；**过账门只放行标准完整数据**（缺码/歧义行保留暂存区并提示原因，不完整数据不可过账）。
 
 ---
 
@@ -274,8 +288,20 @@ curl -X POST http://localhost:18080/api/import/process-image \
 | file | 是 | multipart 文件，校验规则同 5.1 |
 | useCache | 否 | 默认 true；false 时淘汰该图片的结果缓存并以审查模式 Prompt 重新处理 |
 
-成功：`data` 为 `List<TradeDraftItem>`（stockCode / stockName / direction / price / volume / tradeTime / status）；无有效流水时为 `[]`（同样缓存）。
+成功：`data` 为 `List<TradeDraftItem>`（stockCode / stockName / direction / price / volume / tradeTime / status / candidates）；截图缺码时经 Smartbox 补全——唯一候选已静默回填 `stockCode`，多候选/零匹配 `stockCode=null` 且 `candidates` 透传（见 4.8）；无有效流水时为 `[]`（同样缓存）。
 失败（信封 code 区分）：422 空文本；503 OCR/LLM 全链失败或降级模板输出；500 模型输出非 JSON。
+
+### 5.5 GET /api/import/stock-candidates（代码候选查询）
+
+```sh
+curl "http://localhost:18080/api/import/stock-candidates?q=中国银行"
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| q | 是 | 搜索关键词（股票名称/拼音/代码） |
+
+成功：`data` 为 `List<StockCandidate>`（market / code / name / type，已过滤沪深 A 股）；零匹配为 `[]`。唯一命中场景后端已在 /process-image 静默回填，本接口服务于多候选/零匹配的人工选择与前端实时模糊搜索（前端亦可走自有 Smartbox 代理，本端点保留作开放 API）。
 
 ---
 
@@ -384,17 +410,18 @@ OCR 层扩展新渠道不受上述限制：直接实现 `OcrService` 三方法�
 | `LlmChannelWiringTest` | 2 | llm 渠道真实装配（ApplicationContextRunner 最小上下文）：嵌套配置类注入 / 全局模型 Bean 条件装配 / @Qualifier+ObjectProvider 注入 / 健康检查判定 |
 | `GeminiLlmServiceTest` | 7 | JDK HttpServer 本地桩 + 渠道自建 OpenAiChatModel 真实 HTTP 往返：Bearer 鉴权/内容解析/429/5xx/401/非 JSON/缺 choices |
 | `GroqLlamaServiceTest` | 3 | Groq 渠道同款桩：Bearer 鉴权/模型名传递/429/401（其余路径与 Gemini 共用基类已覆盖） |
-| `PromptFormatterTest` | 13 | 清洗规则与模板（通用 + 交易提取/审查模式；DB 覆写优先/未命中回落） |
-| `ImageTextProcessingFacadeTest` | 9 | 编排顺序/空文本拦截/异常透传/默认指令/结果缓存命中/强制刷新审查模式/降级不缓存/解析失败不缓存 |
-| `TradeDraftParserTest` | 5 | 围栏清理/二维数组映射/脏行隔离/非 JSON 500/空结果语义 |
+| `PromptFormatterTest` | 14 | 清洗规则与模板（通用 + 交易提取/审查模式；DB 覆写优先/未命中回落）；5 列输出契约断言 |
+| `ImageTextProcessingFacadeTest` | 14 | 编排顺序/空文本拦截/异常透传/默认指令/结果缓存命中/强制刷新审查模式/降级不缓存/解析失败不缓存；补全链路：唯一回填/多候选透传/零匹配/旧缓存回填/已回填不重查 |
+| `TradeDraftParserTest` | 8 | 围栏清理/二维数组映射/脏行隔离/非 JSON 500/空结果语义；5/6 列自适应（≥6 旧格式代码在前，=5 新格式名称在前） |
+| `SmartBoxStockCodeResolverTest` | 6 | HttpServer 桩：UTF-8 编码与噪声清洗重试/市场过滤/唯一回填语义/fail-open 不缓存/真实零匹配缓存 |
 | `ModulithVerifyTest` | 2 | 模块边界（vision→llm 基包单向依赖） |
 
 ```sh
 ./mvnw compile -q
-./mvnw test -q '-Dtest=AzureOcrServiceExtractContentTest,OcrChainManagerTest,LlmChainRouterTest,LlmChannelWiringTest,GeminiLlmServiceTest,GroqLlamaServiceTest,PromptFormatterTest,ImageTextProcessingFacadeTest,TradeDraftParserTest,ModulithVerifyTest' '-DfailIfNoTests=false'
+./mvnw test -q '-Dtest=AzureOcrServiceExtractContentTest,OcrChainManagerTest,LlmChainRouterTest,LlmChannelWiringTest,GeminiLlmServiceTest,GroqLlamaServiceTest,PromptFormatterTest,ImageTextProcessingFacadeTest,TradeDraftParserTest,SmartBoxStockCodeResolverTest,ModulithVerifyTest' '-DfailIfNoTests=false'
 ```
 
-以上 65 用例全部通过（2026-09-01 全局模型 Bean 轮验证）；`GeminiLlmServiceTest` / `GroqLlamaServiceTest` 为本地桩的真实 HTTP 测试，未打真实外部 API。
+以上 84 用例全部通过（2026-09-08 代码补全链路轮验证）；`GeminiLlmServiceTest` / `GroqLlamaServiceTest` 为本地桩的真实 HTTP 测试，未打真实外部 API。
 
 ---
 
@@ -420,4 +447,5 @@ OCR 层扩展新渠道不受上述限制：直接实现 `OcrService` 三方法�
 5. **LLM 无结果缓存**：同图同任务重复请求会重复消耗免费额度（P2 预留）；
 6. **最坏耗时**：约等于 Σ(启用渠道数 × connect+read 超时 × max-attempts) + 退避 + Azure 轮询，个人场景低概率触顶；前端/网关超时建议 ≥90s，或按需调低各渠道 read-timeout；
 7. **网络代理（生产实测）**：本机直连 `generativelanguage.googleapis.com` 不通（connect timeout），必须走代理——JVM 需真实系统属性 `-Dhttps.proxyHost=... -Dhttps.proxyPort=...`（IDEA 里放 **VM options**，放 Program arguments 无效，`HttpClient` 经 `ProxySelector.getDefault()` 读取）；代理故障时 Gemini 免费层偶发 503 high demand，重试可过；`api.groq.com` 与 global Azure 端点直连可达；
-8. **验证口径**：2026-09-01 真实端到端冒烟（azure OCR blocks 兑底路径 656 字符 → gemini 16936ms → 9 笔交易草稿全部正确）发生在旧手写 HTTP 传输层上；其后传输层收敛为 Spring AI（OpenAI SDK + options 多实例），真实 API 冒烟待重做；`api.groq.com` 历史直连可达，Groq 渠道 2026-09-01 随 options 多实例方案恢复。
+8. **验证口径**：2026-09-01 真实端到端冒烟（azure OCR blocks 兑底路径 656 字符 → gemini 16936ms → 9 笔交易草稿全部正确）发生在旧手写 HTTP 传输层上；其后传输层收敛为 Spring AI（OpenAI SDK + options 多实例），真实 API 冒烟待重做；`api.groq.com` 历史直连可达，Groq 渠道 2026-09-01 随 options 多实例方案恢复；
+9. **Smartbox 补全依赖**：代码补全依赖腾讯 Smartbox 接口可达性（fail-open：异常不缓存不阻塞主链路，缺码行退化为前端人工补录）；旧公司名/改名股不在联想词库时零匹配，走人工兜底（决策 P11 有意不接 crawler 字典）；存量库旧 6 列提示词模板需手动 UPDATE（见 `postgres/data.sql` 播种区注释），否则旧行仍要求模型输出代码列；

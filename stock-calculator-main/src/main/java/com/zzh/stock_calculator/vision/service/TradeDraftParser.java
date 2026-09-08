@@ -65,25 +65,29 @@ public class TradeDraftParser {
         return clean.trim();
     }
 
-    /** 逐行映射；列数不足或数字/时间字段非法的行跳过并告警 */
+    /**
+     * 逐行映射；列数自适应：5 列 = 新契约（名称在前，代码由后端 Smartbox 补全，见 SmartBoxStockCodeResolver），
+     * 6 列及以上 = 旧契约（代码在前，兼容 DB/Redis 未刷新的旧模板）；列数不足或数字/时间字段非法的行跳过并告警。
+     */
     private List<TradeDraftItem> mapToItems(List<List<Object>> rawRows) {
         if (rawRows == null || rawRows.isEmpty()) {
             return List.of();
         }
         List<TradeDraftItem> items = new ArrayList<>();
         for (List<Object> row : rawRows) {
-            if (row.size() < 6) {
+            boolean legacy = row.size() >= 6;
+            if (!legacy && row.size() != 5) {
                 log.warn("跳过列数不足的交易行: size={}", row.size());
                 continue;
             }
             try {
                 items.add(TradeDraftItem.builder()
-                        .stockCode(String.valueOf(row.get(0)).trim())
-                        .stockName(String.valueOf(row.get(1)).trim())
-                        .direction(TradeDirection.fromCode(String.valueOf(row.get(2))))
-                        .price(new BigDecimal(String.valueOf(row.get(3)).trim()))
-                        .volume(Integer.parseInt(String.valueOf(row.get(4)).trim()))
-                        .tradeTime(String.valueOf(row.get(5)).trim())
+                        .stockCode(legacy ? text(row.get(0)) : null)
+                        .stockName(text(row.get(legacy ? 1 : 0)))
+                        .direction(TradeDirection.fromCode(text(row.get(legacy ? 2 : 1))))
+                        .price(new BigDecimal(text(row.get(legacy ? 3 : 2))))
+                        .volume(Integer.parseInt(text(row.get(legacy ? 4 : 3))))
+                        .tradeTime(text(row.get(legacy ? 5 : 4)))
                         .status(TradeStatus.FILLED)
                         .build());
             } catch (Exception e) {
@@ -91,5 +95,9 @@ public class TradeDraftParser {
             }
         }
         return items;
+    }
+
+    private static String text(Object value) {
+        return String.valueOf(value).trim();
     }
 }

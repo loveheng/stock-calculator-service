@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -80,5 +81,45 @@ class TradeDraftParserTest {
         List<TradeDraftItem> drafts = parser.parse(raw);
 
         assertEquals(TradeDirection.SELL, drafts.getFirst().getDirection());
+    }
+
+    @Test
+    void parsesFiveColumnRowsWithoutStockCode() {
+        String raw = "[[\"*ST闻泰\",\"卖出\",16.69,100,\"2026-09-01 10:00:00\"]]";
+
+        List<TradeDraftItem> drafts = parser.parse(raw);
+
+        assertEquals(1, drafts.size());
+        TradeDraftItem item = drafts.getFirst();
+        assertNull(item.getStockCode());
+        assertEquals("*ST闻泰", item.getStockName());
+        assertEquals(TradeDirection.SELL, item.getDirection());
+        assertEquals(0, item.getPrice().compareTo(new BigDecimal("16.69")));
+        assertEquals(100, item.getVolume());
+        assertEquals("2026-09-01 10:00:00", item.getTradeTime());
+        assertEquals(TradeStatus.FILLED, item.getStatus());
+    }
+
+    @Test
+    void parsesMixedLegacyAndFiveColumnRows() {
+        String raw = """
+                [["600745","中际旭创","BUY",16.69,100,"2026-09-01 10:00:00"],
+                 ["*ST闻泰","SELL",16.52,200,"2026-08-21 00:00:00"]]
+                """;
+
+        List<TradeDraftItem> drafts = parser.parse(raw);
+
+        assertEquals(2, drafts.size());
+        assertEquals("600745", drafts.get(0).getStockCode());
+        assertEquals("中际旭创", drafts.get(0).getStockName());
+        assertNull(drafts.get(1).getStockCode());
+        assertEquals("*ST闻泰", drafts.get(1).getStockName());
+    }
+
+    @Test
+    void fiveColumnInvalidRowStillSkipped() {
+        String raw = "[[\"*ST闻泰\",\"卖出\",\"abc\",100,\"2026-09-01 10:00:00\"]]";
+
+        assertTrue(parser.parse(raw).isEmpty());
     }
 }

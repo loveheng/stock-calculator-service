@@ -3,18 +3,26 @@ package com.zzh.stock_calculator.vision.service;
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.llm.LlmChainRouter;
 import com.zzh.stock_calculator.vision.config.VisionAiProperties;
+import com.zzh.stock_calculator.vision.dto.StockCandidate;
 import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.DigestUtils;
+import org.springframework.util.StringUtils;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 智能图片分析门面（Facade + Pipeline 编排）：
  * 图片字节 -> OCR 多渠道责任链提取纯文本 -> PromptFormatter 清洗与组装 -> LLM 多渠道责任链 -> 业务结果。
+ *
+ * <p>股票代码补全（拍板决策）：截图中只有名称没有代码时，解析后统一经 {@link StockCodeResolver}
+ * 按名称补全——唯一候选静默回填 stockCode；多候选/零匹配保留 null 并透传 candidates 给前端人工选择。
+ * 旧缓存结构（无 candidates 字段）命中时惰性回填并重写缓存（read-through）。</p>
  *
  * <p>异常边界（三类可预期的业务结果，均经 GlobalExceptionHandler 统一转 ApiResponse）：
  * <ul>
@@ -35,6 +43,7 @@ public class ImageTextProcessingFacade {
     private final PromptFormatter promptFormatter;
     private final LlmChainRouter llmChainRouter;
     private final TradeDraftParser tradeDraftParser;
+    private final StockCodeResolver stockCodeResolver;
     private final VisionAiProperties properties;
     /** 结构化结果 <-> JSON（与 TradeDraftParser 同用 Boot 自动装配的 Jackson 3 Bean） */
     private final ObjectMapper objectMapper;
@@ -45,6 +54,7 @@ public class ImageTextProcessingFacade {
                                      PromptFormatter promptFormatter,
                                      LlmChainRouter llmChainRouter,
                                      TradeDraftParser tradeDraftParser,
+                                     StockCodeResolver stockCodeResolver,
                                      VisionAiProperties properties,
                                      ObjectMapper objectMapper,
                                      VisionCacheStore draftCache) {
@@ -52,6 +62,7 @@ public class ImageTextProcessingFacade {
         this.promptFormatter = promptFormatter;
         this.llmChainRouter = llmChainRouter;
         this.tradeDraftParser = tradeDraftParser;
+        this.stockCodeResolver = stockCodeResolver;
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.draftCache = draftCache;
@@ -118,6 +129,12 @@ public class ImageTextProcessingFacade {
         if (useCache) {
             List<TradeDraftItem> cached = readDraftCache(hash);
             if (cached != null) {
+                // 旧缓存结构惰性回填：无 candidates 字段（从未解析过）的缺码草稿补全后重写缓存
+                if (needsCodeEnrichment(cached)) {
+                    enrichStockCodes(cached);
+                    writeDraftCache(hash, cached);
+                    log.info("缓存命中旧结构，已补全股票代码并回写 (hash={})", hash);
+                }
                 log.info("交易草稿缓存命中，直接返回 (hash={}, size={}, cost={}ms)",
                         hash, cached.size(), System.currentTimeMillis() - start);
                 return cached;
@@ -153,13 +170,56 @@ public class ImageTextProcessingFacade {
             throw new BusinessException(503, "AI 渠道暂不可用，本次结果未经模型处理，请稍后重试");
         }
 
-        // 5. 解析 + 写缓存（业务空结果 [] 同样缓存）
+        // 5. 解析 + 代码补全 + 写缓存（业务空结果 [] 同样缓存）
         List<TradeDraftItem> drafts = tradeDraftParser.parse(result);
+        enrichStockCodes(drafts);
         writeDraftCache(hash, drafts);
 
         log.info("图片→交易草稿 全链路完成 (hash={}, useCache={}, ocrCost={}ms, formatCost={}ms, llmCost={}ms, total={}ms, drafts={})",
                 hash, useCache, ocrCost, formatCost, llmCost, System.currentTimeMillis() - start, drafts.size());
         return drafts;
+    }
+
+    /**
+     * 批量补全缺失的股票代码：同名只查一次（单次请求内去重）。
+     * 唯一候选 -> 静默回填 stockCode；多候选/零匹配 -> stockCode 保持 null，candidates 透传前端。
+     * resolver 侧 fail-open（异常/未命中返回空列表），此处对 null 返回再做一层防御。
+     */
+    private void enrichStockCodes(List<TradeDraftItem> drafts) {
+        Map<String, List<StockCandidate>> resolved = new HashMap<>();
+        for (TradeDraftItem item : drafts) {
+            if (StringUtils.hasText(item.getStockCode()) || !StringUtils.hasText(item.getStockName())) {
+                continue;
+            }
+            String name = item.getStockName().trim();
+            List<StockCandidate> candidates = resolved.computeIfAbsent(name, stockCodeResolver::search);
+            if (candidates == null) {
+                candidates = List.of();
+            }
+            if (candidates.size() == 1) {
+                item.setStockCode(candidates.getFirst().code());
+                item.setCandidates(List.of());
+                log.info("股票代码唯一匹配，已回填 (name={}, code={})", name, item.getStockCode());
+            } else {
+                item.setCandidates(candidates);
+                if (candidates.isEmpty()) {
+                    log.info("股票代码零匹配，待前端人工补录 (name={})", name);
+                } else {
+                    log.info("股票代码多候选，透传前端选择 (name={}, candidates={})", name, candidates.size());
+                }
+            }
+        }
+    }
+
+    /** 旧缓存结构判定：存在「缺码且 candidates 字段缺失（从未解析过）」的草稿时需要回填；
+     *  已解析过的缺码草稿（candidates 已置空列表或候选列表）不重复查询，避免每次读缓存都打 Smartbox */
+    private boolean needsCodeEnrichment(List<TradeDraftItem> drafts) {
+        for (TradeDraftItem item : drafts) {
+            if (!StringUtils.hasText(item.getStockCode()) && item.getCandidates() == null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 读结果缓存：JSON 反序列化失败（如结构漂移）视作未命中并驱逐脏数据，不阻塞重算 */
