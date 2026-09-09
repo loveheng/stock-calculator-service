@@ -3,6 +3,7 @@ package com.zzh.stock_calculator.crawler.task;
 import com.openai.core.http.Headers;
 import com.openai.errors.UnexpectedStatusCodeException;
 import com.zzh.stock_calculator.crawler.EmbeddingBackfillCompletedEvent;
+import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingGate;
 import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
 import com.zzh.stock_calculator.crawler.embedding.service.ArticleEmbeddingService;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
@@ -47,6 +49,9 @@ class EmbeddingBackfillTaskTest {
     private ArticleEmbeddingService embeddingService;
 
     @Mock
+    private ObjectProvider<ArticleEmbeddingService> embeddingServiceProvider;
+
+    @Mock
     private EmbeddingQuotaGuard quotaGuard;
 
     @Mock
@@ -62,8 +67,13 @@ class EmbeddingBackfillTaskTest {
         properties.setBatchSize(2);
         properties.setBatchIntervalMs(0);
         properties.setDailyMaxArticles(100);
-        task = new EmbeddingBackfillTask(embeddingRepository, embeddingService,
-                quotaGuard, properties, eventPublisher);
+        // 门控开启态（R1）：enabled=true + 凭据齐备，等价生产配置
+        properties.setEnabled(true);
+        properties.getCloudflare().setAccountId("acc-test");
+        properties.getCloudflare().setApiToken("tok-test");
+        task = new EmbeddingBackfillTask(embeddingRepository, embeddingServiceProvider,
+                quotaGuard, properties, eventPublisher, new EmbeddingGate(properties));
+        lenient().when(embeddingServiceProvider.getObject()).thenReturn(embeddingService);
 
         lenient().when(quotaGuard.isFatal()).thenReturn(false);
         lenient().when(quotaGuard.isRateLimited()).thenReturn(false);
@@ -72,6 +82,19 @@ class EmbeddingBackfillTaskTest {
         lenient().when(embeddingRepository.countDone()).thenReturn(0L);
         // 默认视为远未完成（完成判定 countDone + countFailed >= countArticles 不成立）
         lenient().when(embeddingRepository.countArticles()).thenReturn(Long.MAX_VALUE);
+    }
+
+    @Test
+    @DisplayName("门控关闭: 未启用/凭据缺失 → 整轮跳过，不解析 Service 不触仓储")
+    void gateClosedSkipsRun() {
+        properties.setEnabled(false);
+
+        task.cronRun();
+
+        verify(embeddingServiceProvider, never()).getObject();
+        verify(embeddingService, never()).processArticle(anyLong());
+        verify(embeddingRepository, never()).findPendingArticleIds(anyInt(), anyLong());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

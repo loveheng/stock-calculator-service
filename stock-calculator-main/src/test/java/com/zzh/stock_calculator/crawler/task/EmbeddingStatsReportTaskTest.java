@@ -1,6 +1,7 @@
 package com.zzh.stock_calculator.crawler.task;
 
 import com.zzh.stock_calculator.crawler.EmbeddingStatsReportEvent;
+import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingGate;
 import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.entity.EmbeddingStatus;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
@@ -51,7 +52,12 @@ class EmbeddingStatsReportTaskTest {
     @BeforeEach
     void setUp() {
         properties = new EmbeddingProperties();
-        task = new EmbeddingStatsReportTask(embeddingRepository, articleRepository, properties, eventPublisher);
+        // 门控开启态（R1）：enabled=true + 凭据齐备，等价生产配置
+        properties.setEnabled(true);
+        properties.getCloudflare().setAccountId("acc-test");
+        properties.getCloudflare().setApiToken("tok-test");
+        task = new EmbeddingStatsReportTask(embeddingRepository, articleRepository,
+                properties, eventPublisher, new EmbeddingGate(properties));
 
         lenient().when(embeddingRepository.countArticles()).thenReturn(1000L);
         lenient().when(embeddingRepository.countDone()).thenReturn(300L);
@@ -84,6 +90,18 @@ class EmbeddingStatsReportTaskTest {
 
         task.cronCheck();
 
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("门控关闭: embedding 未启用 → 统计跳过，不触仓储不发布")
+    void gateClosedSkips() {
+        properties.setEnabled(false);
+        task.lastSentEpochDay.set(today() - 10);
+
+        task.cronCheck();
+
+        verify(embeddingRepository, never()).countArticles();
         verify(eventPublisher, never()).publishEvent(any());
     }
 

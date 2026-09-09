@@ -149,7 +149,8 @@ app:
 
 embedding:
   # 向量化功能总开关（cls_article 语义检索基座，docs/cls-article-vector-backend-design.md）
-  # native 变体不配置本块即整体关闭（D9）；enabled=true 但凭据缺失时 Bean 不装配并 WARN
+  # 运行期门控（EmbeddingGate，R1）：enabled=true 且 CF 凭据齐备才实例化重 Bean；
+  # 未配置凭据时整体关闭并 WARN 一次（native/JVM 行为一致）
   enabled: ${EMBEDDING_ENABLED:true}
   cloudflare:
     # CF 账户 ID + Workers AI 专用 token（仅 Workers AI Edit 权限，须为轮换后新 token，§8.1）

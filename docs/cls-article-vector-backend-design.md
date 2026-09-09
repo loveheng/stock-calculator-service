@@ -1,9 +1,9 @@
 # cls_article 向量化（语义检索基座）· 后端设计文档
 
-> 版本：v1.4（2026-09-09，远程库 DDL 部署 + 小批量试点实证见附录 A.3）
+> 版本：v1.5（2026-09-09，R1 运行期门控重构：native 终态自带向量化，见 §9.3 C8）
 > 范围：crawler 域 embedding 子包——cls_article 全量向量化管道（存量回填 + 增量）、pgvector 存储、Cloudflare Workers AI 配额治理与熔断；相似检索 service 能力随 P0 就绪，消费场景（copilot RAG）为 P1 待定。
 > 关联：`docs/copilot-design.md`（P1 消费方先例）、`postgres/schema.sql`（表结构落点）
-> 状态：P0 已实现（2026-09-09 编码完成，全量回归 297 测试 0 失败；存量回填待生产库开闸）
+> 状态：P0 已实现（2026-09-09 编码完成；R1 重构后全量回归 300 测试 0 失败 1 skip；存量回填待生产库开闸）
 
 ---
 
@@ -19,7 +19,7 @@
 | D6 | 状态管理 | 独立状态表 `cls_article_embedding`，**三态**（PENDING/DONE/FAILED，P1 追加 FAILED 终态见 §9.3）+ content_hash + fail_count | 状态即游标（断点续传零额外状态文件）；model 列为换模型留记录；hash 支撑内容变更重嵌；主表零污染；FAILED 终态防毒丸文章反复空耗 | cls_article 加 embedding_status 列（域污染）；三态含「处理中」（崩溃卡死态需重置逻辑，单线程 + 幂等下无收益） |
 | D7 | 额度策略 | 免费档 10,000 Neurons/天 + 三类熔断 + 每小时对账 + **日上限不跑满**（预留余量） | 回填日上限 6 万条 ≈ 日额度 75%~84%（计价校准后修订，§9.3 C2），全量回填约 8.5 天零成本；余量保增量、查询向量化与估算偏差；付费兜底仅 ~$1.5（附录 B.1） | 本地回填（无可用 GPU）；直接付费一次刷完（保留为应急选项） |
 | D8 | 领域归属 | crawler 域 `embedding` 子包；检索门面 P1 时提升至 crawler 基包 | 数据主权在 crawler；跨域仅暴露基包类型（Modulith 红线，ModulithVerifyTest 守护） | 独立顶层 embedding 域（当前无第二数据源诉求） |
-| D9 | native 隔离 | `embedding.enabled` 总开关，不配置即整体不装配 | native 变体无需向量能力；AOT 风险面不扩大 | — |
+| D9 | native 装配 | **Bean 一律注册 + EmbeddingGate 运行期门控**（R1，2026-09-09 用户拍板 native 终态） | 原 @Conditional 在 AOT 构建期固化判定（构建环境无凭据 → Bean 被裁剪，运行期无法恢复，实测根因）；运行期门控使 native/JVM 行为一致，单进程自洽 | 构建期条件装配（AOT 固化，已废弃）；native 不装配需拆分补量进程（双进程运维复杂）；构建期注入占位凭据（镜像失去优雅降级，脚枪） |
 
 **历史决策脉络**（评审过程存档）：最初评估「存量 Ollama bge-large-zh-v1.5 + 增量 Gemini」→ 发现**不同模型向量空间不可混库**（同维度 ≠ 同坐标系）→ 改为「本地 Ollama bge-m3 + CF bge-m3」同模型双运行时 → 最终收敛为**全量 CF**（消除跨运行时一致性门禁，架构最简）。
 
@@ -278,7 +278,7 @@ public List<ArticleSearchResult> similaritySearch(String query, int topK, double
 
 ```yaml
 embedding:
-  enabled: true                        # native 变体不配置 → 整体关闭（D9）
+  enabled: true                        # 运行期门控（EmbeddingGate，R1）：true + 凭据齐备才实例化重 Bean
   cloudflare:
     account-id: ${CLOUDFLARE_ACCOUNT_ID:}
     api-token: ${CLOUDFLARE_API_TOKEN:}   # 口令不落库，同 POSTGRES_PASS 模式
@@ -366,7 +366,7 @@ embedding:
 | 动作 | 路径 | 职责 |
 |---|---|---|
 | 新增 | embedding/config/EmbeddingProperties.java | 配置绑定 |
-| 新增 | embedding/config/EmbeddingEnabledCondition.java | enabled + 凭据三重条件装配 |
+| 新增 | embedding/config/EmbeddingGate.java | 运行期门控（R1，替代 EmbeddingEnabledCondition）：enabled + 凭据三重判定，WARN 一次 |
 | 新增 | embedding/config/CfUsageFixingClient.java | Option A 垫片：装饰 OpenAIClient 修 CF 响应缺 usage（S5 实证结论，用户拍板 2026-09-08） |
 | 新增 | embedding/config/EmbeddingConfig.java | Bean 装配（OpenAiSetup+垫片→OpenAiEmbeddingModel；PgVectorStore；QuotaGuard） |
 | 新增 | embedding/entity/ClsArticleEmbedding.java | 状态表实体 |
@@ -411,6 +411,7 @@ embedding:
 | C5 | **完成邮件通知**：`EmbeddingBackfillCompletedEvent`（crawler 基包）→ auth 域 `EmbeddingBackfillMailListener` | 存量跑完（DONE+FAILED ≥ 总数）邮件提示；`EMBEDDING_NOTIFY_EMAIL` 未配置静默跳过；进程生命周期一次 |
 | C6 | Modulith 事件落 **crawler 基包**（非 event 子包） | ModulithVerifyTest 严格 verify() 只放行基包类型跨模块引用 |
 | C7 | **周期统计报告**（用户需求）：每 interval-days（默认 3 天）一份邮件，统计新增数据量（按 ctime）+ 存量处理量（按 embedded_at）；存量全量完成后自动切「仅增量」模板 | 每日 UTC 01:00 检查点比对上次发送 epoch day，满间隔才发（间隔严格、不受月份长度影响；内存态重启顺延不轰炸）；统计在 crawler 域完成后发布基包事件，auth 侧渲染发送；收件人复用 EMBEDDING_NOTIFY_EMAIL。口径说明：cls_article 无独立入库时间戳（created_at 为 to_timestamp(ctime) 生成列），新增按 ctime（爬虫近实时入库 ctime ≈ 入库时间） |
+| C8 | **R1 运行期门控重构**（用户拍板 native 终态）：删除 EmbeddingEnabledCondition（构建期 @Conditional），新增 EmbeddingGate 运行期判定；全部 embedding Bean 一律注册；重 Bean（EmbeddingModel/VectorStore）靠全局 lazy-initialization + 调用方门控实现「未启用不实例化」，embeddingModel() 内置防御性 tripwire；Task/Listener 依赖改 ObjectProvider 惰性解析 | 原 @Conditional 被 Spring AOT 在 native 构建期固化（构建环境无凭据 → Bean 被裁剪，运行期注入凭据无法恢复）——生产 native 变体回填不跑的实测根因；R1 后 native/JVM 行为一致，单进程自洽，无需拆分补量进程。验证：全量回归 300 测试 0 失败 1 skip；native 端到端（回填实跑）待 CI 出镜像后部署冒烟 |
 
 ---
 
@@ -435,7 +436,7 @@ embedding:
 | V3 | CF 连通冒烟 | ✅ 2026-09-09 远程库试点覆盖：实调 32 篇均 dim=1024（附录 A.3）；语义检索 sanity（如「固态电池」命中相关电报）留 P1 场景联调一并验证 |
 | V4 | 幂等验证 | 同批重跑两次 → vector_store 行数不增（S3 原子性 + 确定性 UUID upsert 生效） |
 | V5 | 熔断验证 | mock 429 / 500 / 401 三分支单测 |
-| V6 | native 隔离 | `embedding.enabled` 缺省 → Bean 不装配 → contextLoads 通过；native 构建不受影响 |
+| V6 | 门控与 native 装配 | 无凭据启动 → 门控 WARN 一次、回填/统计/监听静默跳过、重 Bean 不实例化（contextLoads 通过）；凭据就位时 native 变体回填实跑（CI 出镜像后部署冒烟） |
 | V7 | Day-1 校准 | 记录当日实际处理条数与退出原因，回填 §5.2 工期预估 |
 | V8 | 完成邮件 | 配置 `EMBEDDING_NOTIFY_EMAIL` 后，存量回填全量完成时收到一封通知（§4.4 / §9.3 C5） |
 | V9 | 统计报告 | 配置 `EMBEDDING_NOTIFY_EMAIL` 后，每 3 天收到一份统计邮件；存量完成后模板自动切「仅增量」（§9.3 C7） |

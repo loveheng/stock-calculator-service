@@ -10,7 +10,6 @@ import org.springframework.ai.openai.setup.OpenAiSetup;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,16 +27,23 @@ import java.util.List;
  * <p>PgVectorStore：手动 builder 装配（与 DeepSeekConfig 手动装配同法），初始化时自动
  * 建扩展（vector/hstore/uuid-ossp）、vector_store 表（vector(1024)）与 HNSW(cosine) 索引。
  *
- * <p>本配置类整体受 EmbeddingEnabledCondition 控制：未启用时三个 Bean 均不装配，
- * 依赖 VectorStore/EmbeddingModel 的 Service 也条件装配，应用照常启动。
+ * <p>R1 装配语义：本配置类不再使用构建期 {@code @Conditional}（AOT 会在 native 构建
+ * 期固化判定导致 Bean 被裁剪），改为 Bean 定义一律注册，实例化交给全局
+ * lazy-initialization + EmbeddingGate 运行期门控——未启用时无调用方触发实例化，
+ * native/JVM 行为一致。embeddingModel() 内置防御性 tripwire：门控未通过时被
+ * 意外实例化立即抛出明确异常，避免落到凭据层报 401 之类的次生错误。
  */
 @Configuration
-@Conditional(EmbeddingEnabledCondition.class)
 @EnableConfigurationProperties(EmbeddingProperties.class)
 public class EmbeddingConfig {
 
     @Bean
-    public OpenAiEmbeddingModel embeddingModel(EmbeddingProperties props) {
+    public OpenAiEmbeddingModel embeddingModel(EmbeddingProperties props, EmbeddingGate gate) {
+        if (!gate.isAvailable()) {
+            throw new IllegalStateException(
+                    "embedding 未启用或 CF 凭据缺失（embedding.enabled / account-id / api-token），"
+                            + "EmbeddingModel 不应被实例化；调用方必须先通过 EmbeddingGate 门控");
+        }
         String baseUrl = "https://api.cloudflare.com/client/v4/accounts/"
                 + props.getCloudflare().getAccountId() + "/ai/v1";
         // maxRetries=0：429 直抛 RateLimitException，交由 EmbeddingQuotaGuard 熔断分类

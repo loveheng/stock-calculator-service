@@ -8,13 +8,14 @@ import java.time.Duration;
 
 /**
  * 向量化配置（embedding.* 前缀，设计文档 §7.1）。
- * native 变体不配置本块 → enabled 默认 false，整体关闭（D9）。
+ * 未配置本块时 enabled 默认 false，整体关闭；enabled=true 但凭据缺失时同样关闭并
+ * WARN 一次（运行期 EmbeddingGate 判定，native/JVM 行为一致，R1）。
  */
 @Data
 @ConfigurationProperties(prefix = "embedding")
 public class EmbeddingProperties {
 
-    /** 功能总开关；配合 account-id/api-token 非空三重条件装配（EmbeddingEnabledCondition） */
+    /** 功能总开关；配合 account-id/api-token 非空三重门控（EmbeddingGate，运行期判定） */
     private boolean enabled = false;
 
     private final Cloudflare cloudflare = new Cloudflare();

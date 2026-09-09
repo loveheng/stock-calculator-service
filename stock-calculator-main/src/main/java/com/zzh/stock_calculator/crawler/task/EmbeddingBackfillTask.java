@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.crawler.task;
 
 import com.zzh.stock_calculator.crawler.EmbeddingBackfillCompletedEvent;
-import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingEnabledCondition;
+import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingGate;
 import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.entity.EmbeddingStatus;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
@@ -10,9 +10,9 @@ import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingErrorClassifi
 import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingQuotaGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -36,10 +36,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>完成通知：本轮启动时未完成、结束后全量 DONE/FAILED → 发布
  * EmbeddingBackfillCompletedEvent（进程生命周期内一次，重启前已完成则预置标志不重发），
  * auth 侧监听发送完成邮件；无监听方/邮件未配置时静默。
+ *
+ * <p>R1：本 Bean 一律注册（@Scheduled 经 ScheduledBeanLazyInitializationExcludeFilter
+ * 强制急切实例化），嵌入依赖经 ObjectProvider 惰性解析——未过 EmbeddingGate 门控前
+ * 绝不触发 ArticleEmbeddingService/VectorStore/EmbeddingModel 实例化链。
  */
 @Slf4j
 @Component
-@Conditional(EmbeddingEnabledCondition.class)
 @RequiredArgsConstructor
 public class EmbeddingBackfillTask {
 
@@ -47,10 +50,11 @@ public class EmbeddingBackfillTask {
     static final long[] TRANSIENT_BACKOFF_MS = {300, 1000, 3000};
 
     private final ClsArticleEmbeddingRepository embeddingRepository;
-    private final ArticleEmbeddingService embeddingService;
+    private final ObjectProvider<ArticleEmbeddingService> embeddingServiceProvider;
     private final EmbeddingQuotaGuard quotaGuard;
     private final EmbeddingProperties properties;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmbeddingGate gate;
 
     /** 启动触发与 cron 触发可能重叠，单飞守卫 */
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -78,6 +82,11 @@ public class EmbeddingBackfillTask {
     }
 
     private void runSafely(String trigger) {
+        if (!gate.isAvailable()) {
+            // 未启用/凭据缺失：整体静默跳过（凭据缺失但开关开时 EmbeddingGate 已 WARN 一次）
+            log.debug("embedding unavailable, backfill skipped, trigger={}", trigger);
+            return;
+        }
         if (!running.compareAndSet(false, true)) {
             log.info("embedding backfill skipped, previous run still in progress, trigger={}", trigger);
             return;
@@ -114,6 +123,7 @@ public class EmbeddingBackfillTask {
 
         int batchSize = properties.getBatchSize();
         long intervalMs = properties.getBatchIntervalMs();
+        ArticleEmbeddingService embeddingService = embeddingServiceProvider.getObject();
         log.info(">>> embedding backfill start, trigger={}, boundary={}, progress={}/{}",
                 trigger, boundaryCtime, embeddingRepository.countDone(), embeddingRepository.countArticles());
 
@@ -232,7 +242,7 @@ public class EmbeddingBackfillTask {
                 return false;
             }
             try {
-                embeddingService.processArticle(articleId);
+                embeddingServiceProvider.getObject().processArticle(articleId);
                 return true;
             } catch (Exception retryError) {
                 log.warn("transient embedding retry failed, articleId={}, backoffMs={}",

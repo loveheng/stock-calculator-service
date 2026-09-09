@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.crawler.task;
 
 import com.zzh.stock_calculator.crawler.EmbeddingStatsReportEvent;
-import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingEnabledCondition;
+import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingGate;
 import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.entity.EmbeddingStatus;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
@@ -9,7 +9,6 @@ import com.zzh.stock_calculator.crawler.repository.ClsArticleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -31,10 +30,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Modulith：统计在 crawler 域完成后发布 EmbeddingStatsReportEvent（基包 API），
  * auth 侧监听渲染并发送邮件；无监听方/邮箱未配置静默，不影响统计任务。
+ *
+ * <p>R1：Bean 一律注册（@Scheduled 强制急切），未过 EmbeddingGate 门控前不触碰
+ * 仓储统计与事件发布（embedding 关闭时统计报告无意义）。
  */
 @Slf4j
 @Component
-@Conditional(EmbeddingEnabledCondition.class)
 @RequiredArgsConstructor
 public class EmbeddingStatsReportTask {
 
@@ -42,12 +43,17 @@ public class EmbeddingStatsReportTask {
     private final ClsArticleRepository articleRepository;
     private final EmbeddingProperties properties;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmbeddingGate gate;
 
     /** 上次发送所在 UTC epoch day；package-private 供同包测试推进。初始 = 启动当天 → 首封在满间隔后 */
     final AtomicLong lastSentEpochDay = new AtomicLong(Instant.now().getEpochSecond() / 86400L);
 
     @Scheduled(cron = "${embedding.report.cron:0 0 1 * * *}", zone = "UTC")
     public void cronCheck() {
+        if (!gate.isAvailable()) {
+            log.debug("embedding unavailable, stats report skipped");
+            return;
+        }
         if (!properties.getReport().isEnabled()) {
             return;
         }
