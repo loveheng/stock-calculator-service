@@ -335,6 +335,50 @@ for d in agent_dirs:
     agent_meta['reflection'].extend(m.get('reflection', []))
     agent_meta['resources'].extend(m.get('resources', []))
 
+# Hibernate models 的 JPA 注解内部类（XxxJpaAnnotation）在运行期经反射构造，
+# 静态分析不可达；agent 只录得启动路径出现过的注解。实体新增注解（如 @Enumerated）
+# 就会 NoSuchMethodException。此处按 classpath 上实际存在的全部 JpaAnnotation
+# 实现类做 UNION 补齐（构造器签名统一为 (jakarta 注解, ModelsContext)），
+# 新实体加注解无需再重录 agent。
+
+def fill_missing_jpa_annotation_reflection(entries):
+    known = set()
+    for e in entries:
+        t = e.get('type')
+        known.add(t.get('name') if isinstance(t, dict) else t)
+    found = []
+    for j in open(cp).read().strip().split(':'):
+        j = j.strip()
+        if not j.endswith('.jar') or not os.path.exists(j):
+            continue
+        try:
+            z = zipfile.ZipFile(j)
+        except Exception:
+            continue
+        for n in z.namelist():
+            if not n.startswith('org/hibernate/boot/models/annotations/internal/'):
+                continue
+            if not n.endswith('JpaAnnotation.class'):
+                continue
+            fq = n[:-6].replace('/', '.')
+            if fq in known:
+                continue
+            ann = fq.rsplit('.', 1)[-1].replace('JpaAnnotation', '')
+            entries.append({
+                'type': fq,
+                'methods': [{
+                    'name': '<init>',
+                    'parameterTypes': [
+                        'jakarta.persistence.' + ann,
+                        'org.hibernate.models.spi.ModelsContext',
+                    ],
+                }],
+            })
+            found.append(fq)
+    return found
+
+fill_missing_jpa_annotation_reflection(agent_meta['reflection'])
+
 def type_of(entry):
     t = entry.get('type')
     return t.get('name') if isinstance(t, dict) else t
