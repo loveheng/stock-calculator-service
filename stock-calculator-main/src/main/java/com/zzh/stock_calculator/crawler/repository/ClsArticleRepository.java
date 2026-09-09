@@ -15,4 +15,7 @@ public interface ClsArticleRepository extends JpaRepository<ClsArticle, Long> {
 
     @Query("SELECT a.ctime  FROM ClsArticle a where a.ctime between :startTime and :endTime order by ctime asc limit 1")
     Long findHistoryMinCtime(@Param("startTime") Long startTime,@Param("endTime") Long endTime);
+
+    /** 窗口内新增电报数（按发布时间 ctime，秒；统计报告用，爬虫近实时入库 ctime ≈ 入库时间） */
+    long countByCtimeGreaterThanEqual(Long ctime);
 }

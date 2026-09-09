@@ -4,10 +4,12 @@ import com.zzh.stock_calculator.crawler.entity.ClsArticleStock;
 import com.zzh.stock_calculator.crawler.entity.ClsArticleSubject;
 import com.zzh.stock_calculator.crawler.entity.ClsSubject;
 import com.zzh.stock_calculator.crawler.entity.Stock;
+import com.zzh.stock_calculator.crawler.event.ArticleSavedEvent;
 import com.zzh.stock_calculator.crawler.repository.ClsArticleRepository;
 import com.zzh.stock_calculator.crawler.repository.ClsArticleStockRepository;
 import com.zzh.stock_calculator.crawler.repository.ClsArticleSubjectRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +27,7 @@ public class ClsArticleService {
     private final ClsArticleStockRepository stockRepository;
     private final StockService stockService;
     private final ClsSubjectService clsSubjectService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public boolean saveIfNotExists(ClsArticle article) {
@@ -69,6 +72,12 @@ public class ClsArticleService {
                 article.getId(),
                 subjects != null ? subjects.size() : 0,
                 stocks != null ? stocks.size() : 0);
+
+        // 增量向量化触发点（设计文档 §4.5，唯一侵入点）：事务提交后由监听器异步消费
+        eventPublisher.publishEvent(ArticleSavedEvent.builder()
+                .articleId(article.getId())
+                .ctime(article.getCtime())
+                .build());
         return true;
     }
 

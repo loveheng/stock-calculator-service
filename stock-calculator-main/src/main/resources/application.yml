@@ -56,7 +56,11 @@ spring:
           timeout: 5000
           writetimeout: 5000
           starttls:
-            enable: true
+            enable: ${SMTP_STARTTLS:true}
+          # 465 隐式 SSL（如新浪 SMTP 仅 465 加密、587 为明文无 STARTTLS）：
+          # .env 设 SMTP_SSL=true + SMTP_PORT=465 + SMTP_STARTTLS=false；与 starttls 互斥使用
+          ssl:
+            enable: ${SMTP_SSL:false}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -142,3 +146,37 @@ app:
   auth:
     # E2EE 用户服务总开关：native 变体的 application.yml 不配置此项，即整体关闭
     enabled: true
+
+embedding:
+  # 向量化功能总开关（cls_article 语义检索基座，docs/cls-article-vector-backend-design.md）
+  # native 变体不配置本块即整体关闭（D9）；enabled=true 但凭据缺失时 Bean 不装配并 WARN
+  enabled: ${EMBEDDING_ENABLED:true}
+  cloudflare:
+    # CF 账户 ID + Workers AI 专用 token（仅 Workers AI Edit 权限，须为轮换后新 token，§8.1）
+    # 口令不落库，同 POSTGRES_PASS 模式经环境变量注入
+    account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+    api-token: ${CLOUDFLARE_API_TOKEN:}
+    model: '@cf/baai/bge-m3'
+    dimensions: 1024
+  # 回填游标批大小与批间节流
+  batch-size: 64
+  batch-interval-ms: 300
+  # 单日回填上限（免费额度 10000 Neurons/日，00:00 UTC 刷新；bge-m3 计价实测 1075 Neurons/M tokens，
+  # 均值 ~115 tokens/条 → 60000 条/天 ≈ 75%~84% 额度；留 ~20% 防回填打爆当日额度
+  # 导致增量监听/聊天查询向量化连坐 429，§5.3）
+  daily-max-articles: 60000
+  # 永久性失败连续次数上限：达上限落 FAILED 终态退出游标（仅 PERMANENT 计次，成功清零）
+  max-fail-attempts: 5
+  backfill:
+    startup-delay: 15s
+    cron: '0 5 * * * *'
+  # 统计报告邮件（新增数据量 + 存量处理量；存量完成后仅报增量，§9.3）
+  # 每日 UTC 01:00（北京 09:00）检查点比对上次发送，满 interval-days 才发；
+  # 收件人复用 EMBEDDING_NOTIFY_EMAIL，未配置时静默跳过
+  report:
+    enabled: true
+    interval-days: 3
+    cron: '0 0 1 * * *'
+  search:
+    default-top-k: 10
+    default-threshold: 0.5

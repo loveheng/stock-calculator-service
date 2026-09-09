@@ -273,3 +273,33 @@ CREATE INDEX IF NOT EXISTS idx_user_custom_stat_user ON public.user_custom_stat 
 -- 回滚：DROP TABLE IF EXISTS public.user_custom_stat;
 -- 注：user_id 为 varchar(64)（auth 用户 UUID 文本）；D17 文档示例写 BIGINT 系前端笔误，
 --     对齐 user_sync_data / ai_chat_session 既有先例（E1）
+
+-- ============================================================
+-- cls_article 向量化基础设施（docs/cls-article-vector-backend-design.md §3.2）
+-- pgvector 扩展 + 状态表；vector_store 主表由 Spring AI PgVectorStore
+-- initialize-schema 自动建表（vector(1024) + HNSW cosine 索引），不手写 DDL
+-- ============================================================
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS public.cls_article_embedding (
+	article_id int8 NOT NULL,
+	status varchar(10) DEFAULT 'PENDING' NOT NULL,
+	fail_count int4 DEFAULT 0 NOT NULL,
+	model varchar(64) DEFAULT '@cf/baai/bge-m3' NOT NULL,
+	content_hash varchar(64) NULL,
+	error varchar(500) NULL,
+	embedded_at timestamptz NULL,
+	created_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
+	updated_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
+	CONSTRAINT cls_article_embedding_pkey PRIMARY KEY (article_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cae_status ON public.cls_article_embedding USING btree (status);
+
+-- P1 追加：永久失败计次列（幂等，存量库补列；spring.sql.init 每次启动执行不报错）
+ALTER TABLE public.cls_article_embedding ADD COLUMN IF NOT EXISTS fail_count int4 DEFAULT 0 NOT NULL;
+
+-- 回滚：DROP TABLE IF EXISTS public.cls_article_embedding;
+-- 注：与 cls_article 无物理外键（现库惯例，引用完整性由应用层保证）；
+--     三态语义：不存在行或 PENDING=未处理，DONE=已生成，FAILED=永久失败终态（fail_count 计次）；
+--     model 留档支撑将来换模型全量重嵌（R9）

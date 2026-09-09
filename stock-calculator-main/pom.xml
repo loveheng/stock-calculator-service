@@ -45,6 +45,12 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
+        <!-- 向量存储（方案一）：Spring AI 官方 PgVectorStore，BOM 2.0.1 管版本；
+             见 docs/cls-article-vector-backend-design.md D2 -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
+        </dependency>
         <dependency>
             <!-- spring-ai 将 reactor 标为 optional（阻塞用法不强制），Copilot 流式（chatModel.stream 返回 Flux）需显式引入；版本由 Boot BOM 管理 -->
             <groupId>io.projectreactor</groupId>
