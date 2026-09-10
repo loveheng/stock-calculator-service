@@ -85,6 +85,7 @@ public class ArticleEmbeddingSearchService {
                     .articleId(article.getId())
                     .title(article.getTitle())
                     .brief(article.getBrief())
+                    .content(article.getContent())
                     .level(article.getLevel())
                     .ctime(article.getCtime())
                     .score(document.getScore())

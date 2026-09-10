@@ -18,6 +18,17 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 限流异常（backend-implementation §5.3）：HTTP 200 + 信封 429 + data.retryAfterSeconds，
+     * 与其他业务错误口径一致；日志不带 query/stockCodes 明文（C1 红线）。
+     */
+    @ExceptionHandler(RateLimitedException.class)
+    public ApiResponse<RateLimitData> handleRateLimited(RateLimitedException e) {
+        log.warn("限流: retryAfterSeconds={}", e.getRetryAfterSeconds());
+        return ApiResponse.fail(429, e.getMessage(),
+                RateLimitData.builder().retryAfterSeconds(e.getRetryAfterSeconds()).build());
+    }
+
+    /**
      * SSE/异步请求生命周期异常：客户端中途断开（容器把 Broken pipe 包装为本异常，
      * 经 async error dispatch 进入 advice）或流超时（AsyncRequestTimeoutException）。
      * 此时响应已按 text/event-stream 提交且连接不可写，无法回落 JSON 信封——

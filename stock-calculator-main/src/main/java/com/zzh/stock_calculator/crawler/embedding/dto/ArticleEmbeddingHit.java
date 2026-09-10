@@ -21,6 +21,9 @@ public class ArticleEmbeddingHit {
 
     private String brief;
 
+    /** 正文（summary 兑底来源，brief 缺失时截断使用） */
+    private String content;
+
     private String level;
 
     /** 原始发布时间戳（秒） */

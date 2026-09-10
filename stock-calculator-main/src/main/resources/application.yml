@@ -214,3 +214,24 @@ announcement:
     prompt-version: ''
   throttle:
     batch-interval-ms: 300
+
+# ======================= search 域（docs/news-search-backend-implementation.md §9） =======================
+# 默认值 = 拍板值（B6 限流 10 次/10s + 综合 3 次/10s；C11 threshold=0.3/topK=10），显式落配置便于调参
+search:
+  rate-limit:
+    search-window-seconds: 10
+    search-max-per-window: 10
+    composite-max-per-window: 3
+  retrieval:
+    default-top-k: 10
+    max-top-k: 50
+    default-threshold: 0.3
+    # 过渡期 false：公告向量 metadata 回填（kind/annDate，B8）完成后切 true 下推 SQL
+    kind-filter-enabled: false
+  composite:
+    llm-timeout-seconds: 30
+    retrieval-top-k: 8
+  backfill:
+    # 公告向量 metadata 回填任务（默认关闭；开启后按 cron 补 kind/annDate）
+    enabled: false
+    cron: '0 40 2 * * *'

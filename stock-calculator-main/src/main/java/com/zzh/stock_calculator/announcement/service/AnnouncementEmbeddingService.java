@@ -60,11 +60,16 @@ public class AnnouncementEmbeddingService {
         String documentId = deterministicUuid(announcementId);
         try {
             transactionTemplate.executeWithoutResult(tx -> {
+                // metadata kind/annDate（backend-implementation §8.3 拍板 B8）：
+                // kind 供共表来源过滤（kind=='announcement'），annDate（ISO 日期，字典序即时间序）供 filterExpression 下推；
+                // 确定性 UUID 幂等覆盖，存量重嵌即完成增强，不产生重复向量
                 Document document = new Document(documentId, summary.trim(), Map.of(
                         "announcementId", announcementId,
                         "adjunctUrl", announcement.getAdjunctUrl() == null ? "" : announcement.getAdjunctUrl(),
                         "secCode", announcement.getSecCode() == null ? "" : announcement.getSecCode(),
-                        "model", EMBEDDING_MODEL));
+                        "model", EMBEDDING_MODEL,
+                        "kind", "announcement",
+                        "annDate", announcement.getSeDate() == null ? "" : announcement.getSeDate().toString()));
                 vectorStore.add(List.of(document));
                 announcement.setStatus(AnnouncementStatus.DONE);
                 announcement.setStatusReason(null);
