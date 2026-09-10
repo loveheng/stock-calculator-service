@@ -100,6 +100,13 @@
             <artifactId>spring-modulith-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- PDFBox 3.x 公告 PDF 纯文本抽取（announcement 域，设计文档 §4.2/§8.1 S1）；
+             3.0.x 最新锁定版本，传递引入 pdfboxIo/fontbox/commonsLogging -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.8</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

@@ -303,3 +303,62 @@ ALTER TABLE public.cls_article_embedding ADD COLUMN IF NOT EXISTS fail_count int
 -- 注：与 cls_article 无物理外键（现库惯例，引用完整性由应用层保证）；
 --     三态语义：不存在行或 PENDING=未处理，DONE=已生成，FAILED=永久失败终态（fail_count 计次）；
 --     model 留档支撑将来换模型全量重嵌（R9）
+
+-- ============================================================
+-- announcement 域三表（docs/announcement-rag-pipeline-design.md §3）
+-- 主表：元数据 + 状态机游标（PENDING/DONE/FAILED）；不存 PDF、不存正文（D5/D7）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.announcement (
+	id bigserial NOT NULL,
+	announcement_id text NOT NULL,
+	title text NOT NULL,
+	adjunct_url text NULL,
+	se_date date NULL,
+	sec_code varchar(32) NULL,
+	sec_name varchar(64) NULL,
+	status varchar(16) DEFAULT 'PENDING' NOT NULL,
+	status_reason text NULL,
+	fail_count int4 DEFAULT 0 NOT NULL,
+	summary text NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
+	updated_at timestamptz DEFAULT now() NOT NULL,
+	CONSTRAINT announcement_pkey PRIMARY KEY (id),
+	CONSTRAINT uk_announcement_announcement_id UNIQUE (announcement_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_announcement_sec ON public.announcement USING btree (sec_code, se_date);
+
+-- PENDING 游标消费专用部分索引（仅 DDL 可表达；实体侧用普通方法查询）
+CREATE INDEX IF NOT EXISTS idx_announcement_pending ON public.announcement USING btree (se_date DESC, id DESC) WHERE status = 'PENDING';
+
+-- 1:1 溯源表：结构树/切片选择 JSONB（重放重建依据，D5），无正文大列
+CREATE TABLE IF NOT EXISTS public.announcement_content (
+	announcement_id int8 NOT NULL,
+	extractor_version text NULL,
+	char_count int4 NULL,
+	page_count int4 NULL,
+	structure_json jsonb NULL,
+	selection_json jsonb NULL,
+	CONSTRAINT announcement_content_pkey PRIMARY KEY (announcement_id),
+	CONSTRAINT fk_ann_content_announcement FOREIGN KEY (announcement_id) REFERENCES public.announcement(id) ON DELETE CASCADE
+);
+
+-- 订阅表：用户×股票权限；订阅即触发抓取（SubscriptionCreatedEvent 与抓取逻辑分离，D13）
+CREATE TABLE IF NOT EXISTS public.announcement_subscription (
+	id bigserial NOT NULL,
+	user_id uuid NOT NULL,
+	stock_id varchar(32) NOT NULL,
+	org_id varchar(64) NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
+	CONSTRAINT announcement_subscription_pkey PRIMARY KEY (id),
+	CONSTRAINT uk_ann_sub_user_stock UNIQUE (user_id, stock_id),
+	CONSTRAINT fk_ann_sub_user FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ann_sub_stock ON public.announcement_subscription USING btree (stock_id);
+
+-- 回滚：DROP TABLE IF EXISTS public.announcement_subscription;
+--       DROP TABLE IF EXISTS public.announcement_content;
+--       DROP TABLE IF EXISTS public.announcement;
+-- 注：三表均幂等建表；announcement_content 对主表物理外键级联（设计 §3）；
+--     subscription.org_id 可空（订阅时未必已知，采集期 topSearch 回填）

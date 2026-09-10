@@ -1,6 +1,4 @@
-package com.zzh.stock_calculator.crawler.embedding.service;
-
-import org.springframework.stereotype.Component;
+package com.zzh.stock_calculator.crawler;
 
 import java.time.Instant;
 import java.time.LocalDate;

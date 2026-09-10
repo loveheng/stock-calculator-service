@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.crawler.embedding.config;
 
 import com.openai.client.OpenAIClient;
-import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingQuotaGuard;
+import com.zzh.stock_calculator.crawler.EmbeddingQuotaGuard;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;

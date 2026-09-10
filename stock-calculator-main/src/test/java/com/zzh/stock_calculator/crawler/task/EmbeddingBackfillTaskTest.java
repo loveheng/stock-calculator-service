@@ -7,7 +7,7 @@ import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingGate;
 import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
 import com.zzh.stock_calculator.crawler.embedding.service.ArticleEmbeddingService;
-import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingQuotaGuard;
+import com.zzh.stock_calculator.crawler.EmbeddingQuotaGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

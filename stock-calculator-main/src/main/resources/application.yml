@@ -181,3 +181,36 @@ embedding:
   search:
     default-top-k: 10
     default-threshold: 0.5
+
+# ======================= announcement 域（docs/announcement-rag-pipeline-design.md §7） =======================
+# 骨架期 sync/process 均默认关闭，联调时手动开启
+announcement:
+  sync:
+    enabled: false
+    cron: '0 0 * * * *'
+    # 纯订阅驱动：无订阅则不抓取（种子兜底仅留开发期临时写入用）
+    seed-stock-list: []
+    first-pull-mode: FULL
+    history-since: 2023-01-01
+    lookback-days: 90
+    long-term-enabled: false
+    long-term-keywords: '招股说明书,公司章程,重大资产重组,控制权变更'
+  process:
+    enabled: false
+    cron: '0 1 * * * *'
+    max-fail-attempts: 3
+  subscription:
+    # 每用户订阅标的数上限（防滥用：订阅即触发 CNINFO 全量首拉）
+    max-per-user: 100
+  pdf:
+    max-size-mb: 50
+    parse-concurrency: 1
+    parse-timeout-seconds: 120
+  clean:
+    header-repeat-ratio: 0.3
+    no-text-min-chars-per-page: 50
+  distill:
+    model: ''
+    prompt-version: ''
+  throttle:
+    batch-interval-ms: 300

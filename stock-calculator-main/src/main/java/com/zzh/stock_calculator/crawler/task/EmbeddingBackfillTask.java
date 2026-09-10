@@ -7,7 +7,7 @@ import com.zzh.stock_calculator.crawler.embedding.entity.EmbeddingStatus;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
 import com.zzh.stock_calculator.crawler.embedding.service.ArticleEmbeddingService;
 import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingErrorClassifier;
-import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingQuotaGuard;
+import com.zzh.stock_calculator.crawler.EmbeddingQuotaGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;

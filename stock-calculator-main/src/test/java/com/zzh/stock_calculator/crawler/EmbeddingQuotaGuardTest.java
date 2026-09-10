@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.crawler.embedding.service;
+package com.zzh.stock_calculator.crawler;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
