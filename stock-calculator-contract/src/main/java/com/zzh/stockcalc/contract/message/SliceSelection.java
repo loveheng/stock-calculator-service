@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.announcement.dto;
+package com.zzh.stockcalc.contract.message;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,8 +8,10 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * 切片选择与哈希基线（设计文档 §4.4）：哈希重放比对三要素（算法/编码/拼接分隔符）
+ * 切片选择与哈希基线（设计文档 §4.4）：哈希重放比对三要素（算法/编码/拼接分隔符），
  * 显式写入 JSON，杜绝后续重放时基线歧义。
+ * <p>2026-09-11 阶段 4 任务 1 自主服务 announcement/dto 下沉至 contract：
+ * result.announcement.done 载荷引用此类型，主服务与数据服务共用单一来源（R2 防协议漂移）。</p>
  */
 @Data
 @Builder

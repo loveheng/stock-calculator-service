@@ -1,6 +1,6 @@
 package com.zzh.stock_calculator.announcement.service;
 
-import com.zzh.stock_calculator.announcement.dto.StructureNode;
+import com.zzh.stockcalc.contract.message.StructureNode;
 import com.zzh.stock_calculator.llm.LlmChainRouter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

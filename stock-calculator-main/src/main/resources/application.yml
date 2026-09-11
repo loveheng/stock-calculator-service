@@ -68,6 +68,32 @@ spring:
       # 短超时：Redis 故障时快速降级（会话回源 DB、限流放行），不阻塞主链路
       connect-timeout: 2s
       timeout: 2s
+  rabbitmq:
+    # 数据服务拆分阶段 1（docs/data-service-split-design.md）：result 上行消费；
+    # RabbitMQ 服务不可用时不影响启动——RabbitAdmin/监听器均由 datasvc.mq.enabled 门控
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASS:guest}
+    # 关闭 Boot 自动 AmqpAdmin（RabbitAdmin 会在启动期声明拓扑而开连接）；
+    # MQ 启用时由 RabbitTopologyConfig 提供受门控的 AmqpAdmin Bean
+    dynamic: false
+    # 任务发布（阶段 3/4）需确认回调；当前仅 dead.q 投递使用
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        # 手动 ack（设计文档 §4.4）：业务成功/失败分流后由消费端显式确认
+        acknowledge-mode: manual
+
+datasvc:
+  mq:
+    # 主服务 MQ 消费端总开关（默认关：无 MQ 部署零连接零依赖）。
+    # 开启时同步置 crawler.enabled=false（拉取改由数据服务承担，回退只需对调两开关）；
+    # 公告域：采集移交数据服务（本地 sync/订阅触发抓取空转，任务 2 双路径门控），
+    # 订阅快照发布器随本开关装配（任务 1），公告处理任务发布端随本开关装配（任务 3：
+    # PENDING 扫描→task.announcement.process + done/failed 消费端 + 二段向量化下发）
+    enabled: ${DATASVC_MQ_ENABLED:false}
 
 crawler:
   enabled: true
@@ -169,6 +195,8 @@ embedding:
   # 永久性失败连续次数上限：达上限落 FAILED 终态退出游标（仅 PERMANENT 计次，成功清零）
   max-fail-attempts: 5
   backfill:
+    # 回填对账总开关（startup/cron 都停；E2E 共享 broker 场景必关，防扫真实库发任务污染测试队列）
+    enabled: true
     startup-delay: 15s
     cron: '0 5 * * * *'
   # 统计报告邮件（新增数据量 + 存量处理量；存量完成后仅报增量，§9.3）
@@ -199,6 +227,11 @@ announcement:
     enabled: false
     cron: '0 1 * * * *'
     max-fail-attempts: 3
+    # RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，§4.5 发布端熔断；datasvc.mq.enabled=true 时生效）
+    rate-limit-cooldown-minutes: 30
+  snapshot:
+    # 订阅快照定时重推周期（§8 阶段 4/R3；datasvc.mq.enabled=true 时才生效）
+    cron: '0 */30 * * * *'
   subscription:
     # 每用户订阅标的数上限（防滥用：订阅即触发 CNINFO 全量首拉）
     max-per-user: 100

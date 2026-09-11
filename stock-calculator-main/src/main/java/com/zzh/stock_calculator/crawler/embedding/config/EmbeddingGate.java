@@ -28,6 +28,14 @@ public class EmbeddingGate {
     /** WARN 一次标志（实例级，便于单测隔离） */
     private final AtomicBoolean warned = new AtomicBoolean(false);
 
+    /**
+     * 功能开关是否打开（不含凭据判定）：MQ 发布路径（任务下发/对账）只看此开关，
+     * CF 凭据齐备性属计算端 worker 职责，主服务缺失凭据不应阻塞任务下发。
+     */
+    public boolean isFeatureEnabled() {
+        return properties.isEnabled();
+    }
+
     /** 向量化是否可用（运行期判定）：总开关开启且 CF 凭据齐备 */
     public boolean isAvailable() {
         String accountId = properties.getCloudflare().getAccountId();

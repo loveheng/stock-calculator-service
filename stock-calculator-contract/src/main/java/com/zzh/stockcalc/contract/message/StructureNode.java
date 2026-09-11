@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.announcement.dto;
+package com.zzh.stockcalc.contract.message;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 /**
  * 结构树节点（设计文档 §4.3/D4）：建树期即绑定绝对字符偏移，
  * 切片按 nodeId → offset 截取，消除字符串 find() 的重名/失配两类 bug。
+ * <p>2026-09-11 阶段 4 任务 1 自主服务 announcement/dto 下沉至 contract：
+ * result.announcement.done 载荷引用此类型，主服务与数据服务共用单一来源（R2 防协议漂移）。</p>
  */
 @Data
 @Builder

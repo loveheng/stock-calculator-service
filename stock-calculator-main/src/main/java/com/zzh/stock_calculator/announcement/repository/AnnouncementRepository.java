@@ -18,6 +18,9 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     /** announcementId 幂等去重（S3：CNINFO 唯一公告标识） */
     boolean existsByAnnouncementId(String announcementId);
 
+    /** 按 CNINFO announcementId 取单行（done/failed 回报落账，任务 3） */
+    Optional<Announcement> findByAnnouncementId(String announcementId);
+
     /** 增量水位：该股票最新公告日（empty = 首拉） */
     Optional<Announcement> findFirstBySecCodeOrderBySeDateDesc(String secCode);
 
@@ -26,6 +29,9 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
      * 防历史首拉积压阻塞当天最新公告的实时性。
      */
     List<Announcement> findTop50ByStatusOrderBySeDateDescIdDesc(AnnouncementStatus status);
+
+    /** MQ 发布端扫描（任务 3）：待蒸馏 PENDING（摘要空）——有摘要的走二段向量化对账 */
+    List<Announcement> findTop50ByStatusAndSummaryIsNullOrderBySeDateDescIdDesc(AnnouncementStatus status);
 
     // ==================== AnnouncementQueryApi（基包查询 API）委托 ====================
 

@@ -16,6 +16,7 @@ public class AnnouncementProperties {
 
     private final Sync sync = new Sync();
     private final Process process = new Process();
+    private final Snapshot snapshot = new Snapshot();
     private final Pdf pdf = new Pdf();
     private final Clean clean = new Clean();
     private final Distill distill = new Distill();
@@ -54,6 +55,17 @@ public class AnnouncementProperties {
         private String cron = "0 1 * * * *";
         /** 瞬时失败计次上限，达限落 FAILED 终态 */
         private int maxFailAttempts = 3;
+        /** RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，§4.5 发布端熔断，任务 3） */
+        private long rateLimitCooldownMinutes = 30;
+    }
+
+    /**
+     * 订阅快照下发（设计文档 §8 阶段 4/R3，datasvc.mq.enabled=true 时生效）：
+     * 定时重推周期兜底快照丢失（R6 恢复窗口）；注：@Scheduled 占位符默认值须与此处一致。
+     */
+    @Data
+    public static class Snapshot {
+        private String cron = "0 */30 * * * *";
     }
 
     @Data

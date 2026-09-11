@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.zzh</groupId>
+        <artifactId>stock-calculator-service</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>stock-calculator-contract</artifactId>
+    <name>stock-calculator-contract</name>
+    <description>
+        数据服务与主服务的消息契约（docs/data-service-split-design.md §4.3/D9）：
+        交换机/队列/routing key 常量 + 统一信封 + 消息 DTO。
+        纯 POJO，禁引 JPA 实体与 Spring 类型（ContractRuntimeHints AOT 辅助类例外，
+        spring-core 为 optional 不传递）；schemaVersion 管协议演进。
+    </description>
+    <dependencies>
+        <!-- 仅供 ContractRuntimeHints（native 反射注册辅助类）编译；optional 不传递，
+             DTO 表面仍零 Spring 类型 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+</project>

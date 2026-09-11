@@ -27,6 +27,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!-- 数据服务拆分阶段 1（docs/data-service-split-design.md）：result 上行消费 + 后续任务发布 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <!-- 消息契约（队列常量 + 统一信封 + DTO，纯 POJO） -->
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-contract</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <!-- Jackson 3（Boot 4 默认）：vision 的 JSON 反序列化；
              注解包 com.fasterxml.jackson.annotation 与 2.x 同名，两代兼容 -->
         <dependency>

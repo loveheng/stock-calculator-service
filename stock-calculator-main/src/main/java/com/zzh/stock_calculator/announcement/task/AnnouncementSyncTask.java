@@ -6,6 +6,7 @@ import com.zzh.stock_calculator.announcement.repository.AnnouncementSubscription
 import com.zzh.stock_calculator.announcement.service.AnnouncementCollectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -24,9 +25,17 @@ public class AnnouncementSyncTask {
     private final AnnouncementSubscriptionRepository subscriptionRepository;
     private final AnnouncementCollectService collectService;
 
+    /** 采集双路径门控（设计文档 §8 阶段 4）：MQ 开 → 采集由数据服务承担，本地路径空转 */
+    @Value("${datasvc.mq.enabled:false}")
+    private boolean mqEnabled;
+
     @Scheduled(cron = "${announcement.sync.cron:0 0 * * * *}")
     public void sync() {
         if (!properties.getSync().isEnabled()) {
+            return;
+        }
+        if (mqEnabled) {
+            log.info("datasvc.mq.enabled=true，公告采集已移交数据服务，本地同步空转");
             return;
         }
         List<String> stockIds = subscriptionRepository.findDistinctStockIds();

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.zzh</groupId>
+        <artifactId>stock-calculator-service</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>stock-calculator-data</artifactId>
+    <name>stock-calculator-data</name>
+    <description>
+        数据服务（docs/data-service-split-design.md §2/D3/D4）：拉取 + 处理数据，零 DB 依赖。
+        collector 角色：CLS 电报滚动窗口拉取 → 归一化 → result.cls.article 上行；
+        worker 角色（阶段 3）：竞争消费 task.embedding.compute → CF 向量化 → result.embedding.done。
+        部署形态：native/JVM 均可；collector 副本恒=1，worker 副本=N（KEDA 伸缩）。
+    </description>
+    <dependencies>
+        <!-- MQ：amqp starter 传递引入 spring-boot-starter 核心 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <!-- RestClient 拉取数据源 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
+        <!-- ingest HTTP 端点（IngestController，阶段 5）：内嵌 web 服务器。
+             R1 冒烟暴露的缺口：原本 web-application-type=none 导致控制器从未监听端口 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- worker 角色向量化计算（OpenAiEmbeddingModel + openai-java client，BOM 2.0.1 管版本；
+             用非 starter 形态避免其 autoconfiguration：模型 Bean 由 WorkerEmbeddingConfig 手动装配） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
+        </dependency>
+        <!-- 公告 PDF 解析（阶段 4 任务 4 随迁 parser） -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.8</version>
+        </dependency>
+        <!-- Jackson 3（Boot 4 默认 tools.jackson）：信封与 payload 序列化 -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-contract</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -63,6 +63,9 @@ public class EmbeddingProperties {
     @Data
     public static class Backfill {
 
+        /** 回填对账总开关（startup/cron 两条触发路径都停；E2E 共享 broker 场景防真实库任务污染测试队列） */
+        private boolean enabled = true;
+
         /** 启动后延迟触发首轮回填 */
         private Duration startupDelay = Duration.ofSeconds(15);
 

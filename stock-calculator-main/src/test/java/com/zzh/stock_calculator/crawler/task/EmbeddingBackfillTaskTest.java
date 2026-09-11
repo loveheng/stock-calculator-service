@@ -7,6 +7,7 @@ import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingGate;
 import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
 import com.zzh.stock_calculator.crawler.embedding.service.ArticleEmbeddingService;
+import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingTaskDispatcher;
 import com.zzh.stock_calculator.crawler.EmbeddingQuotaGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,7 +38,7 @@ import static org.mockito.Mockito.when;
 /**
  * EmbeddingBackfillTask 编排逻辑单测（Mockito，无 Spring 上下文）：
  * 范围快照参数透传、完成事件一次性发布（完成迁移判定 + 重启不重发）、
- * 401 → markFatal 停机、日上限熔断不发起嵌入。
+ * 401 → markFatal 停机、日上限熔断不发起嵌入、MQ 对账模式扫缺下发与额度中断。
  */
 @ExtendWith(MockitoExtension.class)
 class EmbeddingBackfillTaskTest {
@@ -50,6 +51,12 @@ class EmbeddingBackfillTaskTest {
 
     @Mock
     private ObjectProvider<ArticleEmbeddingService> embeddingServiceProvider;
+
+    @Mock
+    private ObjectProvider<EmbeddingTaskDispatcher> dispatcherProvider;
+
+    @Mock
+    private EmbeddingTaskDispatcher dispatcher;
 
     @Mock
     private EmbeddingQuotaGuard quotaGuard;
@@ -72,12 +79,15 @@ class EmbeddingBackfillTaskTest {
         properties.getCloudflare().setAccountId("acc-test");
         properties.getCloudflare().setApiToken("tok-test");
         task = new EmbeddingBackfillTask(embeddingRepository, embeddingServiceProvider,
-                quotaGuard, properties, eventPublisher, new EmbeddingGate(properties));
+                quotaGuard, properties, eventPublisher, new EmbeddingGate(properties), dispatcherProvider);
         lenient().when(embeddingServiceProvider.getObject()).thenReturn(embeddingService);
+        // 默认 JVM 模式（MQ 未启用）：dispatcher 缺位，进程内回填照常
+        lenient().when(dispatcherProvider.getIfAvailable()).thenReturn(null);
 
         lenient().when(quotaGuard.isFatal()).thenReturn(false);
         lenient().when(quotaGuard.isRateLimited()).thenReturn(false);
         lenient().when(quotaGuard.tryAcquireBackfill(anyInt())).thenReturn(true);
+        lenient().when(quotaGuard.getDailyMaxArticles()).thenReturn(properties.getDailyMaxArticles());
         lenient().when(embeddingRepository.countByStatus(any())).thenReturn(0L);
         lenient().when(embeddingRepository.countDone()).thenReturn(0L);
         // 默认视为远未完成（完成判定 countDone + countFailed >= countArticles 不成立）
@@ -93,6 +103,19 @@ class EmbeddingBackfillTaskTest {
 
         verify(embeddingServiceProvider, never()).getObject();
         verify(embeddingService, never()).processArticle(anyLong());
+        verify(embeddingRepository, never()).findPendingArticleIds(anyInt(), anyLong());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("回填总开关关闭: backfill.enabled=false → startup/cron 全停，不触派发不扫库")
+    void backfillDisabledSkipsRun() {
+        properties.getBackfill().setEnabled(false);
+
+        task.cronRun();
+
+        verify(dispatcherProvider, never()).getIfAvailable();
+        verify(embeddingServiceProvider, never()).getObject();
         verify(embeddingRepository, never()).findPendingArticleIds(anyInt(), anyLong());
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -180,6 +203,39 @@ class EmbeddingBackfillTaskTest {
 
         task.cronRun();
 
+        verify(embeddingService, never()).processArticle(anyLong());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("MQ 对账模式: dispatcher 存在 → 全量快照逐篇下发, 不触进程内嵌入, 无完成事件")
+    void mqModeRunsReconcileDispatch() {
+        when(dispatcherProvider.getIfAvailable()).thenReturn(dispatcher);
+        when(embeddingRepository.findPendingArticleIds(anyInt(), anyLong()))
+                .thenReturn(List.of(101L, 202L));
+
+        task.cronRun();
+
+        // 快照扫缺：一次取全量 pending（大 limit），非进程内路径的 batchSize(2) 分批
+        verify(embeddingRepository).findPendingArticleIds(eq(EmbeddingBackfillTask.RECONCILE_SNAPSHOT_LIMIT), anyLong());
+        verify(dispatcher).dispatchForArticle(101L);
+        verify(dispatcher).dispatchForArticle(202L);
+        verify(embeddingServiceProvider, never()).getObject();
+        verify(embeddingService, never()).processArticle(anyLong());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("MQ 对账模式: 日额度已满 → MAX_REACHED 中断, 不下发任何任务")
+    void mqModeQuotaExhaustedStopsDispatch() {
+        when(dispatcherProvider.getIfAvailable()).thenReturn(dispatcher);
+        when(quotaGuard.getTodayCount()).thenReturn(properties.getDailyMaxArticles());
+        when(embeddingRepository.findPendingArticleIds(anyInt(), anyLong()))
+                .thenReturn(List.of(1L, 2L, 3L));
+
+        task.cronRun();
+
+        verify(dispatcher, never()).dispatchForArticle(anyLong());
         verify(embeddingService, never()).processArticle(anyLong());
         verify(eventPublisher, never()).publishEvent(any());
     }

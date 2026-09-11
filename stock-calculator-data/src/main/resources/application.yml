@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: stock-calculator-data
+  main:
+    # 阶段 5 起暴露 ingest HTTP 端点（docs/data-source-onboarding.md），需内嵌 web 服务器；
+    # 测试仍显式 web-application-type=none 保持零端口依赖
+    banner-mode: "off"
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASS:guest}
+    # 发布端确认（设计文档 §4.4）：correlated 模式 + MqPublishConfig 回调日志
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+datasvc:
+  # collector 副本恒=1（D4/D11）；worker 角色自阶段 3 引入
+  collector:
+    enabled: true
+    announcement:
+      # 公告采集（§8 阶段 4 任务 2）：叠加在 collector.enabled 之上的域开关；
+      # 标的源 = 订阅快照（control.subscription.snapshot，首帧到达前空转）
+      enabled: true
+      cron: '0 5 * * * *'
+      first-pull-mode: FULL
+      history-since: 2023-01-01
+      lookback-days: 90
+      long-term-enabled: false
+      long-term-keywords: '招股说明书,公司章程,重大资产重组,控制权变更'
+      throttle-batch-interval-ms: 300
+      max-pages: 200
+      page-size: 30
+      pdf-max-size-mb: 50
+  # worker 竞争消费角色（阶段 3）：缺省关闭；JVM 部署经 DATASVC_WORKER_ENABLED=true
+  # 开启，native 构建须在构建期钉死该值（AOT 固化条件装配，R1 教训，collector 同）
+  worker:
+    enabled: false
+    embedding:
+      account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+      api-token: ${CLOUDFLARE_API_TOKEN:}
+  # 公告蒸馏 LLM（阶段 4 任务 4）：单渠道 OpenAI 兼容；worker.enabled=false 时不校验
+  llm:
+    base-url: ${LLM_BASE_URL:}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:}
+  # webhook 摄取端点（阶段 5）：默认关闭；部署经 DATASVC_INGEST_ENABLED=true +
+  # INGEST_SECRET 开启（HMAC-SHA256 共享密钥，见 docs/data-source-onboarding.md）
+  ingest:
+    enabled: false
+    secret: ${INGEST_SECRET:}
+    skew-seconds: 300
+
+logging:
+  level:
+    root: info

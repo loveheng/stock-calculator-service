@@ -2,6 +2,7 @@ package com.zzh.stock_calculator.announcement.service;
 
 import com.zzh.stock_calculator.announcement.config.AnnouncementProperties;
 import com.zzh.stock_calculator.announcement.entity.AnnouncementSubscription;
+import com.zzh.stock_calculator.announcement.event.SubscriptionChangedEvent;
 import com.zzh.stock_calculator.announcement.event.SubscriptionCreatedEvent;
 import com.zzh.stock_calculator.announcement.repository.AnnouncementSubscriptionRepository;
 import com.zzh.stock_calculator.common.BusinessException;
@@ -54,18 +55,25 @@ public class AnnouncementSubscriptionService {
                 .stockId(saved.getStockId())
                 .orgId(saved.getOrgId())
                 .build());
+        eventPublisher.publishEvent(SubscriptionChangedEvent.builder()
+                .stockId(saved.getStockId())
+                .build());
         return true;
     }
 
-    /** @return true=删除成功，false=本就未订阅（幂等） */
+    /** @return true=删除成功（已发订阅变更事件），false=本就未订阅（幂等） */
     @Transactional
     public boolean unsubscribe(UUID userId, String stockId) {
-        return subscriptionRepository.findByUserIdAndStockId(userId, stockId)
+        boolean removed = subscriptionRepository.findByUserIdAndStockId(userId, stockId)
                 .map(row -> {
                     subscriptionRepository.delete(row);
                     return true;
                 })
                 .orElse(false);
+        if (removed) {
+            eventPublisher.publishEvent(SubscriptionChangedEvent.builder().stockId(stockId).build());
+        }
+        return removed;
     }
 
     /** 我的订阅清单（创建时间倒序） */

@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.announcement.parser;
 
 import com.zzh.stock_calculator.announcement.dto.ExtractedDocument;
-import com.zzh.stock_calculator.announcement.dto.StructureNode;
+import com.zzh.stockcalc.contract.message.StructureNode;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
