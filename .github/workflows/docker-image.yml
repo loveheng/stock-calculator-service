@@ -1,4 +1,20 @@
-name: Build and Push Native Docker Image for Stock Calculator Service
+# ============================================================================
+# Stock Calculator Service — Native 镜像按需构建（main + data 双模块）
+#
+# 单仓三模块：stock-calculator-main（主服务）/ stock-calculator-data（数据服务），
+# 共享依赖 stock-calculator-contract + 根 pom.xml + mvnw 包装器。
+#
+# 构建策略（按模块条件构建，避免每次推送全量编译）：
+#   - 分支推送：dorny/paths-filter 按变更路径决定构建目标——
+#       main 侧文件变更（或 contract/根 POM 等共享部分变更）→ 构建主服务镜像 ghcr.io/<repo>
+#       data 侧文件变更（或共享部分变更）      → 构建数据服务镜像 ghcr.io/<repo>-data
+#     两个 job 并行跑在各自 runner 上，互不拖慢；仅文档类变更则一个都不跑。
+#   - tag 推送（发版）/ 手动触发：不受路径过滤，强制全量构建。
+#     （on.push.paths 对 tag 推送不可靠——tag 事件没有可比较的文件变更，
+#      故 tag 一律走 changes job 的强制全量分支，见下方 force 步骤。）
+# ============================================================================
+
+name: Build and Push Native Docker Images (per-module)
 
 on:
   push:
@@ -6,11 +22,65 @@ on:
     tags: [ 'v*.*.*' ]
   workflow_dispatch:
 
+# 同一分支/tag 连续推送时取消已过期的构建，节省 runner 时间
+concurrency:
+  group: docker-images-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-and-push:
+  # ---------------- 变更检测：决定本次推送要构建哪些模块 ----------------
+  # 两个检测步骤的 if 互斥且完备：分支推送走路径过滤；其余（tag/手动/未来
+  # 可能加入的 pull_request）走强制全量。保证 outputs.main/data 恒有定义。
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      main: ${{ steps.filter.outputs.main }}
+      data: ${{ steps.filter.outputs.data }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 检测变更模块 (dorny/paths-filter)
+        id: filter
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            main:
+              - 'stock-calculator-main/**'
+              - 'stock-calculator-contract/**'
+              - 'pom.xml'
+              - 'mvnw'
+              - 'mvnw.cmd'
+              - '.mvn/**'
+              - '.github/workflows/docker-image.yml'
+            data:
+              - 'stock-calculator-data/**'
+              - 'stock-calculator-contract/**'
+              - 'pom.xml'
+              - 'mvnw'
+              - 'mvnw.cmd'
+              - '.mvn/**'
+              - '.github/workflows/docker-image.yml'
+
+      - name: tag 推送或手动触发 → 强制全量构建
+        id: force
+        if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "main=true" >> "$GITHUB_OUTPUT"
+          echo "data=true" >> "$GITHUB_OUTPUT"
+
+  # ---------------- 主服务镜像（原 docker-image 流程） ----------------
+  # 镜像名保持 ghcr.io/<repo> 不变，docker-compose.yml / README 的引用无需改动。
+  build-main:
+    name: 构建主服务镜像 (main)
+    needs: changes
+    if: needs.changes.outputs.main == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,7 +124,7 @@ jobs:
 
       # 4. 配置 GraalVM JDK 25 环境（含 native-image 组件）
       #    build-native.sh 会自动探测 JAVA_HOME（setup-graalvm 会设置）并校验 25.x 版本。
-      #    cache: 'maven' 缓存 ~/.m2，加快父 POM + common 的 install 与依赖下载。
+      #    cache: 'maven' 缓存 ~/.m2，加快父 POM + contract 的 install 与依赖下载。
       - name: 配置 GraalVM JDK 25 环境
         uses: graalvm/setup-graalvm@v1
         with:
@@ -67,9 +137,8 @@ jobs:
 
       # 5. 编译 Native 二进制 + 冒烟验证
       #    全部逻辑收敛在 build-native.sh（本地与 CI 走完全相同的路径）：
-      #    install 父POM/common -> mvnw compile + spring-boot:process-aot
+      #    install 父POM/contract -> mvnw compile + spring-boot:process-aot
       #    -> 生成 classpath 并剥离 test jar -> native-image -> 启动测试（失败即中止）
-      #    任一步骤失败脚本都会 exit 1，坏二进制不会进入镜像。
       - name: 编译 Native 二进制 (build-native.sh)
         env:
           POSTGRES_PASS: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
@@ -112,3 +181,83 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=docker-native
           cache-to: type=gha,mode=max,scope=docker-native
+
+  # ---------------- 数据服务镜像（data 模块，独立镜像名） ----------------
+  # 与 build-main 同套路，差异点：
+  #   - 镜像名加 -data 后缀（ghcr.io/<repo>-data），不与主服务镜像混用
+  #   - 无 JPA 数据源：不需要 postgres service，冒烟凭据由脚本内 dummy 注入
+  #   - GHA docker 缓存用独立 scope（docker-data），两镜像互不污染
+  build-data:
+    name: 构建数据服务镜像 (data)
+    needs: changes
+    if: needs.changes.outputs.data == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # data 变体为 all-in-one（collector/worker/ingest 三角色全开，AOT 期钉死），
+      # native-image 同样 -J-Xmx12g，需要 8GB Swap 防编译 OOM
+      - name: 扩展虚拟内存 (Swap Space)
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 8
+
+      - name: 配置 GraalVM JDK 25 环境
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+          native-image-job-reports: true
+
+      # data/build-native.sh 自含完整链路：install 父POM/contract -> compile+AOT
+      # -> classpath 剥离 -> native-image -> 启动冒烟（ingest 端点探活，无需连库）
+      - name: 编译 Native 二进制 (build-native.sh)
+        run: bash stock-calculator-data/build-native.sh
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 镜像名 = 仓库全小写 + -data 后缀
+      - name: 格式化镜像名称 (全小写)
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}-data" >> $GITHUB_ENV
+
+      - name: 解析镜像 Tag 和 Label 标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - name: 初始化 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建并推送 Docker 镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: ./stock-calculator-data
+          file: ./stock-calculator-data/Dockerfile.native
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=docker-data
+          cache-to: type=gha,mode=max,scope=docker-data
+
+

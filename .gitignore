@@ -47,5 +47,8 @@ build/
 ### Zed ###
 .zed/
 
+### dev-loop（个人指针不入库；context/ 其余部分随项目提交） ###
+context/CURRENT
+
 ### Python ###
 __pycache__/

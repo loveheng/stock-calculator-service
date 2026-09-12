@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Stock Calculator Service — GraalVM Native 直接编译脚本 (单模块)
+# Stock Calculator Service — GraalVM Native 直接编译脚本 (main 模块)
 #
-# 单模块: stock-calculator-main（2026-09 与 common 合并后为唯一模块）
+# 模块: stock-calculator-main（2026-09 系统拆分为 主模块 + 数据模块 + contract）
 #
 # 环境要求（不再依赖 sdkman）:
 #   1. GraalVM 25.0.x + native-image，来源按以下顺序探测：
@@ -12,11 +12,12 @@
 #   2. Maven 统一使用仓库自带 ../mvnw，不依赖系统 mvn / sdkman
 #
 # 多模块注意:
-#   common 模块必须先 install 到本地仓库 (~/.m2)，main 模块单独编译时
-#   才能解析到 com.zzh:stock-calculator-common:0.0.1-SNAPSHOT。
+#   拆分后 main 依赖 stock-calculator-contract，须先 install 父 POM + contract
+#   到本地仓库 (~/.m2)，main 模块单独编译时才能解析到
+#   com.zzh:stock-calculator-contract:0.0.1-SNAPSHOT（CI 冷缓存同样依赖此步）。
 #
 # 用法:
-#   ./build-native.sh            # 完整构建（install common + compile + AOT + native-image）
+#   ./build-native.sh            # 完整构建（install 父POM+contract + compile + AOT + native-image）
 #   ./build-native.sh --no-pkg   # 跳过 maven 编译，直接用已有 target/ 产物编译
 #
 # 注意：绕过 native-maven-plugin 的卡死问题，直接调用 native-image。
@@ -72,6 +73,10 @@ echo "████████ 开始 GraalVM Native 编译"
 # ---------------- 步骤 1: Maven compile + AOT ----------------
 if [ "$SKIP_PKG" != "--no-pkg" ]; then
   echo "█████ 步骤 1/4: Maven compile + AOT 处理..."
+  # 先 install 父 POM + contract（main 从自身目录编译，reactor 不含 contract；
+  # 与 stock-calculator-data/build-native.sh 同款两行，CI 冷缓存依赖此步）
+  ../mvnw -f .. install -N -q -DskipTests
+  ../mvnw -f .. install -pl stock-calculator-contract -q -DskipTests
   # 只编译不 package，避免触发 native-maven-plugin 卡死问题。
   # process-aot 显式调用（它会生成并编译 AOT 类到 target/spring-aot/main/classes），
   # 不依赖 lifecycle phase 绑定，行为确定。
