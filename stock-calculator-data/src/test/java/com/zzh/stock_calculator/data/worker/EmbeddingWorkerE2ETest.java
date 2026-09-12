@@ -8,6 +8,7 @@ import com.zzh.stockcalc.contract.MqPolicy;
 import com.zzh.stockcalc.contract.MqQueue;
 import com.zzh.stockcalc.contract.message.EmbeddingComputeResult;
 import com.zzh.stockcalc.contract.message.EmbeddingComputeTask;
+import com.zzh.stock_calculator.data.announcement.CninfoClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +34,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -54,7 +56,10 @@ import static org.assertj.core.api.Assertions.assertThat;
         "datasvc.worker.enabled=true",
         "datasvc.collector.enabled=false",
         "datasvc.worker.embedding.account-id=test-account",
-        "datasvc.worker.embedding.api-token=test-token"
+        "datasvc.worker.embedding.api-token=test-token",
+        "datasvc.llm.base-url=http://127.0.0.1:1",
+        "datasvc.llm.api-key=dummy-key",
+        "datasvc.llm.model=dummy-model"
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class EmbeddingWorkerE2ETest {
@@ -71,6 +76,13 @@ class EmbeddingWorkerE2ETest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    /**
+     * worker 门控链含 AnnouncementProcessWorker（其依赖的 CninfoClient 挂 collector 门控装配），
+     * worker-only 上下文（collector.enabled=false）需 mock 补位才能启动（同 AnnouncementWorkerE2ETest）。
+     */
+    @MockitoBean
+    private CninfoClient cninfoClient;
 
     @BeforeEach
     void declareCaptureQueueAndClean() {

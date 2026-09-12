@@ -1,6 +1,22 @@
 # 数据服务拆分与 MQ 通信 · 后端设计文档
 
-> 版本：v2.3（2026-09-11，阶段 2 native 补课完成，R1 硬门槛全绿）：
+> 版本：v2.4（2026-09-12，终态清理完成：main 侧回退路径删除，MQ 单路径）：
+> §8 回退策略存续期间的双路径门控（datasvc.mq.enabled / crawler.enabled）按终态规划退役——
+> main 删除 announcement 进程内管道（parser 5 件套/CninfoClient+DTO/ExtractedDocument/
+> DistillService/GroundingValidator/ProcessService/CollectService/SyncTask/订阅首拉监听）、
+> CLS 进程内拉取（TaskService/ClsDayTask/HistoryClsDayTask/CommonHttpService/ClsSignUtil/
+> ClsDayTaskHelp/ParseDataUtil/ApplicationEvent 启动补录/ClsSearchTask 空壳）、
+> embedding 进程内计算半边（ArticleEmbeddingService 裁为纯函数工具/EmbeddingErrorClassifier/
+> EmbeddingBackfillTask 进程内分支及完成邮件事件），全文 14 处副本归零；
+> 7 个 MQ Bean（TaskPublisher/ClsArticleMqConsumer/两 Publisher/EmbeddingTaskDispatcher/
+> RabbitTopologyConfig/RabbitPublishConfig）摘除 @ConditionalOnProperty 常驻装配；
+> 历史补录按 §3.2 落地：main 控制器改发 task.history.sync（MQ 化闭环，死拓扑消除），
+> data/cls/HistorySyncWorker 执行区间拉取（频控策略平移）+ result.cls.history.report 回执；
+> 可靠性姿态：无回退开关，broker/worker 停摆靠 数据源窗口自愈（D3）+ 对账器（D6）
+> + PipelineWatchTask 堆积/停机告警（R4 落地）；
+> 验收：main 369 用例 0 失败 9 skip、data 68 用例 0 失败 3 skip；
+> 遗留：main native 二进制重建（ContractHintsConfig 已在位）
+> 历版本：v2.3（2026-09-11，阶段 2 native 补课完成，R1 硬门槛全绿）：
 > ① native 构建：build-native.sh 参照 main 脚本适配（-J-Xmx12g + 构建期
 > SPRING_APPLICATION_JSON 钉死三角色全开 all-in-one 变体 + dummy 凭据，AOT 固化
 > 条件装配），产物 201MB ELF，启动 0.3s，smoke-native.sh（启动+ingest 端点 503）双绿；
@@ -325,37 +341,38 @@ graph LR
 
 > worker 副本数不影响任何记账正确性：额度在发布端扣，限流在每实例局部生效。这是 D7/D8 的直接收益。
 
-## 5. 配置设计
+## 5. 配置设计（v2.4 按实现现状修订）
 
 ```yaml
 spring:
   rabbitmq:
     host: ${RABBIT_HOST:localhost}
     port: ${RABBIT_PORT:5672}
-    username: ${RABBIT_USER:}
-    password: ${RABBIT_PASS:}
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASS:guest}
     publisher-confirm-type: correlated
     publisher-returns: true
     listener:
       simple:
         acknowledge-mode: manual
-        shutdown-timeout: 30s
 
-datasvc:
-  role: collector          # collector | worker | all（开发期单进程双角色）
+datasvc:   # 数据服务侧（stock-calculator-data）
   collector:
+    enabled: true                # collector 角色总开关（D4 部署形态，非回退开关）
     ingest:
       enabled: true
-      token: ${DATASVC_INGEST_TOKEN:}   # webhook 接入鉴权
+      secret: ${INGEST_SECRET:}  # webhook HMAC 鉴权（阶段 5 定案，见 onboarding 文档）
   worker:
+    enabled: true                # worker 角色总开关
     prefetch:
       announcement: 2
       embedding: 8
 ```
 
-- 主服务新增 `main.mq`：result 消费者（幂等入库 + 状态机落账）、任务发布器（PENDING 扫描/回填对账/快照下发）；`crawler.enabled=false` 的 native 变体同时关闭 MQ 任务发布
+- 主服务 MQ 面**常驻装配（v2.4 终态）**：result 消费者（幂等入库 + 状态机落账）、任务发布器（PENDING 扫描、回填对账、快照下发）、历史补录触发；原 `datasvc.mq.enabled` / `crawler.enabled` 双路径门控已删除，MQ 为唯一路径
 - 拓扑声明：数据服务侧 Declarables 集中声明（§4.1），主服务只声明自己消费的 `result.ingest.q`
-- 角色切换用 @ConditionalOnProperty 绑定 `datasvc.role`；@Scheduled 只在 collector 生效，task 监听器只在 worker 生效，`all` 全开（开发期）
+- 角色切换用 @ConditionalOnProperty 绑定 `datasvc.collector.enabled` / `datasvc.worker.enabled`（设计原稿的 `datasvc.role` 未实现，实际为独立布尔开关）
+- 管线巡检告警（R4 落地）：主服务 `pipeline.watch.*`（见 application.yml）+ monitor 域 PipelineWatchTask，邮件收件人 `PIPELINE_ALERT_EMAIL`
 
 ## 6. 扩缩容与部署
 
@@ -388,7 +405,7 @@ datasvc:
 | 4 公告迁移 | 采集拆出（订阅快照下发）+ 处理任务化（状态机留主服务）+ 发布端熔断 | 公告全链经 MQ；failCount/终态语义与现在一致 |
 | 5 扩展规范 | ingest endpoint + parser 插件约定 + 新源接入文档 | 新数据源接入只改数据服务 + contract |
 
-回退策略：每阶段主服务保留原路径开关（crawler.enabled 等既有门控），任一阶段可切回进程内执行。
+回退策略（v2.4 已退役）：迁移期每阶段主服务保留原路径开关（crawler.enabled 等既有门控），任一阶段可切回进程内执行；**终态（2026-09-12）双路径与开关已删除，MQ 为唯一路径**——停摆发现与提醒由 PipelineWatchTask 告警承担（§5/monitor 域），恢复靠数据源窗口自愈（D3）+ 对账器（D6）+ 人工重启 data 服务。
 
 ## 9. 风险表
 
@@ -403,7 +420,7 @@ datasvc:
 
 ## 10. 开放问题
 
-1. webhook 推送源的认证强度：静态 token 还是 HMAC 签名（阶段 5 定）
+1. webhook 推送源的认证强度：静态 token 还是 HMAC 签名（~~阶段 5 定~~ 已定案 HMAC-SHA256 + 时间戳防重放，v2.2，见 docs/data-source-onboarding.md）
 2. CLS/CNINFO 的配置（category、longTermKeywords 等）归属哪侧：跟随部署在数据服务 yml，还是经 control 消息由主服务下发
 3. contract 模块版本策略：随 monorepo 同版本发布即可，还是独立版本号（当前建议同版本）
 4. dead.q 的处置方式：仅告警人工处理，还是加管理端点重放

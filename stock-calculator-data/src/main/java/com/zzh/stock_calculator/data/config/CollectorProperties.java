@@ -10,8 +10,9 @@ import java.util.List;
  * collector 角色公告采集配置（datasvc.collector.announcement 前缀，设计文档 §5/§8 阶段 4）。
  * enabled 缺省 false：@ConditionalOnProperty 无 matchIfMissing 是项目既有约定
  * （防未显式配置的进程意外打真实 CNINFO）；yml 显式开启。
- * <p>首拉/长效白名单/节流键语义与主服务 AnnouncementProperties.Sync 同源
- * （采集逻辑迁出 D1，主服务保留同名键仅作回退路径）。</p>
+ * <p>采集配置唯一落点在本侧（2026-09-12 终态：主服务 announcement.sync.* 键已随
+ * 回退路径退役删除，采集逻辑迁出 D1 后无第二实现；键语义沿用原主服务
+ * AnnouncementProperties.Sync 的设计口径，D1 迁出时的历史溯源）。</p>
  */
 @Data
 @ConfigurationProperties(prefix = "datasvc.collector")

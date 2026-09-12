@@ -3,7 +3,7 @@
 > 版本：v1.5（2026-09-10；v1.5 = 修正 Q3 终版定案：没有早报/晚报，edition 恒 'telegraph'，无条目映射回填；v1.4 = 关闭 Q3：早/晚报 = 财联社电报流内条目，无新增获取与合规评估；v1.3 = 关闭 Q4：C1 隐私红线定案；v1.2 = 关闭 Q2：composite 拍板 SSE（方案 A）；v1.1 = 采纳后端评审：修正 §0.2 订阅接口返回结构、§1 HTTP 状态口径、§6 改写为复用既有管线，关闭 Q1/Q5/Q6）
 > 读者：后端开发（Spring Boot :18080，与 /api/auth 同应用）。本文给出检索类四个新接口的完整契约、通用约定、数据依赖与联调说明；前端按此契约开发并在就绪前使用 mock。
 > 关联：前端仓 `docs/news-search-spec.md`（需求 D1-D10）、前端仓 `docs/news-search-implementation.md`（前端实现）、`docs/news-search-backend-implementation.md`（后端技术实现，本仓库）；已上线接口 `POST/DELETE/GET /api/announcement/subscriptions`（订阅闭环，本文件 §0.2 摘要）
-> 状态：契约定稿待后端排期；P1 依赖 §2/§5，P2 依赖 §3/§4
+> 状态：已实现（2026-09-10，commit 5444b31；search 域四端点含 SSE 变体均在 SearchController，本文件由 API 契约转为现状文档）；P1 依赖 §2/§5，P2 依赖 §3/§4
 
 ---
 

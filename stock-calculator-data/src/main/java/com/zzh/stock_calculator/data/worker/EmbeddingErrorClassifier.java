@@ -6,7 +6,7 @@ import com.openai.errors.RateLimitException;
 import com.openai.errors.UnexpectedStatusCodeException;
 
 /**
- * 嵌入异常三分类（设计文档 §6.1 语义平移，与主服务 EmbeddingErrorClassifier 同源）：
+ * 嵌入异常三分类（设计文档 §6.1，worker 侧唯一实现；main 侧副本已随回退路径删除）：
  * openai-java 异常经 OpenAiEmbeddingModel 原样透传（client 构建时 maxRetries=0 关闭内置重试）。
  * worker 据此决定消息分流（§4.2/§4.4）：
  * <ul>

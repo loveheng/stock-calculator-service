@@ -20,13 +20,7 @@ public class EmbeddingProperties {
 
     private final Cloudflare cloudflare = new Cloudflare();
 
-    /** 回填游标批大小（每小时取批条数） */
-    private int batchSize = 64;
-
-    /** 批间节流间隔毫秒，避免误触 RPM 类限额 */
-    private long batchIntervalMs = 300;
-
-    /** 单日回填上限（保险丝；仅约束回填 Task，增量监听不占此计数器）。
+    /** 单日下发上限（保险丝；发布端统一记账——增量下发与对账扫缺都经 tryAcquireBackfill）。
      *  60000 条 ≈ 免费额度 10000 Neurons 的 75%~84%（bge-m3 计价 1075 Neurons/M tokens
      *  × 均值 ~115 tokens/条），余 ~20% 防回填打爆当日额度致增量/聊天查询连坐 429。 */
     private int dailyMaxArticles = 60000;

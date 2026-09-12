@@ -28,7 +28,7 @@ import java.util.UUID;
  * crawler.AnnouncementEmbeddingApi 的 announcement 域实现，承接两端——
  * 发布面 dispatchEmbeddingTask：task.embedding.compute(kind=announcement, text=摘要) 下发，
  * 额度在发布端扣减（D8，复用共享 EmbeddingQuotaGuard 单例）；发布经 TaskDispatchApi
- * （datasvc.mq.enabled 门控，MQ 关闭时空转返回 false，PENDING 行留对账）。
+ * （PENDING 行留对账，下轮续发）。
  * 消费面 applyEmbeddingResult：确定性 UUID 向量 upsert + 状态行 DONE 同事务成对写，
  * 绝不经 VectorStore.add()（其内部会重新发起 CF 嵌入，双份烧额度）。
  * <p>指纹判重（cls EmbeddingResultService 同语义）：向量行已存在且 metadata.kind=announcement

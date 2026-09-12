@@ -5,6 +5,7 @@
 > 配套文档：《Context-Aware Copilot 开发实施文档》v1.4（文件级落点/骨架/验收，**尚未入库**，建议收录为 `docs/copilot-implementation.md`）；设计决策编号 D1-D32 以实施文档引用为准，本文以 C1-Cn 承载本仓后端侧决策。
 > 关联：`docs/ocr-llm-pipeline.md`（llm 域现状）、`docs/e2ee-auth-backend-design.md`（信封/限流先例）、skill `cls-article-patterns`（后端编码模板）。
 > 状态：待评审冻结（对应实施文档 P0 启动前）。
+> **现状注记（2026-09-12）**：本文 C1/C5「复用 llm 域 gemini→groq 容灾链」未实现——实际为 copilot 专用 DeepSeek 渠道（`copilot.llm.deepseek.*`，`channel=deepseek` 落库）；限流实际顺序为「校验→限流→幂等门控」（AiChatOrchestrationService.beginAsk，cid 重放/续跑会消耗限流额度）；SSE 流式端点、Prompt 模板管理子系统、custom-stats 动作块提取均已实现但本文未覆盖。冲突处以 `docs/copilot-api.md` 与代码为准。
 
 ---
 

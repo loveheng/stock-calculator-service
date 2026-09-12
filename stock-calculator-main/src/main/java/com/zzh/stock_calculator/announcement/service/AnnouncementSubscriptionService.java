@@ -3,7 +3,6 @@ package com.zzh.stock_calculator.announcement.service;
 import com.zzh.stock_calculator.announcement.config.AnnouncementProperties;
 import com.zzh.stock_calculator.announcement.entity.AnnouncementSubscription;
 import com.zzh.stock_calculator.announcement.event.SubscriptionChangedEvent;
-import com.zzh.stock_calculator.announcement.event.SubscriptionCreatedEvent;
 import com.zzh.stock_calculator.announcement.repository.AnnouncementSubscriptionRepository;
 import com.zzh.stock_calculator.common.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -50,10 +49,6 @@ public class AnnouncementSubscriptionService {
         AnnouncementSubscription saved = subscriptionRepository.save(AnnouncementSubscription.builder()
                 .userId(userId)
                 .stockId(stockId)
-                .build());
-        eventPublisher.publishEvent(SubscriptionCreatedEvent.builder()
-                .stockId(saved.getStockId())
-                .orgId(saved.getOrgId())
                 .build());
         eventPublisher.publishEvent(SubscriptionChangedEvent.builder()
                 .stockId(saved.getStockId())

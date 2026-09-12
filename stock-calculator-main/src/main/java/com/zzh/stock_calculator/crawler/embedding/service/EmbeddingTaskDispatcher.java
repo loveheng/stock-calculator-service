@@ -11,7 +11,6 @@ import com.zzh.stockcalc.contract.MessageType;
 import com.zzh.stockcalc.contract.message.EmbeddingComputeTask;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,12 +21,11 @@ import org.springframework.stereotype.Component;
  * ③额度上移（§4.5）：发布前 EmbeddingQuotaGuard 扣减放行，余额不足/熔断 → 停发，
  *   PENDING 行留给对账任务补发（D6），主链路绝不阻塞。
  * <p>不写任何 embedding 状态：DONE/FAILED 落库由 result.embedding.done 消费端承担。</p>
- * <p>datasvc.mq.enabled=false（默认）时不装配，ArticleEmbeddingListener 走进程内路径。</p>
+ * <p>常驻装配（MQ 单路径终态）：ArticleSavedEvent → 本类 → task.embedding.compute。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "datasvc.mq", name = "enabled", havingValue = "true")
 public class EmbeddingTaskDispatcher {
 
     private final ClsArticleRepository articleRepository;

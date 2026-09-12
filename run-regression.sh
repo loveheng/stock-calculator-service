@@ -8,4 +8,4 @@ PASS=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)
 export POSTGRES_PASS="$PASS"
 export POSTGRES_URL="jdbc:postgresql://localhost/scs"
 export POSTGRES_USER="root"
-./mvnw install -Dtest='!TaskServiceTest' -DfailIfNoTests=false
+./mvnw install -Dtest='!TaskServiceTest' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false

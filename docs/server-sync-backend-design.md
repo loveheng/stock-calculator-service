@@ -4,6 +4,7 @@
 > 范围：stock-calculator-service 侧的 sync 领域包设计——两表存储、3 端点 API、CAS 版本协议、频控与历史裁剪。承接前端仓库 `docs/server-sync-spec.md` 的决策 D1-D15 中与后端相关的部分（D2/D5/D7/D8/D10/D11 为主）。
 > 关联：前端仓库 `docs/server-sync-spec.md` / `docs/server-sync-implementation.md`；本仓库 `docs/e2ee-auth-backend-design.md`（鉴权拦截）、`docs/copilot-design.md`（恒 200 信封与领域包先例）
 > 状态：设计定稿，待开发（落点见 `docs/server-sync-backend-implementation.md`）
+> **现状注记（2026-09-12）**：本文 native 变体相关表述已过时（native 模块 2026-08-31 删除；现为 contract/main/data 三模块，sync 域留守 main）。CAS/频控/历史裁剪等核心协议语义仍与代码一致。
 
 ---
 

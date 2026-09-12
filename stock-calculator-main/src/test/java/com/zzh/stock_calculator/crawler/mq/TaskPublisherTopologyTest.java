@@ -26,9 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @EnabledIfEnvironmentVariable(named = "RABBIT_E2E", matches = "true")
 @TestPropertySource(properties = {
-        "datasvc.mq.enabled=true",
-        "embedding.enabled=false",
-        "crawler.enabled=false"
+        "embedding.enabled=false"
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class TaskPublisherTopologyTest {

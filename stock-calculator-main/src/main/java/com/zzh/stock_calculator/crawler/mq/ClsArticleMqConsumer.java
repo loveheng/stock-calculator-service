@@ -32,7 +32,6 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
@@ -55,7 +54,6 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 @Lazy(false)
-@ConditionalOnProperty(prefix = "datasvc.mq", name = "enabled", havingValue = "true")
 public class ClsArticleMqConsumer {
 
     private final ClsArticleService clsArticleService;
@@ -88,10 +86,21 @@ public class ClsArticleMqConsumer {
             case MessageType.RESULT_ANNOUNCEMENT_DONE -> handleAnnouncementDone(envelope);
             case MessageType.RESULT_ANNOUNCEMENT_FAILED -> handleAnnouncementFailed(envelope);
             case MessageType.RESULT_ARTICLE_INGESTED -> handleArticleIngested(envelope);
+            case MessageType.RESULT_CLS_HISTORY_REPORT -> log.info(
+                    "cls history report requestId={} window=[{}, {}] inserted={}",
+                    historyReportField(envelope, "requestId"),
+                    historyReportField(envelope, "startTime"),
+                    historyReportField(envelope, "endTime"),
+                    historyReportField(envelope, "inserted"));
             // 其余 result.* 类型按阶段逐步接入；先记录后丢弃，避免堆积
             default -> log.info("skip unsupported result type={} messageId={}",
                     envelope.getType(), envelope.getMessageId());
         }
+    }
+
+    /** 历史补录回执为日志级（§4.3 无需幂等）：直接读 payload 字段打印 */
+    private Object historyReportField(MessageEnvelope envelope, String field) {
+        return envelope.getPayload() instanceof Map<?, ?> payload ? payload.get(field) : null;
     }
 
     private void handleClsArticle(MessageEnvelope envelope) {

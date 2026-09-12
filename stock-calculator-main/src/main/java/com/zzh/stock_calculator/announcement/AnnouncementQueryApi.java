@@ -1,6 +1,5 @@
 package com.zzh.stock_calculator.announcement;
 
-import com.zzh.stock_calculator.announcement.client.CninfoClient;
 import com.zzh.stock_calculator.announcement.entity.Announcement;
 import com.zzh.stock_calculator.announcement.entity.AnnouncementStatus;
 import com.zzh.stock_calculator.announcement.repository.AnnouncementRepository;
@@ -23,6 +22,9 @@ import java.util.List;
 public class AnnouncementQueryApi {
 
     private static final AnnouncementStatus DONE = AnnouncementStatus.DONE;
+
+    /** CNINFO 静态资源前缀（原 CninfoClient.STATIC_BASE：adjunctUrl 拼接为完整下载地址） */
+    private static final String CNINFO_STATIC_BASE = "http://static.cninfo.com.cn/";
 
     private final AnnouncementRepository announcementRepository;
 
@@ -81,7 +83,7 @@ public class AnnouncementQueryApi {
     private static AnnouncementView toView(Announcement entity) {
         String adjunctUrl = entity.getAdjunctUrl();
         String sourceUrl = adjunctUrl == null || adjunctUrl.isBlank() ? ""
-                : (adjunctUrl.startsWith("http") ? adjunctUrl : CninfoClient.STATIC_BASE + adjunctUrl);
+                : (adjunctUrl.startsWith("http") ? adjunctUrl : CNINFO_STATIC_BASE + adjunctUrl);
         return new AnnouncementView(entity.getId(), entity.getAnnouncementId(), entity.getTitle(),
                 entity.getSecCode(), entity.getSecName(), entity.getSeDate(),
                 entity.getAdjunctUrl(), entity.getSummary(),

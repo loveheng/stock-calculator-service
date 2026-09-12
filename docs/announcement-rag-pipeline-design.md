@@ -1,6 +1,7 @@
 # 公告提取与蒸馏管道（announcement 域）· 后端设计文档
 
-> 版本：v1.7（2026-09-10，S1/S3 实证闭环回写（§8.1），管道未开工；v1.6 长效白名单/首拉护栏/年报回顾性/加载写法/reason 词典；v1.5 历史下界）
+> 版本：v1.8（2026-09-12，数据服务拆分终态回填：本档 §2.1/§6 组件清单中 CninfoClient、parser 全套（PdfTextExtractor/StructureTreeBuilder/SlicingService/TextCleaner/TitlePatterns）、AnnouncementDistillService、GroundingValidator、AnnouncementCollectService、AnnouncementSyncTask 已迁至 stock-calculator-data/data/announcement（datasvc.collector/worker 角色门控），主服务仅存 状态机落账（AnnouncementResultService）、订阅 CRUD、PENDING 扫描发布（AnnouncementProcessPublisher）、向量对账（AnnouncementEmbeddingBackfillTask）与查询端口；§4/§7 的进程内管道语义与 announcement.sync/clean/distill/throttle.* 配置键为历史基线（解析配置现落 data 侧 announcement.parse.* / datasvc.collector.announcement.*））
+> 历版本：v1.7（2026-09-10，S1/S3 实证闭环回写（§8.1），管道未开工；v1.6 长效白名单/首拉护栏/年报回顾性/加载写法/reason 词典；v1.5 历史下界）
 > 范围：新顶层域 announcement——CNINFO 公告采集、内存 PDF 纯文本抽取、代码结构树、双阶段 AI（标题路由 + 事实蒸馏）、溯源三件套、pgvector 落库
 > 关联：docs/cls-article-vector-backend-design.md（embedding 基座与 CF 额度治理）、docs/announcement-pipeline-todo.md（T1 正文留存暂缓，护栏随 P0 落地）
 > 状态：实现前须过 §8 实证清单
@@ -220,6 +221,8 @@ CREATE INDEX idx_ann_sub_stock ON announcement_subscription (stock_id);
 | adjunctUrl 失效 | 下载/重放 404 | 重试后 FAILED；溯源降级为引用级（T1） |
 
 ## 6. Modulith 归属与代码落点
+
+> **v1.8 迁移注记**：下表为拆分前的设计落点。终态仅 entity/repository/订阅/查询 API/mq 发布消费端/task 对账器仍在 main；CninfoClient、parser 全套、DistillService、GroundingValidator、CollectService、SyncTask 的现行实现一律以 **stock-calculator-data/data/announcement** 为准。
 
 新增域 announcement/（相对 stock-calculator-main/src/main/java/com/zzh/stock_calculator/）：
 

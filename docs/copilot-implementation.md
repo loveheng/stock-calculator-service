@@ -4,6 +4,7 @@
 > 范围：前端契约/状态/服务/UI 落点与骨架、后端领域包/表结构/编排/容灾实现要点、API 契约、验证清单
 > 关联：`docs/copilot-spec.md`（决策 D 编号总表，v1.5 重建版）、`docs/copilot-design.md`（C1-C17 设计基线）、`docs/e2ee-auth-spec.md`（鉴权）、skill `cls-article-patterns`（后端编码模板）
 > 状态：待 P0 开发启动
+> **现状注记（2026-09-12）**：本文「单模块」表述已过时（现为 contract/main/data 三模块）；SSE 流式提问（`askStream`）、Prompt 模板管理（`CopilotPromptAdminController` + `copilot_prompt_template/_history` 两表 + Redis 镜像）、custom-stats `taskType` 路由与 `CopilotStatActionExtractor` 动作块均为既有实现，本文未覆盖；LLM 渠道为 DeepSeek 专用渠道。冲突处以代码与 `docs/copilot-api.md` 为准。
 
 **v1.5 修订摘要**（相对 v1.4，逐项对应 design §8 差异清单 #1-#13）：
 

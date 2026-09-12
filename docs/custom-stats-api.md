@@ -4,6 +4,7 @@
 > 范围：自定义统计功能对后端的**全部接口需求**——设计原则是最大化复用现有 Copilot 通道，后端改动收敛为「请求可选字段 + 系统提示词模板」，**无新端点、无新表**
 > 关联：`docs/custom-stats-backend-support.md`（信息支持文档：动作契约详解、字段字典、模板草稿）；前端仓 `docs/custom-stats-spec.md`（需求）
 > 状态：设计定稿，待 P0 开发启动
+> **现状注记（2026-09-12）**：本文「无新端点、无新表/零服务端存储」口径已过时——2026-09-07（commit b274fe4）已落地 `customstat` 域：`user_custom_stat` 表（明文 JSONB，**非 E2EE 通道**）+ `GET/PUT/DELETE /api/custom-stats`（指标定义服务端持久化）。「计算执行在前端沙箱、服务端不理解 code 语义」仍然成立。见 `customstat` 域代码。
 
 ---
 

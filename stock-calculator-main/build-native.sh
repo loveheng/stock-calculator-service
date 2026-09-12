@@ -88,7 +88,10 @@ echo "█████ 步骤 2/4: 生成依赖 classpath..."
 ../mvnw -q dependency:build-classpath -Dmdep.outputFile=target/cp.txt -Dfile.encoding=UTF-8 >/dev/null 2>&1
 RAW_CP=$(cat target/cp.txt)
 STRIPPED=""
-while IFS= read -r j; do
+# || [ -n "$j" ]：cp.txt 末行无换行符时 read 会静默丢弃最后一个 jar
+# （实证：commons-logging 恰排末位被丢，spring-data 4.1 TypedPropertyPathFeature
+#   构造期加载 LogFactory 即 CNFE，构建失败）
+while IFS= read -r j || [ -n "$j" ]; do
   case "$j" in
     # *-test-* 兜底 Boot 4 新式 test jar（如 spring-boot-data-jpa-test / spring-boot-restclient-test），
     # 否则会泄入 native classpath，spring.factories 触发运行期 ClassNotFoundException

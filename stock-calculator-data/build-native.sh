@@ -85,7 +85,8 @@ echo "█████ 步骤 2/4: 生成依赖 classpath 并剥离 test jar..."
 ../mvnw -q dependency:build-classpath -Dmdep.outputFile=target/cp.txt -Dfile.encoding=UTF-8 >/dev/null 2>&1
 RAW_CP=$(cat target/cp.txt)
 STRIPPED=""
-while IFS= read -r j; do
+# || [ -n "$j" ]：cp.txt 末行无换行符时 read 会静默丢弃最后一个 jar
+while IFS= read -r j || [ -n "$j" ]; do
   case "$j" in
     *spring-boot-starter-test*|*spring-boot-test*|*junit*|*mockito*|*assertj*|*hamcrest*|*opentest4j*|*spring-test*|*json-path*|*json-smart*|*jsonassert*|*xmlunit*|*awaitility*|*-test-*|*resttestclient*)
       continue ;;

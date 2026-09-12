@@ -9,7 +9,7 @@ import com.zzh.stockcalc.contract.message.EmbeddingComputeResult;
  * 分流、未来跨域触发）只经本端口调用——端口倒置避免 crawler → announcement 成环
  * （AnnouncementIngestApi 同款模式）。
  * <p>额度记账复用共享 EmbeddingQuotaGuard 单例（D8：严禁第二份独立计数）；
- * 任务发布复用 TaskDispatchApi（datasvc.mq.enabled=false 空转）。</p>
+ * 任务发布复用 TaskDispatchApi。</p>
  */
 public interface AnnouncementEmbeddingApi {
 

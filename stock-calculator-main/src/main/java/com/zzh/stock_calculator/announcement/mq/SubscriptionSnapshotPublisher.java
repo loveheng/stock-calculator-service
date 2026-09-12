@@ -9,7 +9,6 @@ import com.zzh.stockcalc.contract.MessageType;
 import com.zzh.stockcalc.contract.message.SubscriptionSnapshotPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -29,12 +28,11 @@ import java.util.Optional;
  * <p>三触发点：①订阅变更 AFTER_COMMIT（事务内发布，提交后才读 DB 防未提交态）；
  * ②定时重推（兜底快照丢失，R6）；③启动首推（collector 晚启动也不丢全集）。
  * version = epoch millis 单调，collector 拒旧版本（R3 防缓存漂移）。</p>
- * <p>门控：datasvc.mq.enabled=false 不装配，订阅本地采集回退路径不受影响。</p>
+ * <p>发布失败只记日志：快照丢失由 AFTER_COMMIT 重试与 30min 定时重推兜底（R6）。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "datasvc.mq", name = "enabled", havingValue = "true")
 public class SubscriptionSnapshotPublisher {
 
     /** 增量水位重叠天数（与 AnnouncementCollectService.OVERLAP_DAYS 同语义，D3） */

@@ -12,7 +12,6 @@ import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,10 +19,9 @@ import org.springframework.context.annotation.Configuration;
  * 主服务侧 MQ 拓扑（设计文档 §4.1）：仅声明自己消费的 results 半区。
  * 队列参数必须与数据服务 MqTopologyConfig 严格一致（重复声明为幂等 no-op，
  * 参数漂移会触发 PRECONDITION_FAILED，改动需两侧同步）。
- * datasvc.mq.enabled=false（默认）时不装配，零 MQ 连接。
+ * 无条件装配（MQ 单路径终态）。
  */
 @Configuration
-@ConditionalOnProperty(prefix = "datasvc.mq", name = "enabled", havingValue = "true")
 public class RabbitTopologyConfig {
 
     /**

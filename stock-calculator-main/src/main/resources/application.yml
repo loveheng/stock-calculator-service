@@ -69,16 +69,17 @@ spring:
       connect-timeout: 2s
       timeout: 2s
   rabbitmq:
-    # 数据服务拆分阶段 1（docs/data-service-split-design.md）：result 上行消费；
-    # RabbitMQ 服务不可用时不影响启动——RabbitAdmin/监听器均由 datasvc.mq.enabled 门控
+    # 数据服务拆分终态（docs/data-service-split-design.md）：result 上行消费 + task/control 下发。
+    # RabbitMQ 为数据管线的必要依赖：broker 不可用时监听器持续重连、发布失败由对账重发兜底（D6）；
+    # 管线停摆经 PipelineWatchTask 告警（邮件），不再设进程内回退路径
     host: ${RABBIT_HOST:localhost}
     port: ${RABBIT_PORT:5672}
     username: ${RABBIT_USER:guest}
     password: ${RABBIT_PASS:guest}
     # 关闭 Boot 自动 AmqpAdmin（RabbitAdmin 会在启动期声明拓扑而开连接）；
-    # MQ 启用时由 RabbitTopologyConfig 提供受门控的 AmqpAdmin Bean
+    # AmqpAdmin 由 RabbitTopologyConfig 提供
     dynamic: false
-    # 任务发布（阶段 3/4）需确认回调；当前仅 dead.q 投递使用
+    # 任务发布需确认回调；当前仅 dead.q 投递使用
     publisher-confirm-type: correlated
     publisher-returns: true
     listener:
@@ -86,17 +87,7 @@ spring:
         # 手动 ack（设计文档 §4.4）：业务成功/失败分流后由消费端显式确认
         acknowledge-mode: manual
 
-datasvc:
-  mq:
-    # 主服务 MQ 消费端总开关（默认关：无 MQ 部署零连接零依赖）。
-    # 开启时同步置 crawler.enabled=false（拉取改由数据服务承担，回退只需对调两开关）；
-    # 公告域：采集移交数据服务（本地 sync/订阅触发抓取空转，任务 2 双路径门控），
-    # 订阅快照发布器随本开关装配（任务 1），公告处理任务发布端随本开关装配（任务 3：
-    # PENDING 扫描→task.announcement.process + done/failed 消费端 + 二段向量化下发）
-    enabled: ${DATASVC_MQ_ENABLED:false}
-
 crawler:
-  enabled: true
   # /api/admin/sync 管理端点令牌；未配置时端点拒绝所有请求
   admin-token: ${CRAWLER_ADMIN_TOKEN:}
 
@@ -185,9 +176,6 @@ embedding:
     api-token: ${CLOUDFLARE_API_TOKEN:}
     model: '@cf/baai/bge-m3'
     dimensions: 1024
-  # 回填游标批大小与批间节流
-  batch-size: 64
-  batch-interval-ms: 300
   # 单日回填上限（免费额度 10000 Neurons/日，00:00 UTC 刷新；bge-m3 计价实测 1075 Neurons/M tokens，
   # 均值 ~115 tokens/条 → 60000 条/天 ≈ 75%~84% 额度；留 ~20% 防回填打爆当日额度
   # 导致增量监听/聊天查询向量化连坐 429，§5.3）
@@ -213,40 +201,21 @@ embedding:
 # ======================= announcement 域（docs/announcement-rag-pipeline-design.md §7） =======================
 # 骨架期 sync/process 均默认关闭，联调时手动开启
 announcement:
-  sync:
-    enabled: false
-    cron: '0 0 * * * *'
-    # 纯订阅驱动：无订阅则不抓取（种子兜底仅留开发期临时写入用）
-    seed-stock-list: []
-    first-pull-mode: FULL
-    history-since: 2023-01-01
-    lookback-days: 90
-    long-term-enabled: false
-    long-term-keywords: '招股说明书,公司章程,重大资产重组,控制权变更'
   process:
     enabled: false
     cron: '0 1 * * * *'
     max-fail-attempts: 3
-    # RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，§4.5 发布端熔断；datasvc.mq.enabled=true 时生效）
+    # RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，§4.5 发布端熔断）
     rate-limit-cooldown-minutes: 30
   snapshot:
-    # 订阅快照定时重推周期（§8 阶段 4/R3；datasvc.mq.enabled=true 时才生效）
+    # 订阅快照定时重推周期（§8 阶段 4/R3）
     cron: '0 */30 * * * *'
   subscription:
     # 每用户订阅标的数上限（防滥用：订阅即触发 CNINFO 全量首拉）
     max-per-user: 100
   pdf:
+    # 超体积终态判定阈值（result.announcement.collected 消费端）
     max-size-mb: 50
-    parse-concurrency: 1
-    parse-timeout-seconds: 120
-  clean:
-    header-repeat-ratio: 0.3
-    no-text-min-chars-per-page: 50
-  distill:
-    model: ''
-    prompt-version: ''
-  throttle:
-    batch-interval-ms: 300
 
 # ======================= search 域（docs/news-search-backend-implementation.md §9） =======================
 # 默认值 = 拍板值（B6 限流 10 次/10s + 综合 3 次/10s；C11 threshold=0.3/topK=10），显式落配置便于调参
@@ -268,3 +237,22 @@ search:
     # 公告向量 metadata 回填任务（默认关闭；开启后按 cron 补 kind/annDate）
     enabled: false
     cron: '0 40 2 * * *'
+
+# ======================= pipeline 管线巡检告警（data-service-split-design.md R4） =======================
+# MQ 单路径终态后无回退开关：数据服务停机/队列积压/毒消息/PENDING 停滞经本任务定期巡检，
+# 触发即发邮件（PIPELINE_ALERT_EMAIL 未配置时静默）；同类告警带冷却窗口，防风暴。
+pipeline:
+  watch:
+    enabled: true
+    cron: '0 */5 * * * *'
+    # LavinMQ/RabbitMQ 管理 API（队列深度与 consumer 数查询；凭据复用 AMQP 账号）
+    mgmt-base-url: ${RABBIT_MGMT_URL:http://localhost:15672}
+    mgmt-username: ${RABBIT_USER:guest}
+    mgmt-password: ${RABBIT_PASS:guest}
+    vhost: /
+    # 任务/结果队列积压告警阈值（条）
+    queue-backlog-threshold: 100
+    # DB 侧 PENDING 最老年龄告警阈值（小时）
+    max-pending-age-hours: 24
+    # 同类告警冷却窗口（分钟）
+    alert-cooldown-minutes: 30

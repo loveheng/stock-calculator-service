@@ -143,7 +143,7 @@ public class GroundingValidator {
     public record ValidationResult(boolean passed, String mismatchDetail) {
     }
 
-    /** 接地校验最终失败（定向重试仍不过）：processOne 落 GROUNDING_FAIL 终态 */
+    /** 接地校验最终失败（定向重试仍不过）：上报 GROUNDING_FAIL，由主服务 result 消费端落终态 */
     public static class GroundingFailException extends RuntimeException {
         public GroundingFailException(String message) {
             super(message);

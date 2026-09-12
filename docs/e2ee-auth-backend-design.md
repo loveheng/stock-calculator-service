@@ -4,6 +4,7 @@
 > 定位：为前端《E2EE 鉴权与密钥管理系统 v1.0》（下称《前端 spec》，位于前端仓库 docs/e2ee-auth-spec.md，章节号 §x 均指该文档）提供**用户相关服务**，与现有 /api/import（OCR 识别）并列的后端服务模块。
 > 配套文档：实行方案 docs/e2ee-auth-backend-implementation.md（文件级任务拆解与验收标准）。
 > 状态：待评审冻结（对应实行方案 B0 阶段）。
+> **现状注记（2026-09-12）**：本文模块结构引用（common/main/native 划分）已过时——native 模块 2026-08-31 删除，现为 **contract/main/data 三模块**；限流阈值以代码为准（`RateLimitService`：login = IP 30 次 + email 10 次 / 15 分钟双桶；verify = IP 20 次 + email 10 次 / 小时，Redis 固定窗口 fail-open），本文与 api.md 中不一致的数字作废。
 
 ---
 

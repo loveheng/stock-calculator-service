@@ -11,7 +11,6 @@ import com.zzh.stockcalc.contract.message.AnnouncementProcessTask;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -27,12 +26,11 @@ import java.util.List;
  * AnnouncementEmbeddingApi 直接补发二段任务，避免 worker 全量重处理。</p>
  * <p>发布端熔断（§4.5）：worker 回报 RATE_LIMITED → markRateLimited 暂停发布窗口
  * （原批级 break 熔断的发布端等价物），冷却结束自动恢复。</p>
- * <p>门控：datasvc.mq.enabled=false 不装配，AnnouncementProcessTask 走进程内路径。</p>
+ * <p>PENDING 扫描发布为公告处理唯一路径（MQ 单路径终态），发布端熔断见 §4.5。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "datasvc.mq", name = "enabled", havingValue = "true")
 public class AnnouncementProcessPublisher {
 
     private final AnnouncementRepository announcementRepository;

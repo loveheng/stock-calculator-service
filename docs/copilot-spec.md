@@ -4,6 +4,7 @@
 > 定位：Copilot 功能的**决策总表与规范基线**。原 spec v1.4 未随仓入库，本版按《开发实施文档》v1.4 的 D 引用重建：被引用的 D 编号按其引用语义落表，未被引用的编号明确标注缺失待补；与 `docs/copilot-design.md` 的 C1-C17 互相映射。若原 v1.4 手稿日后找回，缺失条目以其为准补录。
 > 配套：`docs/copilot-design.md`（架构与后端设计基线）、`docs/copilot-implementation.md`（文件级实施，v1.5 收录版）。
 > 状态：待评审（与实施文档 v1.5 同批冻结）。
+> **现状注记（2026-09-12）**：本文 LLM 渠道与端点行为描述部分过时——实际聊天渠道为 **copilot 专用 DeepSeek 付费渠道**（`copilot.llm.deepseek.*`，见 `docs/copilot-api.md` 与 `DeepSeekConfig`），「复用 llm 域容灾链」从未实现；SSE 流式提问、Prompt 模板管理（`/api/copilot/prompt/templates`）与 custom-stats `taskType` 集成为既有代码但本文未覆盖。冲突处以 `docs/copilot-api.md` 与代码为准。
 
 ---
 

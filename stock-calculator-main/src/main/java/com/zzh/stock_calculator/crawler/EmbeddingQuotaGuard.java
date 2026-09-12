@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 瞬时类（批级退避后当次退出，由调用方处理）、致命类（401/403/400 → fatal 停机）。
  *
  * <p>内存态：进程重启丢失无妨（重启后首个 429 重新置位，最多浪费一次试探调用）。
- * daily-max-articles 保险丝仅约束回填（tryAcquireBackfill），增量监听不占此计数器（§4.4）。
+ * daily-max-articles 保险丝约束发布端全部下发（增量监听与对账扫缺统一走 tryAcquireBackfill 记账，§4.5 额度上移）。
  */
 public class EmbeddingQuotaGuard {
 

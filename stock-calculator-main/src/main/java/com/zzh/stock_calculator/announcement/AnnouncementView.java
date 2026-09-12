@@ -9,7 +9,7 @@ import java.time.LocalDate;
  * @param id           内部自增主键（回填任务调 processAnnouncement 用）
  * @param announcementId CNINFO 公告标识（resultId 口径）
  * @param status       状态机文本（PENDING/DONE/FAILED）
- * @param sourceUrl    adjunctUrl 补全后的完整下载地址（CninfoClient.downloadPdf 同规则）
+ * @param sourceUrl    adjunctUrl 补全后的完整下载地址（CNINFO 静态前缀拼接，原 CninfoClient 规则）
  */
 public record AnnouncementView(
         Long id,

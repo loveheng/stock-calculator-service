@@ -1,6 +1,7 @@
 # cls_article 向量化（语义检索基座）· 后端设计文档
 
-> 版本：v1.5（2026-09-09，R1 运行期门控重构：native 终态自带向量化，见 §9.3 C8）
+> 版本：v1.6（2026-09-12，数据服务拆分终态回填：进程内 CF 计算/存量回填/增量嵌入移交 data worker（task/result.embedding.*），主服务仅存 查询嵌入（search 相似检索）与结果落账（EmbeddingResultService）；§4.4/§4.5/§4.6/§6.1 的进程内回填语义为历史基线；§7.1 的 batch-size/batch-interval-ms 键已删除；C5 完成邮件事件随进程内路径退役（周期统计报告邮件保留）；CfUsageFixingClient 两侧各一份——main 服务查询嵌入、data 服务计算嵌入，非双控）
+> 历版本：v1.5（2026-09-09，R1 运行期门控重构：native 终态自带向量化，见 §9.3 C8）
 > 范围：crawler 域 embedding 子包——cls_article 全量向量化管道（存量回填 + 增量）、pgvector 存储、Cloudflare Workers AI 配额治理与熔断；相似检索 service 能力随 P0 就绪，消费场景（copilot RAG）为 P1 待定。
 > 关联：`docs/copilot-design.md`（P1 消费方先例）、`postgres/schema.sql`（表结构落点）
 > 状态：P0 已实现（2026-09-09 编码完成；R1 重构后全量回归 300 测试 0 失败 1 skip；存量回填待生产库开闸）
@@ -233,7 +234,7 @@ public List<ArticleSearchResult> similaritySearch(String query, int topK, double
 ### 5.3 治理机制
 
 - **预留余量原则（D7）**：回填日消耗封顶于 `daily-max-articles`（默认 60000 ≈ 日额度 75%~84%），**不跑满免费额度**。余量用途：① 增量嵌入永享额度（~70 Neurons/天）；② 聊天查询向量化不被回填连坐 429；③ Day-1 估算偏差缓冲；④ 人工检索 / 冒烟测试试探调用
-- 计数器边界：daily-max 仅约束回填 Task；增量监听不占该计数器（真实 429 熔断对两者同样生效）
+- **计数器边界（v1.6 修订）**：MQ 终态后发布端统一记账——增量下发与对账扫缺统一走 `tryAcquireBackfill`（EmbeddingTaskDispatcher 内扣减）；CF 429 熔断归 worker 本地节流与静默丢弃，主服务仅维护额度计数与日上限
 - Day-1 校准后修正：以 CF Dashboard 实际 Neurons/条 反推日容量 → 修正 daily-max（建议保持 ≥15% 余量）→ 同步修正工期
 - 用量观测：CF Dashboard Neuron 台账（人工周检即可，不建监控）
 

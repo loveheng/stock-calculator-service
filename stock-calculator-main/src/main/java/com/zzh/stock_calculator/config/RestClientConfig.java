@@ -25,7 +25,7 @@ public class RestClientConfig {
 
     /**
      * 全局通用的 RestClient（用于没有固定 baseUrl 的临时请求）。
-     * @Primary 供 CommonHttpService 按类型注入（原 geminiRestClient 已随 native 模块删除）。
+     * 供 SmartBoxStockCodeResolver 等按类型注入（原 CommonHttpService 已随数据服务拆分删除）。
      */
     @Bean
     @Primary
