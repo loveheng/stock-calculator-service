@@ -4,7 +4,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      # 口令从项目根 .env 注入（compose 自动加载）；仅首次初始化数据卷时生效
+      # 口令从项目根 .env 注入（compose 自动加载）；仅首次初始化数据卷时生效。
+      # 注意：postgres 镜像入口脚本只认 POSTGRES_PASSWORD 这个名字
+      #（POSTGRES_PASS 是应用侧读的变量名，两个都写在 .env 里，别混用）
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?请在项目根 .env 中设置 POSTGRES_PASSWORD}
       - POSTGRES_USER=root
       - POSTGRES_DB=scs
@@ -12,7 +14,8 @@ services:
     volumes:
       - /data/postgres/data:/var/lib/postgresql/data/pgdata:Z
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U root"]
+      # 显式指定业务库：pg_isready 默认拿用户名当库名，会每 10s 刷一条 FATAL 噪音
+      test: ["CMD-SHELL", "pg_isready -U root -d scs"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,6 +36,43 @@ services:
       timeout: 5s
       retries: 5
 
+  lavinmq:
+    image: cloudamqp/lavinmq:latest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - /data/lavinmq/data:/var/lib/lavinmq:Z
+      # control socket 共享给 lavinmq-init 建号用（本地 unix socket，不经网络）
+      - lavinmq-ctl:/tmp
+    healthcheck:
+      test: ["CMD", "lavinmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 一次性初始化容器：经 control socket（共享卷，不经网络、无需凭据）把 .env 的
+  # RABBIT_* 账号建进 LavinMQ 并授权。幂等：账号已存在时 add_user 直接成功，
+  # change_password 保证改密后重新 compose up 即同步。默认 guest 仅限回环连接，
+  # 容器网络远程连入必须用专用账号；monitoring tag 供 app 巡检查 /api/queues。
+  # 注意：LavinMQ 不读环境变量（LAVINMQ_ADMIN_* 之类无效），镜像默认账号口令
+  # 只能在启动参数里给哈希且仅首次初始化生效，故用本容器在启动后建号
+  lavinmq-init:
+    image: cloudamqp/lavinmq:latest
+    depends_on:
+      lavinmq:
+        condition: service_healthy
+    volumes:
+      - lavinmq-ctl:/tmp
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        lavinmqctl add_user "${RABBIT_USER:-scs}" "${RABBIT_PASS:?未设置 RABBIT_PASS}" &&
+        lavinmqctl change_password "${RABBIT_USER:-scs}" "${RABBIT_PASS:?未设置 RABBIT_PASS}" &&
+        lavinmqctl set_permissions "${RABBIT_USER:-scs}" '.*' '.*' '.*' &&
+        lavinmqctl set_user_tags "${RABBIT_USER:-scs}" monitoring
+
   # 应用本体（CI 推送的 GraalVM Native 镜像）。.env 经 env_file 全量注入容器：
   # GEMINI_API_KEY、GROQ_API_KEY、AZURE_OCR_API_KEY、OCRSPACE_API_KEY、SMTP_*、
   # CRAWLER_ADMIN_TOKEN 等直接写 .env 即可（Spring 宽松绑定也能覆盖任意配置项）；
@@ -44,19 +84,39 @@ services:
       - "${APP_PORT:-18080}:18080"
     env_file:
       - .env
-    environment:
-      # 容器内固定连 compose 内的 postgres / redis（优先级高于 env_file）
-      POSTGRES_URL: jdbc:postgresql://postgres:5432/scs
-      POSTGRES_USER: root
-      # 与 postgres 服务共用 .env 中的同一个口令变量
-      POSTGRES_PASS: ${POSTGRES_PASSWORD:?请在项目根 .env 中设置 POSTGRES_PASSWORD}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
     # 启动参数：.env 中 APP_ARGS=--crawler.enabled=false 即可追加程序参数
-    entrypoint: ["/bin/sh", "-c", "exec /application/stock-calculator-service ${APP_ARGS:-}"]
+    entrypoint: ["/bin/sh", "-c", "exec /application/stock-calculator-service $$APP_ARGS"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      lavinmq:
+        condition: service_healthy
     restart: unless-stopped
+
+  # 数据服务（CI 推送的 GraalVM Native 镜像，镜像名 = 主镜像 + -data 后缀）。
+  # 无 JPA 数据源，不连 postgres，只依赖 LavinMQ；collector/worker/ingest 三角色
+  # 已在镜像内 AOT 钉死（all-in-one），运行期不可切换。worker 的 CLOUDFLARE_*、
+  # 蒸馏 LLM 的 LLM_*、ingest 的 INGEST_SECRET、RABBIT_* 连接拓扑经 env_file 从 .env 注入。
+  data:
+    image: ghcr.io/loveheng/stock-calculator-service-data:${DATA_IMAGE_TAG:-3a4f486}
+    ports:
+      - "${DATA_PORT:-18081}:8080"   # 仅 ingest webhook 使用，不用 ingest 可注释掉
+    env_file:
+      - .env
+    depends_on:
+      lavinmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    # 如果已推送到镜像仓库用 image，若是本地构建可用 build: ./frontend
+    image: ghcr.io/loveheng/stock-calculator:${FRONTEND_IMAGE_TAG:-sha-50ce249}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  # 共享给 lavinmq-init 的 LavinMQ control socket（/tmp/lavinmqctl.sock）
+  lavinmq-ctl:
