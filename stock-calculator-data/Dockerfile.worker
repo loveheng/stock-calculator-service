@@ -1,0 +1,42 @@
+# ============================================================================
+# Stock Calculator Data Service — GraalVM Native worker 变体镜像（多副本扩容用）
+# 与 Dockerfile.native（all-in-one）的差异：
+#   - 二进制为 worker 变体（collector/ingest 已 AOT 裁剪 + web-application-type=none，
+#     Tomcat 被 DCE 剔除）：无 HTTP 端点 → 无 EXPOSE/无 curl
+#   - HEALTHCHECK 改为心跳文件新鲜度检查（MqHeartbeatWatchdog 每次成功探活刷新
+#     mtime；date/stat 为 ubuntu 基础工具）。HEALTHCHECK 仅提供可见性（podman ps），
+#     自愈由 watchdog 连续失败退出触发 restart 策略
+#   - 二进制名经 build-arg BINARY_NAME 注入（build-native.sh VARIANT=worker 产物）
+# 运行前提：RABBIT_* 指向主机 1 的 LavinMQ（跨机走虚拟网 overlay，见
+# docs/data-worker-replica-deploy.md）；CLOUDFLARE_* / LLM_* 每副本各自配置
+# ============================================================================
+ARG BINARY_NAME=stock-calculator-data-service-worker
+FROM ubuntu:24.04
+
+ARG BINARY_NAME
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ca-certificates: HTTPS 调用需要（公告 PDF 下载 / CF embedding / LLM API）；
+# libstdc++6 / zlib1g: GraalVM Native 二进制运行时需要
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libstdc++6 \
+        zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建非 root 运行用户
+RUN groupadd -r spring && useradd -r -g spring spring
+
+# 统一落位为固定运行名（ENTRYPOINT/探活路径不随变体变）
+COPY --chown=spring:spring --chmod=755 target/$BINARY_NAME /application/stock-calculator-data-service
+
+USER spring:spring
+
+# 无 HTTP 端点：进程探活走心跳文件（watchdog 启动 10s 首跳、之后每 interval 刷新
+# mtime；start-period=90s 覆盖首个 interval，避免启动期误判）
+HEALTHCHECK --start-period=90s --timeout=5s --interval=60s --retries=3 \
+    CMD [ "$(( $(date +%s) - $(stat -c %Y /tmp/datasvc-heartbeat 2>/dev/null || echo 0) ))" -lt 180 ] || exit 1
+
+ENTRYPOINT ["/application/stock-calculator-data-service"]

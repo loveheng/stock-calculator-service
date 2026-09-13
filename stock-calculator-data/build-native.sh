@@ -6,17 +6,31 @@
 #   1. 依赖 contract 模块，先 install 父 POM + contract 到 ~/.m2
 #   2. 无 native profile / 无 JPA 数据源（不需要 PostgreSQL）
 #   3. 条件装配（collector/worker/ingest）在构建期钉死：AOT 固化条件评估，
-#      运行期不可再切换角色（R1 教训）。本脚本产 all-in-one 变体（三角色全开），
-#      满足 R1 PDFBox AOT 冒烟；worker-only 拆分变体见部署文档。
+#      运行期不可再切换角色（R1 教训）。VARIANT 选择产出变体：
+#        all   = all-in-one（三角色全开，现网主机形态，collector 副本恒=1）
+#        worker = 仅 worker（两域全开），collector/ingest 物理裁剪 + 无 web——
+#                 多副本扩容镜像（新机器拉 -data-worker tag 跑 N 副本竞争消费）。
+#                 已裁剪角色运行期 env 强开无效（AOT 期 bean 不存在）。
 #   4. process-aot 会实例化全部单例 → worker 的 CF/LLM fail-fast 在构建期就会触发，
 #      须注入 dummy 凭据（运行期值仍从环境变量取）。
 #
 # 用法:
 #   ./build-native.sh            # 完整构建（install contract + compile + AOT + native-image + 冒烟）
 #   ./build-native.sh --no-pkg   # 跳过 maven 编译，复用已有 target/ 产物
+#   VARIANT=worker ./build-native.sh   # 构建 worker-only 变体（二进制 -worker 后缀）
 # ============================================================================
 set -e
 cd "$(dirname "$0")"   # 进入 stock-calculator-data/
+
+# ---------------- 变体选择（VARIANT env，默认 all） ----------------
+if [ -z "$VARIANT" ]; then
+  VARIANT="all"
+fi
+case "$VARIANT" in
+  all)    BINARY_NAME="stock-calculator-data-service" ;;
+  worker) BINARY_NAME="stock-calculator-data-service-worker" ;;
+  *) echo "❌ VARIANT 仅支持 all|worker：$VARIANT" >&2; exit 1 ;;
+esac
 
 # ---------------- 步骤 0: 锁定 GraalVM 25.0.x（与 main 同套路） ----------------
 GRAALVM_HOME=""
@@ -46,20 +60,36 @@ fi
 
 echo "════════════════════════════════════════════════════════════════"
 echo " Data Service GraalVM Native 编译"
+echo "   VARIANT      = $VARIANT"
 echo "   native-image = $(native-image --version 2>&1 | head -1)"
 echo "════════════════════════════════════════════════════════════════"
 
 # 构建期钉死角色开关（AOT 固化条件评估）+ dummy 凭据（process-aot 实例化单例，
-# fail-fast 校验构建期触发；运行期值仍可经环境变量覆盖）
-export SPRING_APPLICATION_JSON='{
-  "datasvc": {
-    "collector": {"enabled": true, "announcement": {"enabled": true}},
-    "worker": {"enabled": true,
-               "embedding": {"account-id": "build-time-dummy", "api-token": "build-time-dummy"}},
-    "ingest": {"enabled": true, "secret": "build-time-dummy"},
-    "llm": {"base-url": "http://build-time.invalid", "api-key": "build-time-dummy", "model": "build-time-dummy"}
-  }
-}'
+# fail-fast 校验构建期触发；运行期值仍可经环境变量覆盖）。worker 变体同时钉
+# web-application-type=none：starter-web 是无条件依赖，不钉则 Tomcat 照启
+# （R1 ingest 坑的镜像面），钉死后 servlet 栈被 DCE 从二进制剔除
+if [ "$VARIANT" = "worker" ]; then
+  export SPRING_APPLICATION_JSON='{
+    "spring": {"main": {"web-application-type": "none"}},
+    "datasvc": {
+      "collector": {"enabled": false, "announcement": {"enabled": false}},
+      "worker": {"enabled": true,
+                 "embedding": {"account-id": "build-time-dummy", "api-token": "build-time-dummy"}},
+      "ingest": {"enabled": false},
+      "llm": {"base-url": "http://build-time.invalid", "api-key": "build-time-dummy", "model": "build-time-dummy"}
+    }
+  }'
+else
+  export SPRING_APPLICATION_JSON='{
+    "datasvc": {
+      "collector": {"enabled": true, "announcement": {"enabled": true}},
+      "worker": {"enabled": true,
+                 "embedding": {"account-id": "build-time-dummy", "api-token": "build-time-dummy"}},
+      "ingest": {"enabled": true, "secret": "build-time-dummy"},
+      "llm": {"base-url": "http://build-time.invalid", "api-key": "build-time-dummy", "model": "build-time-dummy"}
+    }
+  }'
+fi
 
 SKIP_PKG=${1:-}
 
@@ -112,7 +142,7 @@ if ! native-image \
   -H:+ReportUnsupportedElementsAtRuntime \
   --install-exit-handlers \
   --initialize-at-build-time=ch.qos.logback.classic,ch.qos.logback.core,org.slf4j,org.jboss.logging \
-  -o target/stock-calculator-data-service \
+  -o "target/$BINARY_NAME" \
   -H:NumberOfThreads=8 \
   > /tmp/ni-data-build.log 2>&1; then
   echo "❌ native-image 编译失败，日志末尾 60 行："
@@ -120,11 +150,23 @@ if ! native-image \
   exit 1
 fi
 
+# 剥离 DWARF 调试段（GraalVM 默认编入，大应用可占二进制 30~50%）：只影响 gdb
+# 符号化，不影响运行；后续冒烟与镜像打包用的都是剥离后的最终产物
+if command -v objcopy >/dev/null 2>&1; then
+  echo "█████ 剥离调试符号（objcopy --strip-debug）..."
+  BEFORE_SIZE="$(du -h "target/$BINARY_NAME" | cut -f1)"
+  objcopy --strip-debug "target/$BINARY_NAME"
+  echo "   二进制体积：剥离前 $BEFORE_SIZE → 剥离后 $(du -h "target/$BINARY_NAME" | cut -f1)"
+else
+  echo "⚠️ 未找到 objcopy，跳过调试符号剥离（不影响产物正确性）"
+fi
+
 echo "█████ 步骤 4/4: 编译完成"
-ls -lh target/stock-calculator-data-service
-file target/stock-calculator-data-service
+ls -lh "target/$BINARY_NAME"
+file "target/$BINARY_NAME"
 
 echo "==================== 启动冒烟（复用 smoke-native.sh） ===================="
-# 注意：SPRING_APPLICATION_JSON（本脚本顶部导出的构建期同款 dummy 凭据）在冒烟时
-# 仍然生效——运行期实例化单例同样会触发 CF/LLM fail-fast，须有非空值
-bash smoke-native.sh
+# 注意：SPRING_APPLICATION_JSON（本脚本导出的构建期同款 dummy 凭据）在冒烟时
+# 仍然生效——运行期实例化单例同样会触发 CF/LLM fail-fast，须有非空值；
+# VARIANT 透传给冒烟脚本（worker 变体无 HTTP 端点，探活策略不同）
+VARIANT="$VARIANT" bash smoke-native.sh

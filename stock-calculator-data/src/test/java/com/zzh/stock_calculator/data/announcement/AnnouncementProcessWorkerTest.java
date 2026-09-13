@@ -41,7 +41,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * AnnouncementProcessWorker 单测（阶段 4 任务 4）：
- * mock CninfoClient / PdfTextExtractor / LlmGateway / ResultPublisher，
+ * mock CninfoPdfClient / PdfTextExtractor / LlmGateway / ResultPublisher，
  * 结构树、切片、接地校验走真实实现；覆盖 done 载荷、毒丸终态、LLM 瞬时失败、毒消息丢弃。
  */
 class AnnouncementProcessWorkerTest {
@@ -55,7 +55,7 @@ class AnnouncementProcessWorkerTest {
                     + "管理层将持续关注宏观环境变化，及时调整经营策略以保障公司稳健发展，"
                     + "并按照监管要求履行信息披露义务。投资者应当仔细阅读本章节全部内容，充分理解相关风险揭示。";
 
-    private CninfoClient cninfoClient;
+    private CninfoPdfClient cninfoPdfClient;
     private PdfTextExtractor pdfTextExtractor;
     private AnnouncementDistillService distillService;
     private ResultPublisher resultPublisher;
@@ -64,12 +64,12 @@ class AnnouncementProcessWorkerTest {
 
     @BeforeEach
     void setUp() {
-        cninfoClient = mock(CninfoClient.class);
+        cninfoPdfClient = mock(CninfoPdfClient.class);
         pdfTextExtractor = mock(PdfTextExtractor.class);
         distillService = mock(AnnouncementDistillService.class);
         resultPublisher = mock(ResultPublisher.class);
         channel = mock(Channel.class);
-        worker = new AnnouncementProcessWorker(cninfoClient,
+        worker = new AnnouncementProcessWorker(cninfoPdfClient,
                 new TextCleaner(new AnnouncementParseProperties()),
                 pdfTextExtractor,
                 new StructureTreeBuilder(),
@@ -139,11 +139,11 @@ class AnnouncementProcessWorkerTest {
                 new MessageProperties()), channel, DELIVERY_TAG);
 
         verify(channel).basicAck(DELIVERY_TAG, false);
-        verifyNoInteractions(resultPublisher, cninfoClient);
+        verifyNoInteractions(resultPublisher, cninfoPdfClient);
     }
 
     private void stubExtraction(String cleanedText) throws java.io.IOException {
-        when(cninfoClient.downloadPdf(PDF_URL)).thenReturn(new byte[]{1, 2, 3});
+        when(cninfoPdfClient.downloadPdf(PDF_URL)).thenReturn(new byte[]{1, 2, 3});
         when(pdfTextExtractor.extract(any())).thenReturn(ExtractedDocument.of(1, List.of(cleanedText)));
     }
 

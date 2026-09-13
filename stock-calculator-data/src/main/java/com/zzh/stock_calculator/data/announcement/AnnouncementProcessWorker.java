@@ -55,7 +55,7 @@ public class AnnouncementProcessWorker {
     static final int MIN_TEXT_CHARS = 100;
     static final String ROUTE_LLM_STAGE1 = "llm_stage1";
 
-    private final CninfoClient cninfoClient;
+    private final CninfoPdfClient cninfoPdfClient;
     private final TextCleaner textCleaner;
     private final PdfTextExtractor pdfTextExtractor;
     private final StructureTreeBuilder structureTreeBuilder;
@@ -105,7 +105,7 @@ public class AnnouncementProcessWorker {
 
     /** 处理管线（无 DB）：返回 done 载荷；终态毒丸抛 SkipTerminal；其余异常按瞬时语义上抛 */
     private AnnouncementDonePayload process(AnnouncementProcessTask task) throws IOException {
-        byte[] pdf = pdfCache.computeIfAbsent(task.getAdjunctUrl(), cninfoClient::downloadPdf);
+        byte[] pdf = pdfCache.computeIfAbsent(task.getAdjunctUrl(), cninfoPdfClient::downloadPdf);
         ExtractedDocument doc = pdfTextExtractor.extract(pdf);
         String cleanedText = doc.getCleanedText();
         int charCount = cleanedText.codePointCount(0, cleanedText.length());
@@ -194,7 +194,7 @@ public class AnnouncementProcessWorker {
                 || e instanceof LlmGatewayException) {
             return "LLM_ROUTE_FAIL";
         }
-        if (e instanceof CninfoClient.CninfoHttpException || e instanceof CninfoClient.CninfoDownloadException
+        if (e instanceof CninfoPdfClient.CninfoHttpException || e instanceof CninfoPdfClient.CninfoDownloadException
                 || e instanceof IllegalArgumentException) {
             return "DOWNLOAD_FAIL";
         }

@@ -30,6 +30,14 @@ public class WorkerProperties {
 
         /** 公告处理任务 prefetch（阶段 4 接入时使用） */
         private int announcement = 2;
+
+        /**
+         * 公告任务监听器并发消费者数（默认 1 = 原行为）。PDF+LLM 均为外部 IO 等待，
+         * 提并发近似线性提单副本吞吐；注意 50MB PDF × 并发的 RSS 峰值（2~3 并发建议
+         * 预留 1~2GB 内存余量）。运行期可经 DATASVC_WORKER_PREFETCH_ANNOUNCEMENTCONCURRENCY
+         * 覆盖（值非 AOT 条件，env 可改）。
+         */
+        private int announcementConcurrency = 1;
     }
 
     @Data

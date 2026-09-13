@@ -8,7 +8,7 @@ import com.zzh.stockcalc.contract.MqPolicy;
 import com.zzh.stockcalc.contract.MqQueue;
 import com.zzh.stockcalc.contract.message.EmbeddingComputeResult;
 import com.zzh.stockcalc.contract.message.EmbeddingComputeTask;
-import com.zzh.stock_calculator.data.announcement.CninfoClient;
+import com.zzh.stock_calculator.data.announcement.CninfoPdfClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -78,11 +78,12 @@ class EmbeddingWorkerE2ETest {
     private ObjectMapper objectMapper;
 
     /**
-     * worker 门控链含 AnnouncementProcessWorker（其依赖的 CninfoClient 挂 collector 门控装配），
-     * worker-only 上下文（collector.enabled=false）需 mock 补位才能启动（同 AnnouncementWorkerE2ETest）。
+     * worker 门控链含 AnnouncementProcessWorker（其依赖的 CninfoPdfClient 由
+     * AnnouncementWorkerConfig 装配），worker-only 上下文（collector.enabled=false）
+     * 直接可启动；测试期用替身避免真实打 CNINFO（同 AnnouncementWorkerE2ETest）。
      */
     @MockitoBean
-    private CninfoClient cninfoClient;
+    private CninfoPdfClient cninfoPdfClient;
 
     @BeforeEach
     void declareCaptureQueueAndClean() {

@@ -10,6 +10,7 @@ import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportRuntimeHints;
@@ -20,10 +21,12 @@ import org.springframework.context.annotation.ImportRuntimeHints;
  * 参数约定：业务队列 quorum + DLX；retry 队列 classic + per-queue TTL（quorum 不支持）；
  * dead.q classic 停放。
  * 本类同时携带 ContractRuntimeHints（native 消费信封的反射注册，无条件）：
- * 手工 readValue/convertValue 不被 AOT 推断，缺注册则 native 反序列化必挂（R1 实证）。
+ * 手工 readValue/convertValue 不被 AOT 推断，缺注册则 native 反序列化必挂（R1 实证）；
+ * 并注册心跳 watchdog 配置（MqHeartbeatWatchdog，无条件组件）。
  */
 @Configuration
 @ImportRuntimeHints(ContractRuntimeHints.class)
+@EnableConfigurationProperties(HeartbeatProperties.class)
 public class MqTopologyConfig {
 
     // ==================== 交换机 ====================

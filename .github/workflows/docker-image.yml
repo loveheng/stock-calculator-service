@@ -260,4 +260,85 @@ jobs:
           cache-from: type=gha,scope=docker-data
           cache-to: type=gha,mode=max,scope=docker-data
 
+  # ---------------- 数据服务 worker 变体镜像（多副本扩容用） ----------------
+  # 与 build-data 同套路，差异点：
+  #   - VARIANT=worker：collector/ingest AOT 裁剪 + web-application-type=none，
+  #     冒烟仅启动行断言（无 HTTP 端点）
+  #   - 镜像名 ghcr.io/<repo>-data-worker；新机器拉本镜像跑 N 副本竞争消费
+  #     （collector 副本恒=1，见 docs/data-worker-replica-deploy.md）
+  #   - 与 build-data 并行各占一个 runner，native-image -J-Xmx12g 单构建不冲突
+  build-data-worker:
+    name: 构建数据服务 worker 变体镜像 (data-worker)
+    needs: changes
+    if: needs.changes.outputs.data == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # worker 变体同样 -J-Xmx12g，需要 8GB Swap 防编译 OOM
+      - name: 扩展虚拟内存 (Swap Space)
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 8
+
+      - name: 配置 GraalVM JDK 25 环境
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+          native-image-job-reports: true
+
+      # worker 变体冒烟无 ingest 探活（web 已裁剪），仅断言启动行
+      - name: 编译 Native 二进制 (build-native.sh, VARIANT=worker)
+        env:
+          VARIANT: worker
+        run: bash stock-calculator-data/build-native.sh
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 镜像名 = 仓库全小写 + -data-worker 后缀
+      - name: 格式化镜像名称 (全小写)
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}-data-worker" >> $GITHUB_ENV
+
+      - name: 解析镜像 Tag 和 Label 标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - name: 初始化 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建并推送 Docker 镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: ./stock-calculator-data
+          file: ./stock-calculator-data/Dockerfile.worker
+          build-args: BINARY_NAME=stock-calculator-data-service-worker
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=docker-data-worker
+          cache-to: type=gha,mode=max,scope=docker-data-worker
+
 

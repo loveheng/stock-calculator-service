@@ -36,6 +36,9 @@ datasvc:
   # 开启，native 构建须在构建期钉死该值（AOT 固化条件装配，R1 教训，collector 同）
   worker:
     enabled: false
+    prefetch:
+      # 公告监听器并发消费者数（默认 1=原行为；运行期 env 可覆盖，值非 AOT 条件）
+      announcement-concurrency: 1
     embedding:
       account-id: ${CLOUDFLARE_ACCOUNT_ID:}
       api-token: ${CLOUDFLARE_API_TOKEN:}
@@ -50,6 +53,14 @@ datasvc:
     enabled: false
     secret: ${INGEST_SECRET:}
     skew-seconds: 300
+  # MQ 心跳 watchdog（多副本改造）：连接假死检测 + 心跳文件（worker 变体 HEALTHCHECK
+  # 读 mtime）；连续失败达阈值主动退出，交由容器 restart 策略自愈。见 MqHeartbeatWatchdog
+  heartbeat:
+    enabled: true
+    interval-ms: 60000
+    timeout-ms: 10000
+    failure-threshold: 3
+    file: /tmp/datasvc-heartbeat
 
 logging:
   level:

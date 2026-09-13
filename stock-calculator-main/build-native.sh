@@ -146,6 +146,17 @@ if ! native-image \
   exit 1
 fi
 
+# 剥离 DWARF 调试段（GraalVM 默认编入，大应用可占二进制 30~50%）：只影响 gdb
+# 符号化，不影响运行；后续启动测试与镜像打包用的都是剥离后的最终产物
+if command -v objcopy >/dev/null 2>&1; then
+  echo "█████ 剥离调试符号（objcopy --strip-debug）..."
+  BEFORE_SIZE="$(du -h target/stock-calculator-service | cut -f1)"
+  objcopy --strip-debug target/stock-calculator-service
+  echo "   二进制体积：剥离前 $BEFORE_SIZE → 剥离后 $(du -h target/stock-calculator-service | cut -f1)"
+else
+  echo "⚠️ 未找到 objcopy，跳过调试符号剥离（不影响产物正确性）"
+fi
+
 echo "█████ 步骤 4/4: Native 编译完成！"
 
 echo ""

@@ -13,6 +13,12 @@ public class AnnouncementParseProperties {
 
     private final Clean clean = new Clean();
 
+    /** CNINFO PDF 下载节流最小间隔（毫秒），与 collector 侧同口径默认 */
+    private long throttleBatchIntervalMs = 300;
+
+    /** PDF 体积上限 MB（CninfoPdfClient 下载护栏，内存炸弹防御） */
+    private int pdfMaxSizeMb = 50;
+
     @Data
     public static class Clean {
 

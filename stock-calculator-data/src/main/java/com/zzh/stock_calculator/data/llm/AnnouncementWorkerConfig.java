@@ -1,5 +1,7 @@
 package com.zzh.stock_calculator.data.llm;
 
+import com.zzh.stock_calculator.data.announcement.AnnouncementParseProperties;
+import com.zzh.stock_calculator.data.announcement.CninfoPdfClient;
 import com.zzh.stock_calculator.data.config.WorkerProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,15 +22,14 @@ import java.util.Map;
 
 /**
  * 公告处理 worker 装配（设计文档 §8 阶段 4 任务 4）：datasvc.worker.enabled=true 时
- * 装配精简 LLM 网关 + 独立监听器工厂（prefetch=2，与 embedding worker prefetch=8 并存，
- * PDF+LLM 单任务耗时长，低预取保公平轮转）。配置缺失 fail-fast（worker 无降级语义，
- * 与 WorkerEmbeddingConfig 同款约定）。
+ * 装配精简 LLM 网关 + CNINFO PDF 下载客户端 + 独立监听器工厂（prefetch=2，与
+ * embedding worker prefetch=8 并存，PDF+LLM 单任务耗时长，低预取保公平轮转）。
+ * 配置缺失 fail-fast（worker 无降级语义，与 WorkerEmbeddingConfig 同款约定）。
  */
 @Slf4j
 @Configuration
 @ConditionalOnProperty(prefix = "datasvc.worker", name = "enabled", havingValue = "true")
-@EnableConfigurationProperties({LlmGatewayProperties.class,
-        com.zzh.stock_calculator.data.announcement.AnnouncementParseProperties.class})
+@EnableConfigurationProperties({LlmGatewayProperties.class, AnnouncementParseProperties.class})
 public class AnnouncementWorkerConfig {
 
     /** OpenAI 兼容 chat-completions 网关：RestClient 单渠道（精简版 LlmChainRouter） */
@@ -48,7 +49,23 @@ public class AnnouncementWorkerConfig {
         return new LlmGateway(client, props);
     }
 
-    /** 公告任务监听器工厂：手动 ack + prefetch=2（独立工厂，非全局 yml） */
+    /** CNINFO PDF 下载专用 RestClient（连接 5s/读 15s，与 collector 侧 cninfoRestClient 同参数） */
+    @Bean
+    public RestClient cninfoPdfRestClient() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(5));
+        factory.setReadTimeout(Duration.ofSeconds(15));
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
+    /** CNINFO PDF 下载客户端（worker 处理链自持，2026-09-13 多副本改造自 CninfoClient 拆出） */
+    @Bean
+    public CninfoPdfClient cninfoPdfClient(RestClient cninfoPdfRestClient, AnnouncementParseProperties props) {
+        return new CninfoPdfClient(cninfoPdfRestClient, props);
+    }
+
+    /** 公告任务监听器工厂：手动 ack + prefetch=2 + 并发消费者（独立工厂，非全局 yml） */
     @Bean
     public SimpleRabbitListenerContainerFactory announcementWorkerListenerFactory(
             ConnectionFactory connectionFactory, WorkerProperties props) {
@@ -56,6 +73,7 @@ public class AnnouncementWorkerConfig {
         factory.setConnectionFactory(connectionFactory);
         factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
         factory.setPrefetchCount(props.getPrefetch().getAnnouncement());
+        factory.setConcurrentConsumers(props.getPrefetch().getAnnouncementConcurrency());
         return factory;
     }
 

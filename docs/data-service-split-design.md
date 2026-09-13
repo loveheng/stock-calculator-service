@@ -383,7 +383,7 @@ datasvc:   # 数据服务侧（stock-calculator-data）
 | 优雅停机 | listener shutdown-timeout 30s 排空在途消息；terminationGracePeriodSeconds=60；未 ack 消息回归队列由其他副本接管 |
 | 缩容安全 | 消息持久化 + 快速 native 冷启动 → 缩容丢弃的是「空闲」，不是「在途」 |
 | RabbitMQ 本身 | 单机部署，quorum 队列持久化；消息均可对账重发（D6），MQ 单点可接受 |
-| 部署形态 | 同一数据服务镜像两个 deployment（role 环境变量区分）；主服务不变 |
+| 部署形态 | 两镜像：all-in-one（`-data`，collector+worker+ingest 全开，副本恒=1 的主机形态）+ worker 变体（`-data-worker`，collector/ingest AOT 裁剪 + 无 web，2026-09-13 多副本改造新增）；角色隔离在构建期完成（原设计「role 环境变量运行期区分」因 AOT 条件固化不可行而调整为双变体，运行期 env 强开被裁角色无效），主服务不变；部署手册见 docs/data-worker-replica-deploy.md |
 
 ## 7. 实证清单（实现前/中验证）
 

@@ -53,8 +53,8 @@ import static org.mockito.Mockito.when;
  * LLM 经本地 HTTP 桩（JDK HttpServer 冒充 OpenAI 兼容 /chat/completions，
  * 按请求体"路由引擎"标记分流路由/蒸馏两段响应）→ result.announcement.done 上行 →
  * 捕获队列断言；失败支路经 mock 下载异常（DOWNLOAD_FAIL/TRANSIENT）验证 failed 上行。
- * CninfoClient 为 @MockitoBean 桩（E2E 不真实打 CNINFO；collector.enabled=false 防真实打
- * CLS API，CollectorGateTest 教训——worker 依赖的 CninfoClient 由 mock 补位）。
+ * CninfoPdfClient 为 @MockitoBean 替身（E2E 不真实打 CNINFO；collector.enabled=false 防真实打
+ * CLS API，CollectorGateTest 教训——真实 bean 由 AnnouncementWorkerConfig 装配，测试期替换）。
  * LLM 桩端口随机（@DynamicPropertySource 惰性解析，@BeforeAll 启动后回填）。
  */
 @EnabledIfEnvironmentVariable(named = "RABBIT_E2E", matches = "true")
@@ -99,7 +99,7 @@ class AnnouncementWorkerE2ETest {
     private ObjectMapper objectMapper;
 
     @MockitoBean
-    private CninfoClient cninfoClient;
+    private CninfoPdfClient cninfoPdfClient;
 
     @BeforeAll
     static void startLlmStubAndBuildPdf() throws Exception {
@@ -185,7 +185,7 @@ class AnnouncementWorkerE2ETest {
     @Test
     @DisplayName("task 下发 → worker 全真解析+桩 LLM 蒸馏 → result.announcement.done 上行 → 队列清空无死信")
     void taskProcessedAndDonePublished() throws Exception {
-        when(cninfoClient.downloadPdf(PDF_URL)).thenReturn(pdfBytes);
+        when(cninfoPdfClient.downloadPdf(PDF_URL)).thenReturn(pdfBytes);
         publishTask("e2e-ann-001", PDF_URL, TRACE_DONE);
 
         AnnouncementDonePayload done = awaitResult(TRACE_DONE, MessageType.RESULT_ANNOUNCEMENT_DONE,
@@ -209,8 +209,8 @@ class AnnouncementWorkerE2ETest {
     @Test
     @DisplayName("下载失败（CninfoDownloadException）→ failed(DOWNLOAD_FAIL/TRANSIENT) 上行 → 队列清空无死信")
     void downloadFailureReportsFailed() throws Exception {
-        when(cninfoClient.downloadPdf(FAIL_URL))
-                .thenThrow(new CninfoClient.CninfoDownloadException("mock download incomplete"));
+        when(cninfoPdfClient.downloadPdf(FAIL_URL))
+                .thenThrow(new CninfoPdfClient.CninfoDownloadException("mock download incomplete"));
         publishTask("e2e-ann-002", FAIL_URL, TRACE_FAIL);
 
         AnnouncementFailedPayload failed = awaitResult(TRACE_FAIL, MessageType.RESULT_ANNOUNCEMENT_FAILED,

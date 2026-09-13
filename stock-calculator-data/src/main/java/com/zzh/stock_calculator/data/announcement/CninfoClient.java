@@ -6,10 +6,8 @@ import com.zzh.stock_calculator.data.config.CollectorProperties;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
-import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -17,23 +15,21 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * CNINFO 客户端（设计文档 §4.1，S3 实证落码）：最小请求头（仅 UA）即可通，
+ * CNINFO 查询客户端（collector 采集链专用）：最小请求头（仅 UA）即可通，
  * 无 Cookie/Referer 依赖；全部请求经节流器串行化（throttle.batchIntervalMs）；
  * column/plate 按 secCode 首位推导（6 开头 sse/sh，否则 szse/sz；北交所未实证 TODO）。
- * <p>2026-09-11 阶段 4 任务 2 自主服务 announcement/client 平移（采集迁出 D1）：
- * properties 换为 CollectorProperties；downloadPdf 属 worker 处理链（任务 4）先行随迁。
- * 由 CollectorConfig（collector.enabled 门控）@Bean 装配，不走组件扫描——
- * data 服务无共享 RestClient bean，worker 部署（collector.enabled=false）无需本类。</p>
+ * <p>2026-09-11 阶段 4 任务 2 自主服务 announcement/client 平移（采集迁出 D1）。
+ * 2026-09-13 多副本改造：downloadPdf 与异常分类迁出至 CninfoPdfClient（worker
+ * 处理链自持）——本类仅剩查询面，由 CollectorConfig（collector.enabled 门控）
+ * @Bean 装配，worker 部署（collector.enabled=false）无本类。</p>
  */
 public class CninfoClient {
 
     public static final String QUERY_URL = "https://www.cninfo.com.cn/new/hisAnnouncement/query";
     public static final String TOP_SEARCH_URL = "https://www.cninfo.com.cn/new/information/topSearch/query";
-    public static final String STATIC_BASE = "http://static.cninfo.com.cn/";
 
     private static final String USER_AGENT =
             "Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0";
-    private static final String PDF_MAGIC = "%PDF-";
     private static final DateTimeFormatter DAY = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private final RestClient restClient;
@@ -99,85 +95,6 @@ public class CninfoClient {
                 .map(CninfoTopSearchItem::getOrgId)
                 .findFirst()
                 .orElse(null);
-    }
-
-    /**
-     * PDF 内存下载（§5）：exchange 手动分流状态码；Content-Length 超限先拒（内存炸弹）；
-     * readNBytes 限读；魔数校验（防 HTML 错误页伪装）；不落盘。worker 公告处理链（任务 4）使用。
-     */
-    public byte[] downloadPdf(String adjunctUrl) {
-        throttle();
-        String url = adjunctUrl.startsWith("http") ? adjunctUrl : STATIC_BASE + adjunctUrl;
-        long maxBytes = (long) properties.getAnnouncement().getPdfMaxSizeMb() * 1024 * 1024;
-        return restClient.get()
-                .uri(url)
-                .header(HttpHeaders.USER_AGENT, USER_AGENT)
-                .exchange((request, response) -> {
-                    if (response.getStatusCode().isError()) {
-                        throw new CninfoHttpException(response.getStatusCode().value(), "下载失败: " + url);
-                    }
-                    long contentLength = response.getHeaders().getContentLength();
-                    if (contentLength > maxBytes) {
-                        throw new IllegalArgumentException(
-                                "PDF 体积超上限: " + contentLength + " > " + maxBytes + " " + url);
-                    }
-                    try (InputStream in = response.getBody()) {
-                        byte[] bytes = in.readNBytes((int) Math.min(maxBytes + 1, Integer.MAX_VALUE - 8L));
-                        if (contentLength > 0 && bytes.length != contentLength) {
-                            throw new CninfoDownloadException(
-                                    "下载不完整: " + bytes.length + "/" + contentLength + " " + url);
-                        }
-                        if (bytes.length < PDF_MAGIC.length()
-                                || !PDF_MAGIC.equals(new String(bytes, 0, PDF_MAGIC.length(), StandardCharsets.US_ASCII))) {
-                            throw new CninfoDownloadException("非 PDF 魔数: " + url);
-                        }
-                        return bytes;
-                    }
-                });
-    }
-
-    /**
-     * 错误分类（§4.5）：429 → RATE_LIMITED（熔断本批）；5xx/网络/内容异常 → TRANSIENT（计次重试）；
-     * 4xx/体积超限 → PERMANENT（终态）。
-     */
-    public enum CninfoErrorKind { TRANSIENT, RATE_LIMITED, PERMANENT }
-
-    public static CninfoErrorKind classify(Throwable t) {
-        if (t instanceof CninfoHttpException http) {
-            if (http.getStatus() == 429) {
-                return CninfoErrorKind.RATE_LIMITED;
-            }
-            return http.getStatus() >= 500 ? CninfoErrorKind.TRANSIENT : CninfoErrorKind.PERMANENT;
-        }
-        if (t instanceof ResourceAccessException || t instanceof CninfoDownloadException) {
-            return CninfoErrorKind.TRANSIENT;
-        }
-        if (t instanceof IllegalArgumentException) {
-            // 体积超限拒绝走此分支：单文件永久性，重试无意义
-            return CninfoErrorKind.PERMANENT;
-        }
-        return CninfoErrorKind.TRANSIENT;
-    }
-
-    /** CNINFO HTTP 非 2xx（status 供 classify 分流） */
-    public static class CninfoHttpException extends RuntimeException {
-        private final int status;
-
-        public CninfoHttpException(int status, String message) {
-            super(message);
-            this.status = status;
-        }
-
-        public int getStatus() {
-            return status;
-        }
-    }
-
-    /** 下载内容异常（非 PDF 魔数/不完整）→ TRANSIENT 重试类 */
-    public static class CninfoDownloadException extends RuntimeException {
-        public CninfoDownloadException(String message) {
-            super(message);
-        }
     }
 
     /** 全部 CNINFO 请求统一节流（串行 + 最小间隔） */
