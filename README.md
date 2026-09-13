@@ -149,8 +149,8 @@ flowchart LR
 git clone <repo-url>
 cd stock-calculator-service
 
-# 2. 启动本地数据库基础设施（postgres，见根目录 docker-compose.yml）
-docker compose up -d postgres
+# 2. 启动本地数据库基础设施（postgres，见根目录 docker-compose.middleware.yml）
+docker compose -f docker-compose.middleware.yml up -d postgres
 
 # 3. 首次运行需手动建表（sql.init.mode=never，不自动执行 DDL）
 psql -h localhost -U root -d scs -f postgres/schema.sql
@@ -257,15 +257,14 @@ docker run -d --name stock-calculator-jvm \
   stock-calculator:jvm
 ```
 
-### Docker Compose（基础设施 + 应用本体）
+### Docker Compose（中间件与应用分文件管理）
 
-根目录的 `docker-compose.yml` 同时提供本地基础设施与应用本体：
+根目录拆为两个 compose 文件，生命周期分开管理（均从项目根目录执行，`.env` 自动加载）：
 
-- `pgvector/pgvector:pg16` — 爬虫入库所需（库名 `scs`，口令从 `.env` 注入）
-- `redis:7-alpine` — 会话缓存与限流计数（AOF 持久化）
-- `ghcr.io/loveheng/stock-calculator-service` — 应用本体（GraalVM Native 镜像，默认 tag `1942570`）
+- `docker-compose.middleware.yml` — 中间件层：`pgvector/pgvector:pg16`（爬虫入库所需，库名 `scs`，口令从 `.env` 注入）、`redis:7-alpine`（会话缓存与限流计数，AOF 持久化）、`lavinmq`（含一次性建号容器）
+- `docker-compose.app.yml` — 应用层：`ghcr.io/loveheng/stock-calculator-service`（应用本体，GraalVM Native 镜像，默认 tag `1942570`）、`data*` 数据服务、`frontend`
 
-应用容器等 postgres / redis 健康检查通过后启动，启动/连接变量均在项目根 `.env` 中配置：
+两层经固定名网络 `scs-net` 互通（应用容器经服务名 `postgres` / `redis` / `lavinmq` 访问中间件），先启动中间件、再启动应用层；应用 `restart: unless-stopped`，中间件晚起可自愈重连。启动/连接变量均在项目根 `.env` 中配置：
 
 ```dotenv
 POSTGRES_PASSWORD=...             # 必填：Postgres 与应用共用口令
@@ -277,7 +276,10 @@ APP_ARGS=--crawler.enabled=false  # 可选：附加 Spring Boot 启动参数（�
 ```
 
 ```bash
-docker compose up -d
+# 中间件层（日常很少动）
+docker compose -f docker-compose.middleware.yml up -d
+# 应用层（发版只重建这一层）
+docker compose -f docker-compose.app.yml up -d
 ```
 
 ### CI/CD 自动构建
@@ -411,7 +413,8 @@ stock-calculator-service/
 │   └── Dockerfile.native              # 仅拷贝二进制的最小镜像
 ├── postgres/                          # schema.sql / data.sql（建表 DDL，需手动执行）
 ├── Dockerfile                         # JVM 镜像（构建 main 模块）
-├── docker-compose.yml                 # postgres / redis + 应用本体（Native 镜像）
+├── docker-compose.middleware.yml      # 中间件层：postgres / redis / lavinmq
+├── docker-compose.app.yml             # 应用层：app / data / frontend（Native 镜像）
 └── .github/workflows/docker-image.yml # CI：Native 镜像构建并推送 GHCR
 ```
 

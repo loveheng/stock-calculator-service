@@ -295,7 +295,7 @@ sequenceDiagram
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | 必须注入，否则找回链路 500 |
 | `MAIL_FROM` | 可选发件人，空则用 SMTP 默认值 |
 | DB | `POSTGRES_URL` / `POSTGRES_USER` / `POSTGRES_PASS`（默认 localhost/scs） |
-| Redis | `REDIS_HOST` / `REDIS_PORT`（默认 localhost:6379）：会话热读缓存 + 限流计数。不可用时自动降级（会话回源 DB、限流 fail-open 放行），认证主链路不阻塞；docker-compose.yml 已含 redis 服务（AOF 持久化） |
+| Redis | `REDIS_HOST` / `REDIS_PORT`（默认 localhost:6379）：会话热读缓存 + 限流计数。不可用时自动降级（会话回源 DB、限流 fail-open 放行），认证主链路不阻塞；docker-compose.middleware.yml 已含 redis 服务（AOF 持久化） |
 
 ---
 

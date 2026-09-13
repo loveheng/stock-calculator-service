@@ -146,15 +146,18 @@ if ! native-image \
   exit 1
 fi
 
-# 剥离 DWARF 调试段（GraalVM 默认编入，大应用可占二进制 30~50%）：只影响 gdb
-# 符号化，不影响运行；后续启动测试与镜像打包用的都是剥离后的最终产物
+# 剥离全部符号（--strip-all = 符号表 ~20MB + DWARF 调试段，本应用实测 DWARF 仅
+# ~140KB，大头是 symtab；只影响 gdb 符号化，不影响运行——Java 异常堆栈走运行期
+# 自身元数据，实测剥后照常打印）。不用 --strip-debug：其在不同 binutils 版本上
+# 是否连带剥 .symtab 行为不一致（本地剥后 file 仍报 not stripped、CI 却是 stripped），
+# --strip-all 各环境结果确定。后续启动测试与镜像打包用的都是剥离后的最终产物
 if command -v objcopy >/dev/null 2>&1; then
-  echo "█████ 剥离调试符号（objcopy --strip-debug）..."
+  echo "█████ 剥离全部符号（objcopy --strip-all）..."
   BEFORE_SIZE="$(du -h target/stock-calculator-service | cut -f1)"
-  objcopy --strip-debug target/stock-calculator-service
+  objcopy --strip-all target/stock-calculator-service
   echo "   二进制体积：剥离前 $BEFORE_SIZE → 剥离后 $(du -h target/stock-calculator-service | cut -f1)"
 else
-  echo "⚠️ 未找到 objcopy，跳过调试符号剥离（不影响产物正确性）"
+  echo "⚠️ 未找到 objcopy，跳过符号剥离（不影响产物正确性）"
 fi
 
 echo "█████ 步骤 4/4: Native 编译完成！"

@@ -26,8 +26,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 连续失败达阈值即 System.exit，交由 restart: unless-stopped 拉起。
  * <p>线程模型：tick 用单线程 ScheduledExecutor（不占 Spring 共享调度池，防 hang 波及
  * collector cron）；探活单独线程池 + 硬超时（半开 TCP 下 declare-ok 可能永不返回），
- * 挂死的探活线程随连接消亡，泄漏有界。成功时原子刷新心跳文件 mtime，供镜像层
- * HEALTHCHECK（Dockerfile.worker，无 HTTP 端点变体）按文件年龄判活——HEALTHCHECK
+ * 挂死的探活线程随连接消亡，泄漏有界。成功时原子刷新心跳文件 mtime（黑盒排障
+ * 信号，历史 worker 变体的镜像层判活来源）——HEALTHCHECK
  * 只提供可见性，自愈完全由本类退出驱动。</p>
  */
 @Slf4j

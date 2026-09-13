@@ -28,8 +28,11 @@ spring:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
   sql:
     init:
-      # data.sql 默认数据播种（copilot prompt 模版等）：外置 PostgreSQL 默认不执行，必须显式开启；
-      # 脚本内 ON CONFLICT DO NOTHING 保证幂等（缺才插，不覆盖已有行）
+      # schema.sql + data.sql 由 pom resources 从 postgres/ 打包到 classpath 根
+      # （即默认脚本位置），每次启动自动建表+播种（copilot prompt 模版等）；
+      # 脚本幂等（IF NOT EXISTS / ON CONFLICT DO NOTHING，缺才插不覆盖已有行）；
+      # 连接的库必须带 pgvector 扩展（schema.sql 会 CREATE EXTENSION vector）；
+      # native 资源由 Boot SqlInitializationScriptsRuntimeHints 自动注册
       mode: always
   task:
     scheduling:

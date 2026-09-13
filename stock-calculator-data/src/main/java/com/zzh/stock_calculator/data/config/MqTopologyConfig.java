@@ -63,9 +63,19 @@ public class MqTopologyConfig {
         return businessQueue(MqQueue.TASK_EMBEDDING_COMPUTE);
     }
 
+    /**
+     * 历史补录队列：单活跃消费者（x-single-active-consumer）——单镜像多副本下
+     * 「恰一个补录执行者」从打包门控迁移到协议仲裁：全舰队任一时刻仅一个副本
+     * 消费（prefetch=1 串行多任务），活跃副本挂掉其余副本自动顶替；
+     * CLS 动态频控在单消费者语义下与副本数天然解耦。
+     */
     @Bean
     public Queue taskHistorySyncQueue() {
-        return businessQueue(MqQueue.TASK_HISTORY_SYNC);
+        return QueueBuilder.durable(MqQueue.TASK_HISTORY_SYNC)
+                .quorum()
+                .deadLetterExchange(MqExchange.DLX)
+                .singleActiveConsumer()
+                .build();
     }
 
     // ---- 自循环拉取队列（docs/pull-loop-unification-design.md §3） ----
@@ -105,12 +115,6 @@ public class MqTopologyConfig {
     @Bean
     public Queue resultIngestQueue() {
         return businessQueue(MqQueue.RESULT_INGEST);
-    }
-
-    /** 控制面队列：快照覆盖式语义，消息丢失/失败由下一次快照兜底，不进重试环 */
-    @Bean
-    public Queue collectorControlQueue() {
-        return QueueBuilder.durable(MqQueue.COLLECTOR_CONTROL).build();
     }
 
     /** 死信停放队列：classic，人工/告警处置 */
@@ -224,12 +228,8 @@ public class MqTopologyConfig {
         return bind(MqQueue.RESULT_INGEST, resultsExchange(), MqKey.BIND_RESULT_ALL);
     }
 
-    // ---- control：订阅快照 ----
-
-    @Bean
-    public Binding collectorControlBinding() {
-        return bind(MqQueue.COLLECTOR_CONTROL, controlExchange(), MqKey.BIND_CONTROL_ALL);
-    }
+    // ---- control：订阅快照（控制面队列/绑定由 SubscriptionSnapshotConsumer 的
+    //      @QueueBinding 声明式自建——每副本匿名队列，native 下不可用 SpEL 引队列 bean） ----
 
     // ---- dlx：原 routing key → 对应 retry 队列；dead.# → 停放 ----
 

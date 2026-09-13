@@ -29,10 +29,12 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
- * CLS 历史补录执行器（设计文档 §3.2/§4.3，task.history.sync 单发单收，collector 角色）：
+ * CLS 历史补录执行器（设计文档 §3.2/§4.3，task.history.sync 挂 x-single-active-consumer）：
  * 主服务管理端点（/api/admin/sync/history/start）下发区间任务，本类滚动窗口拉取
  * （自 startTime 向 endTime 游标推进），逐条解析为契约 DTO 经 result.cls.article 上行，
  * 主服务幂等入库承担去重（D3/D6）；执行完回 result.cls.history.report（日志级回执）。
+ * 单镜像多副本下「恰一个执行者」由队列 SAC 协议仲裁：抢到就是谁的，活跃副本挂掉
+ * 其余副本自动顶替——CLS 动态频控单消费者语义与副本数解耦。
  * <p>进程内无游标无状态（D2）：区间重发无害；连续 5 次空数据自动终止（源站真空期防护）；
  * 交易时段动态降频防风控（原 main HistoryClsDayTask 频控策略平移）。</p>
  * <p>失败语义：区间任务为运维触发的有界动作，异常记日志后 ack 丢弃（不进重试环），

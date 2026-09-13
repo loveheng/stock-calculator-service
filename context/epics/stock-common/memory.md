@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: stock-common
-total-merged: 0
-last-merge: none
+total-merged: 1
+last-merge: 2026-09-13
 ---
 
 # stock-common：main 与 data 模块公共实体抽取评估
@@ -69,6 +69,10 @@ last-merge: none
 - 设计决策：docs/data-service-split-design.md §0 D2/D9、§3.1/§3.2 迁移映射、§8 回退策略、§9 R2
 - 配置门控：stock-calculator-main/src/main/resources/application.yml（datasvc.mq.enabled 默认 false、crawler.enabled true、announcement.process.enabled false）
 - 平移实证：data 侧 ClsSignUtil javadoc「算法不变」；AnnouncementProcessWorker 注释「与主服务 processOne 同口径」
+
+## 杂项记录
+
+- .gitignore 已忽略 context/CURRENT 并解除 git 追踪（个人指针不入库，context/ 其余部分随项目提交）。（2026-09-12）
 
 ## 断点
 

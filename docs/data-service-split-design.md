@@ -1,6 +1,22 @@
 # 数据服务拆分与 MQ 通信 · 后端设计文档
 
-> 版本：v2.4（2026-09-12，终态清理完成：main 侧回退路径删除，MQ 单路径）：
+> 版本：v2.5（2026-09-13，单镜像多副本改造：worker 变体退役，「恰一个」语义从打包
+> 门控迁移到 MQ 协议仲裁——① task.history.sync 挂 x-single-active-consumer，补录
+> 全舰队任一时刻仅一个副本消费（抢到就是谁的，活跃副本挂掉自动顶替），CLS 动态
+> 频控单消费者语义与副本数解耦；② 控制面 collector.control.q（单发单收）改每副本
+> 独占匿名队列（@QueueBinding 声明式，exclusive + auto-delete）绑 control.# 广播，
+> 快照/拉取配置送达全副本，消除多副本配置漂移；③ 常态拉取维持种子 + 深度守卫
+> 不变（L2 复核成立：探-种顺序使多余种子自愈收敛，SAC 对拉取环无增益）；
+> ④ 主服务发布端零改动（CONTROL topic 交换机与 routing key 不变）；⑤ 退役
+> Dockerfile.worker / VARIANT=worker（CI 双 job 并一、compose data-worker 块删除），
+> 部署矩阵收敛为单镜像任意副本；一次性迁移（删 task.history.sync 旧队列、清理
+> collector.control.q）见 docs/data-worker-replica-deploy.md §4。
+> 踩坑：native 下 @RabbitListener 队列名 SpEL 引 bean（JVM 可跑）冒烟即挂
+> Expression parsing failed，改 @QueueBinding 声明式（见 lessons）。
+> 验收：data 79 用例全绿；JVM+AOT 上下文与 native 二进制分别对一次性 LavinMQ
+> 实例实测——SAC 参数落盘、匿名队列声明/绑定/消费者注册、ingest 冒烟 503/400 双绿；
+> native 13m29s 重建通过）
+> 历版本：v2.4（2026-09-12，终态清理完成：main 侧回退路径删除，MQ 单路径）：
 > §8 回退策略存续期间的双路径门控（datasvc.mq.enabled / crawler.enabled）按终态规划退役——
 > main 删除 announcement 进程内管道（parser 5 件套/CninfoClient+DTO/ExtractedDocument/
 > DistillService/GroundingValidator/ProcessService/CollectService/SyncTask/订阅首拉监听）、
@@ -383,7 +399,7 @@ datasvc:   # 数据服务侧（stock-calculator-data）
 | 优雅停机 | listener shutdown-timeout 30s 排空在途消息；terminationGracePeriodSeconds=60；未 ack 消息回归队列由其他副本接管 |
 | 缩容安全 | 消息持久化 + 快速 native 冷启动 → 缩容丢弃的是「空闲」，不是「在途」 |
 | RabbitMQ 本身 | 单机部署，quorum 队列持久化；消息均可对账重发（D6），MQ 单点可接受 |
-| 部署形态 | 两镜像：all-in-one（`-data`，collector+worker+ingest 全开，副本恒=1 的主机形态）+ worker 变体（`-data-worker`，collector/ingest AOT 裁剪 + 无 web，2026-09-13 多副本改造新增）；角色隔离在构建期完成（原设计「role 环境变量运行期区分」因 AOT 条件固化不可行而调整为双变体，运行期 env 强开被裁角色无效），主服务不变；部署手册见 docs/data-worker-replica-deploy.md |
+| 部署形态 | 单镜像：`-data`（collector/worker/ingest 全开）× 任意副本，跨机/云上按需增减；「恰一个」语义由 MQ 协议仲裁（v2.5：常态拉取=种子+深度守卫、历史补录=队列 SAC、控制面=每副本匿名队列广播、worker=竞争消费），worker 变体已退役——打包不再承载角色区分，主服务不变；部署手册见 docs/data-worker-replica-deploy.md |
 | 常态拉取统一化（已实施） | collector 两个 cron 已改为 TTL+DLX 自循环延迟任务（LavinMQ per-message TTL 已实证），main 升级为控制面（配置/心跳两表 + 看门狗补种 + control 快照下发）；完整推演（含被否方案与约束修正）与实施记录见 docs/pull-loop-unification-design.md |
 
 ## 7. 实证清单（实现前/中验证）

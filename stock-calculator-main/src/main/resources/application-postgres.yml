@@ -6,6 +6,6 @@ spring:
     password: ${POSTGRES_PASS:}
   sql:
     init:
-      # data.sql 默认数据播种（copilot prompt 模版等）：必须 always，否则外置 PG 默认不执行；
-      # 脚本内 ON CONFLICT DO NOTHING 保证幂等（缺才插，不覆盖已有行）。回滚此行 = 停用播种。
+      # schema.sql/data.sql 打包在 classpath 根（pom resources，源文件 postgres/），
+      # 启动时自动建表+播种，详见 application.yml 同节点注释。回滚此行 = 停用。
       mode: always

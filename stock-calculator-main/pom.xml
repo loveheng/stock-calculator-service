@@ -120,6 +120,24 @@
         </dependency>
     </dependencies>
     <build>
+        <resources>
+            <!-- 一旦声明 resources 即覆盖 Maven 默认映射，默认目录必须显式保留 -->
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- postgres/schema.sql + data.sql → classpath 根（Boot 默认脚本位置）：
+                 配合 spring.sql.init.mode=always，应用每次启动自动建表+播种（脚本幂等）；
+                 native 资源由 Boot 内置 SqlInitializationScriptsRuntimeHints
+                 （schema.sql/schema-*.sql/data.sql/data-*.sql 四个模式）自动注册，
+                 无需手动 hints。文件本体仍以 postgres/ 目录为事实源（README/设计文档引用） -->
+            <resource>
+                <directory>../postgres</directory>
+                <includes>
+                    <include>schema.sql</include>
+                    <include>data.sql</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

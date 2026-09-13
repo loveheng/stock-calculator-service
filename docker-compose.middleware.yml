@@ -1,3 +1,11 @@
+# 中间件层：postgres / redis / lavinmq（+ 一次性建号容器 lavinmq-init）。
+# 与应用层 docker-compose.app.yml 分文件管理，经固定名网络 scs-net 互通：
+#   docker compose -f docker-compose.middleware.yml up -d   # 先启动中间件
+#   docker compose -f docker-compose.app.yml up -d          # 再启动应用层
+# 应用容器跨 compose 项目经服务名（postgres / redis / lavinmq）DNS 互访，
+# .env 中的 POSTGRES_URL / REDIS_HOST / RABBIT_HOST 等无需改动。
+# 两个 compose 文件共用目录派生的项目名：down 只移除本文件定义的服务，
+# 另一文件的容器不受影响（v1/v2 默认都不清理 orphan）。
 services:
   postgres:
     image: docker.io/pgvector/pgvector:pg16
@@ -20,6 +28,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      scs-net:
+        # 显式别名：应用层（另一个 compose 项目）也靠它在 scs-net 上解析服务名
+        aliases: [postgres]
 
   # E2EE 用户服务缓存层（决策 B11）：会话热读缓存 + 限流计数；
   # AOF 持久化保证限流计数等缓存数据重启不丢；Postgres 仍是会话唯一事实源
@@ -35,6 +47,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      scs-net:
+        aliases: [redis]
 
   lavinmq:
     image: docker.io/cloudamqp/lavinmq:latest
@@ -50,6 +65,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      scs-net:
+        aliases: [lavinmq]
 
   # 一次性初始化容器：经 control socket（共享卷，不经网络、无需凭据）把 .env 的
   # RABBIT_* 账号建进 LavinMQ 并授权。幂等：账号已存在时 add_user 直接成功，
@@ -72,70 +90,13 @@ services:
         lavinmqctl change_password "${RABBIT_USER:-scs}" "${RABBIT_PASS:?未设置 RABBIT_PASS}" &&
         lavinmqctl set_permissions "${RABBIT_USER:-scs}" '.*' '.*' '.*' &&
         lavinmqctl set_user_tags "${RABBIT_USER:-scs}" monitoring
-
-  # 应用本体（CI 推送的 GraalVM Native 镜像）。.env 经 env_file 全量注入容器：
-  # GEMINI_API_KEY、GROQ_API_KEY、AZURE_OCR_API_KEY、OCRSPACE_API_KEY、SMTP_*、
-  # CRAWLER_ADMIN_TOKEN 等直接写 .env 即可（Spring 宽松绑定也能覆盖任意配置项）；
-  # 另有三个 compose 变量：APP_PORT（宿主端口）、APP_IMAGE_TAG（镜像 tag）、
-  # APP_ARGS（附加启动参数，空格分隔）。
-  app:
-    image: ghcr.io/loveheng/stock-calculator-service:${APP_IMAGE_TAG:-1942570}
-    ports:
-      - "${APP_PORT:-18080}:18080"
-    env_file:
-      - .env
-    # 启动参数：.env 中 APP_ARGS=--crawler.enabled=false 即可追加程序参数
-    entrypoint: ["/bin/sh", "-c", "exec /application/stock-calculator-service $$APP_ARGS"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      lavinmq:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # 数据服务（CI 推送的 GraalVM Native 镜像，镜像名 = 主镜像 + -data 后缀）。
-  # 无 JPA 数据源，不连 postgres，只依赖 LavinMQ；collector/worker/ingest 三角色
-  # 已在镜像内 AOT 钉死（all-in-one），运行期不可切换。worker 的 CLOUDFLARE_*、
-  # 蒸馏 LLM 的 LLM_*、ingest 的 INGEST_SECRET、RABBIT_* 连接拓扑经 env_file 从 .env 注入。
-  data:
-    image: ghcr.io/loveheng/stock-calculator-service-data:${DATA_IMAGE_TAG:-3a4f486}
-    ports:
-      - "${DATA_PORT:-18081}:8080"   # 仅 ingest webhook 使用，不用 ingest 可注释掉
-    env_file:
-      - .env
-    depends_on:
-      lavinmq:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # 数据服务 worker 变体（多副本扩容用）：collector/ingest 已在镜像内 AOT 裁剪，
-  # 仅剩 worker 两域（公告蒸馏 + 向量化）竞争消费任务队列，无 HTTP 端口。
-  # profile 门控：主机 1 compose up 默认不激活；新机器上复制本 compose + .env，
-  # RABBIT_HOST 指向主机 1 的虚拟网地址后 --profile data-worker 启动。
-  # 每副本不同 key：CLOUDFLARE_* / LLM_* 是运行期值，改各副本 env 即可
-  # （同机多副本不同 key 用多个 service 块或 podman run --env-file）。
-  # 详见 docs/data-worker-replica-deploy.md
-  data-worker:
-    image: ghcr.io/loveheng/stock-calculator-service-data-worker:${DATA_IMAGE_TAG:-3a4f486}
-    env_file:
-      - .env
-    # 公告 worker 并发消费者数（默认 1；值非 AOT 条件可运行期覆盖）。
-    # 2~3 并发注意 PDF RSS 峰值，mem_limit 2g 即按此估算
-    # environment:
-    #   DATASVC_WORKER_PREFETCH_ANNOUNCEMENTCONCURRENCY: 2
-    mem_limit: 2g
-    restart: unless-stopped
-    profiles: ["data-worker"]
-
-  frontend:
-    # 如果已推送到镜像仓库用 image，若是本地构建可用 build: ./frontend
-    image: ghcr.io/loveheng/stock-calculator:${FRONTEND_IMAGE_TAG:-sha-50ce249}
-    ports:
-      - "3000:3000"
-    restart: unless-stopped
+    # 仅经共享卷里的 control socket 通信，无需加入 scs-net
 
 volumes:
   # 共享给 lavinmq-init 的 LavinMQ control socket（/tmp/lavinmqctl.sock）
   lavinmq-ctl:
+
+networks:
+  # 固定网络名：应用层 compose（docker-compose.app.yml）以 external: true 加入同名网络
+  scs-net:
+    name: scs-net

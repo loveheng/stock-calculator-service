@@ -1,0 +1,55 @@
+# 应用层：app / data / frontend（data 单镜像可跨机任意加副本）。
+# 依赖中间件层（docker-compose.middleware.yml 提供 postgres / redis / lavinmq），
+# 启动顺序：先中间件，后应用；应用均 restart: unless-stopped，中间件晚起可自愈重连，
+# 故跨文件不再写 depends_on（compose 跨项目无法引用另一文件的服务）。
+# 互通：加入中间件层创建的固定名网络 scs-net（external，仅加入不创建），
+# 经服务名 postgres / redis / lavinmq 做 DNS 访问。
+# 若本机不跑中间件（如 data 副本机），先执行：docker network create scs-net
+# 注意：两个文件名都不是 compose 默认名，所有命令需 -f 显式指定。
+services:
+  # 应用本体（CI 推送的 GraalVM Native 镜像）。.env 经 env_file 全量注入容器：
+  # GEMINI_API_KEY、GROQ_API_KEY、AZURE_OCR_API_KEY、OCRSPACE_API_KEY、SMTP_*、
+  # CRAWLER_ADMIN_TOKEN 等直接写 .env 即可（Spring 宽松绑定也能覆盖任意配置项）；
+  # 另有三个 compose 变量：APP_PORT（宿主端口）、APP_IMAGE_TAG（镜像 tag）、
+  # APP_ARGS（附加启动参数，空格分隔）。
+  app:
+    image: ghcr.io/loveheng/stock-calculator-service:${APP_IMAGE_TAG:-1942570}
+    ports:
+      - "${APP_PORT:-18080}:18080"
+    env_file:
+      - .env
+    # 启动参数：.env 中 APP_ARGS=--crawler.enabled=false 即可追加程序参数
+    entrypoint: ["/bin/sh", "-c", "exec /application/stock-calculator-service $$APP_ARGS"]
+    restart: unless-stopped
+    networks:
+      - scs-net
+
+  # 数据服务（CI 推送的 GraalVM Native 镜像，镜像名 = 主镜像 + -data 后缀）。
+  # 无 JPA 数据源，不连 postgres，只依赖 LavinMQ；collector/worker/ingest 三角色
+  # 镜像内全开（单镜像多副本）：「恰一个」语义由 MQ 协议仲裁——常态拉取=种子+深度
+  # 守卫、历史补录=队列 SAC、worker=竞争消费、控制面=每副本匿名队列，可跨机
+  # 任意加副本（详见 docs/data-worker-replica-deploy.md）。worker 的 CLOUDFLARE_*、
+  # 蒸馏 LLM 的 LLM_*、ingest 的 INGEST_SECRET、RABBIT_* 连接拓扑经 env_file 从 .env 注入。
+  data:
+    image: ghcr.io/loveheng/stock-calculator-service-data:${DATA_IMAGE_TAG:-3a4f486}
+    ports:
+      - "${DATA_PORT:-18081}:8080"   # 仅 ingest webhook 使用，不用 ingest 可注释掉
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - scs-net
+
+  frontend:
+    # 如果已推送到镜像仓库用 image，若是本地构建可用 build: ./frontend
+    image: ghcr.io/loveheng/stock-calculator:${FRONTEND_IMAGE_TAG:-sha-50ce249}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - scs-net
+
+networks:
+  # 中间件层已创建（见 docker-compose.middleware.yml 的 networks 段），此处仅加入
+  scs-net:
+    external: true

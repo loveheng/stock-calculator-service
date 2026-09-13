@@ -3,13 +3,17 @@ package com.zzh.stock_calculator.data.announcement;
 import com.rabbitmq.client.Channel;
 import com.zzh.stockcalc.contract.MessageEnvelope;
 import com.zzh.stockcalc.contract.MessageType;
-import com.zzh.stockcalc.contract.MqQueue;
+import com.zzh.stockcalc.contract.MqExchange;
+import com.zzh.stockcalc.contract.MqKey;
 import com.zzh.stockcalc.contract.message.PullConfigPayload;
 import com.zzh.stockcalc.contract.message.SubscriptionSnapshotPayload;
 import com.zzh.stock_calculator.data.mq.PullConfigCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.ExchangeTypes;
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,7 +26,9 @@ import java.nio.charset.StandardCharsets;
 /**
  * 控制面消费端（设计文档 §4.3/R3，§8 阶段 4 任务 2）：单发单收 collector.control.q，
  * control.subscription.snapshot → SubscriptionSnapshotCache 覆盖式更新。
- * <p>控制队列无重试环（快照丢失由 30min 定时重推兜底）：解析失败/未知 type 一律
+ * <p>控制面为每副本独占匿名队列（exclusive + auto-delete）绑 control.# 的广播语义：
+ * 快照/拉取配置送达全副本，多副本无配置漂移；副本断开队列自动清理。
+ * 控制队列无重试环（快照丢失由 30min 定时重推兜底）：解析失败/未知 type 一律
  * 记日志后 ack 丢弃，防毒消息重投风暴；ack 前置异常不外抛（手动 ack 工厂）。</p>
  */
 @Slf4j
@@ -35,7 +41,17 @@ public class SubscriptionSnapshotConsumer {
     private final PullConfigCache pullConfigCache;
     private final ObjectMapper objectMapper;
 
-    @RabbitListener(queues = MqQueue.COLLECTOR_CONTROL,
+    /**
+     * 声明式匿名队列（@Queue 空名 → 服务端命名、非持久、独占、auto-delete）绑
+     * control.#：快照/拉取配置广播到每副本。不用 SpEL 引用队列 bean——native 下
+     * SpEL 属性访问缺反射元数据（R2 冒烟实证，Expression parsing failed），
+     * 注解属性一律用常量声明式表达。
+     */
+    @RabbitListener(bindings = @QueueBinding(
+            value = @org.springframework.amqp.rabbit.annotation.Queue(
+                    value = "", durable = "false", exclusive = "true", autoDelete = "true"),
+            exchange = @Exchange(name = MqExchange.CONTROL, type = ExchangeTypes.TOPIC),
+            key = MqKey.BIND_CONTROL_ALL),
             containerFactory = "collectorControlListenerFactory")
     public void onMessage(Message message,
                           Channel channel,
