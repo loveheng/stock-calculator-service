@@ -68,6 +68,40 @@ public class MqTopologyConfig {
         return businessQueue(MqQueue.TASK_HISTORY_SYNC);
     }
 
+    // ---- 自循环拉取队列（docs/pull-loop-unification-design.md §3） ----
+
+    /** CLS 电报常态拉取工作队列：quorum、无 DLX——消费恒 ack（失败走下一轮续种），retry 环不适用 */
+    @Bean
+    public Queue taskClsPullQueue() {
+        return pullWorkQueue(MqQueue.TASK_CLS_PULL);
+    }
+
+    /** CLS 拉取延迟队列：classic、无消费者；TTL 逐条消息自带（per-message expiration，
+     *  LavinMQ 已实证），到期经 TASKS 交换机以 work key 死信进工作队列 */
+    @Bean
+    public Queue taskClsPullDelayQueue() {
+        return pullDelayQueue(MqQueue.TASK_CLS_PULL_DELAY, MqKey.TASK_CLS_PULL);
+    }
+
+    /** 公告常态采集工作队列（语义同 CLS 拉取工作队列） */
+    @Bean
+    public Queue taskAnnouncementCollectQueue() {
+        return pullWorkQueue(MqQueue.TASK_ANNOUNCEMENT_COLLECT);
+    }
+
+    /** 公告采集延迟队列（语义同 CLS 拉取延迟队列） */
+    @Bean
+    public Queue taskAnnouncementCollectDelayQueue() {
+        return pullDelayQueue(MqQueue.TASK_ANNOUNCEMENT_COLLECT_DELAY, MqKey.TASK_ANNOUNCEMENT_COLLECT);
+    }
+
+    /** 日历型定时任务工作队列（§8 一次性消费：quorum、无 DLX、无 delay 队列——
+     *  "钟"在 main 侧调度游标，看门狗 CAS 认领后直发，无种子无续种） */
+    @Bean
+    public Queue taskHelloWorldQueue() {
+        return pullWorkQueue(MqQueue.TASK_HELLO_WORLD);
+    }
+
     @Bean
     public Queue resultIngestQueue() {
         return businessQueue(MqQueue.RESULT_INGEST);
@@ -89,6 +123,20 @@ public class MqTopologyConfig {
         return QueueBuilder.durable(name)
                 .quorum()
                 .deadLetterExchange(MqExchange.DLX)
+                .build();
+    }
+
+    /** 自循环工作队列：quorum、无 DLX（消费恒 ack，失败语义 = 下一轮续种照常） */
+    private static Queue pullWorkQueue(String name) {
+        return QueueBuilder.durable(name).quorum().build();
+    }
+
+    /** 自循环延迟队列：TTL 逐条消息自带——per-queue x-message-ttl 声明期不可变，
+     *  动态调速（设计 L5）必须逐条携带 expiration */
+    private static Queue pullDelayQueue(String name, String workKey) {
+        return QueueBuilder.durable(name)
+                .deadLetterExchange(MqExchange.TASKS)
+                .deadLetterRoutingKey(workKey)
                 .build();
     }
 
@@ -138,6 +186,35 @@ public class MqTopologyConfig {
     @Bean
     public Binding taskHistorySyncBinding() {
         return bind(MqQueue.TASK_HISTORY_SYNC, tasksExchange(), MqKey.TASK_HISTORY_SYNC);
+    }
+
+    // ---- tasks：自循环拉取（种子发 delay key，TTL 到期 DLX 改写为 work key） ----
+
+    @Bean
+    public Binding taskClsPullBinding() {
+        return bind(MqQueue.TASK_CLS_PULL, tasksExchange(), MqKey.TASK_CLS_PULL);
+    }
+
+    @Bean
+    public Binding taskClsPullDelayBinding() {
+        return bind(MqQueue.TASK_CLS_PULL_DELAY, tasksExchange(), MqKey.TASK_CLS_PULL_DELAY);
+    }
+
+    @Bean
+    public Binding taskAnnouncementCollectBinding() {
+        return bind(MqQueue.TASK_ANNOUNCEMENT_COLLECT, tasksExchange(), MqKey.TASK_ANNOUNCEMENT_COLLECT);
+    }
+
+    @Bean
+    public Binding taskAnnouncementCollectDelayBinding() {
+        return bind(MqQueue.TASK_ANNOUNCEMENT_COLLECT_DELAY, tasksExchange(), MqKey.TASK_ANNOUNCEMENT_COLLECT_DELAY);
+    }
+
+    // ---- tasks：日历型定时任务（§8 看门狗直发 work key，无 delay 环节） ----
+
+    @Bean
+    public Binding taskHelloWorldBinding() {
+        return bind(MqQueue.TASK_HELLO_WORLD, tasksExchange(), MqKey.TASK_HELLO_WORLD);
     }
 
     // ---- results：结果入库 ----

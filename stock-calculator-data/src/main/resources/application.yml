@@ -22,7 +22,6 @@ datasvc:
       # 公告采集（§8 阶段 4 任务 2）：叠加在 collector.enabled 之上的域开关；
       # 标的源 = 订阅快照（control.subscription.snapshot，首帧到达前空转）
       enabled: true
-      cron: '0 5 * * * *'
       first-pull-mode: FULL
       history-since: 2023-01-01
       lookback-days: 90
@@ -61,6 +60,15 @@ datasvc:
     timeout-ms: 10000
     failure-threshold: 3
     file: /tmp/datasvc-heartbeat
+  # 常态拉取自循环（docs/pull-loop-unification-design.md）：代码默认值兜底，
+  # control.pull.config 快照可覆盖；仅 collector 门控实例生效
+  pullloop:
+    cls:
+      enabled: true
+      ttl-ms: 480000
+    announcement:
+      enabled: true
+      ttl-ms: 3600000
 
 logging:
   level:

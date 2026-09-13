@@ -12,6 +12,9 @@ import com.zzh.stockcalc.contract.message.AnnouncementDonePayload;
 import com.zzh.stockcalc.contract.message.AnnouncementFailedPayload;
 import com.zzh.stockcalc.contract.message.ArticleIngestedPayload;
 import com.zzh.stockcalc.contract.message.ClsArticleDto;
+import com.zzh.stockcalc.contract.message.PullHeartbeatPayload;
+import com.zzh.stock_calculator.monitor.PullHeartbeatEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.zzh.stockcalc.contract.message.ClsArticlePayload;
 import com.zzh.stockcalc.contract.message.ClsStockDict;
 import com.zzh.stockcalc.contract.message.ClsStockLink;
@@ -62,6 +65,8 @@ public class ClsArticleMqConsumer {
     private final RabbitTemplate rabbitTemplate;
     /** 公告摄取端口（announcement 域实现；ObjectProvider 防实现缺失阻启动） */
     private final ObjectProvider<AnnouncementIngestApi> announcementIngestProvider;
+    /** 跨域事件通道（result.pull.heartbeat → monitor 落表，事件对象在 monitor 基包） */
+    private final ApplicationEventPublisher eventPublisher;
 
     @RabbitListener(queues = MqQueue.RESULT_INGEST)
     public void onMessage(org.springframework.amqp.core.Message message,
@@ -86,6 +91,7 @@ public class ClsArticleMqConsumer {
             case MessageType.RESULT_ANNOUNCEMENT_DONE -> handleAnnouncementDone(envelope);
             case MessageType.RESULT_ANNOUNCEMENT_FAILED -> handleAnnouncementFailed(envelope);
             case MessageType.RESULT_ARTICLE_INGESTED -> handleArticleIngested(envelope);
+            case MessageType.RESULT_PULL_HEARTBEAT -> handlePullHeartbeat(envelope);
             case MessageType.RESULT_CLS_HISTORY_REPORT -> log.info(
                     "cls history report requestId={} window=[{}, {}] inserted={}",
                     historyReportField(envelope, "requestId"),
@@ -101,6 +107,22 @@ public class ClsArticleMqConsumer {
     /** 历史补录回执为日志级（§4.3 无需幂等）：直接读 payload 字段打印 */
     private Object historyReportField(MessageEnvelope envelope, String field) {
         return envelope.getPayload() instanceof Map<?, ?> payload ? payload.get(field) : null;
+    }
+
+    /** result.pull.heartbeat → 转交 monitor 域落表（事件对象在 monitor 基包，基包引用合规） */
+    private void handlePullHeartbeat(MessageEnvelope envelope) {
+        PullHeartbeatPayload payload =
+                objectMapper.convertValue(envelope.getPayload(), PullHeartbeatPayload.class);
+        if (payload == null || payload.getTaskCode() == null) {
+            log.warn("pull heartbeat payload 缺失 messageId={}", envelope.getMessageId());
+            return;
+        }
+        eventPublisher.publishEvent(PullHeartbeatEvent.builder()
+                .taskCode(payload.getTaskCode())
+                .depth(payload.getDepth())
+                .appliedTtlMs(payload.getAppliedTtlMs())
+                .renewedAt(payload.getRenewedAt())
+                .build());
     }
 
     private void handleClsArticle(MessageEnvelope envelope) {

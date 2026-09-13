@@ -4,7 +4,9 @@ import com.rabbitmq.client.Channel;
 import com.zzh.stockcalc.contract.MessageEnvelope;
 import com.zzh.stockcalc.contract.MessageType;
 import com.zzh.stockcalc.contract.MqQueue;
+import com.zzh.stockcalc.contract.message.PullConfigPayload;
 import com.zzh.stockcalc.contract.message.SubscriptionSnapshotPayload;
+import com.zzh.stock_calculator.data.mq.PullConfigCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
@@ -30,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 public class SubscriptionSnapshotConsumer {
 
     private final SubscriptionSnapshotCache snapshotCache;
+    private final PullConfigCache pullConfigCache;
     private final ObjectMapper objectMapper;
 
     @RabbitListener(queues = MqQueue.COLLECTOR_CONTROL,
@@ -55,6 +58,10 @@ public class SubscriptionSnapshotConsumer {
 
     private void dispatch(MessageEnvelope envelope) {
         String type = envelope.getType() == null ? "" : envelope.getType();
+        if (MessageType.CONTROL_PULL_CONFIG.equals(type)) {
+            applyPullConfig(envelope);
+            return;
+        }
         if (!MessageType.CONTROL_SUBSCRIPTION_SNAPSHOT.equals(type)) {
             log.info("skip unsupported control type={} messageId={}", envelope.getType(), envelope.getMessageId());
             return;
@@ -69,6 +76,21 @@ public class SubscriptionSnapshotConsumer {
         } else {
             log.warn("stale subscription snapshot rejected version={} (current={})",
                     payload == null ? null : payload.getVersion(), snapshotCache.get().version());
+        }
+    }
+
+    /** control.pull.config → PullConfigCache 覆盖式更新（订阅快照同款语义，L4） */
+    private void applyPullConfig(MessageEnvelope envelope) {
+        PullConfigPayload payload =
+                objectMapper.convertValue(envelope.getPayload(), PullConfigPayload.class);
+        boolean accepted = payload != null
+                && pullConfigCache.update(payload.getVersion(), payload.getTasks());
+        if (accepted) {
+            log.info("pull config applied version={} tasks={}",
+                    payload.getVersion(), payload.getTasks() == null ? 0 : payload.getTasks().size());
+        } else {
+            log.warn("stale pull config rejected version={}",
+                    payload == null ? null : payload.getVersion());
         }
     }
 }

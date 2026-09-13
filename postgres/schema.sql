@@ -362,3 +362,39 @@ CREATE INDEX IF NOT EXISTS idx_ann_sub_stock ON public.announcement_subscription
 --       DROP TABLE IF EXISTS public.announcement;
 -- 注：三表均幂等建表；announcement_content 对主表物理外键级联（设计 §3）；
 --     subscription.org_id 可空（订阅时未必已知，采集期 topSearch 回填）
+
+-- 常态拉取自循环控制面（docs/pull-loop-unification-design.md §3，monitor 域）：
+-- 配置表为调速/停启事实源（data.sql 播种，看门狗周期性快照下发 data）；
+-- 心跳表为判活依据（last_renew_time 超期 → 补种）与仪表盘口径。
+CREATE TABLE IF NOT EXISTS public.pull_task_config (
+	task_code varchar(64) NOT NULL,
+	enabled boolean DEFAULT true NOT NULL,
+	ttl_ms int8 DEFAULT 480000 NOT NULL,
+	-- 日历型定时任务扩展（docs/pull-loop-unification-design.md §8，L8-L13）：
+	-- schedule_mode=CALENDAR 时 cron_expression/timezone/next_expected_time 生效，
+	-- ttl_ms 不参与日历调度（哨兵 0）；LOOP 行为与此四列无关
+	schedule_mode varchar(16) DEFAULT 'LOOP' NOT NULL,
+	cron_expression varchar(64),
+	timezone varchar(64) DEFAULT 'Asia/Shanghai' NOT NULL,
+	next_expected_time timestamptz,
+	updated_at timestamptz DEFAULT now() NOT NULL,
+	CONSTRAINT pull_task_config_pkey PRIMARY KEY (task_code)
+);
+
+-- 存量库幂等升级（新库由上方 CREATE 直接带列，以下 ALTER 为 no-op）
+ALTER TABLE public.pull_task_config ADD COLUMN IF NOT EXISTS schedule_mode varchar(16) DEFAULT 'LOOP' NOT NULL;
+ALTER TABLE public.pull_task_config ADD COLUMN IF NOT EXISTS cron_expression varchar(64);
+ALTER TABLE public.pull_task_config ADD COLUMN IF NOT EXISTS timezone varchar(64) DEFAULT 'Asia/Shanghai' NOT NULL;
+ALTER TABLE public.pull_task_config ADD COLUMN IF NOT EXISTS next_expected_time timestamptz;
+
+CREATE TABLE IF NOT EXISTS public.pull_heartbeat (
+	task_code varchar(64) NOT NULL,
+	last_renew_time timestamptz NOT NULL,
+	depth int4 DEFAULT 0 NOT NULL,
+	applied_ttl_ms int8 DEFAULT 0 NOT NULL,
+	updated_at timestamptz DEFAULT now() NOT NULL,
+	CONSTRAINT pull_heartbeat_pkey PRIMARY KEY (task_code)
+);
+
+-- 回滚：DROP TABLE IF EXISTS public.pull_heartbeat;
+--       DROP TABLE IF EXISTS public.pull_task_config;

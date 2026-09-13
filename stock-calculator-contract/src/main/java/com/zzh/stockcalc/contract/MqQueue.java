@@ -20,6 +20,22 @@ public final class MqQueue {
     /** 历史补录触发（collector 单发单收） */
     public static final String TASK_HISTORY_SYNC = "task.history.sync.q";
 
+    /** CLS 电报常态拉取任务（自循环工作队列，collector 门控消费，恒 ack 无 retry 环） */
+    public static final String TASK_CLS_PULL = "task.cls.pull.q";
+
+    /** CLS 拉取自循环延迟队列（classic、无消费者、无 x-message-ttl——TTL 逐条消息自带，
+     *  DLX=TASKS 交换机 + DLK=task.cls.pull；见 docs/pull-loop-unification-design.md） */
+    public static final String TASK_CLS_PULL_DELAY = "task.cls.pull.delay.q";
+
+    /** 公告常态采集任务（自循环工作队列，collector 门控消费，恒 ack 无 retry 环） */
+    public static final String TASK_ANNOUNCEMENT_COLLECT = "task.announcement.collect.q";
+
+    /** 公告采集自循环延迟队列（语义同 TASK_CLS_PULL_DELAY，DLK=task.announcement.collect） */
+    public static final String TASK_ANNOUNCEMENT_COLLECT_DELAY = "task.announcement.collect.delay.q";
+
+    /** 日历型定时任务工作队列（§8 一次性消费：无 delay 队列、无续种，collector 门控消费） */
+    public static final String TASK_HELLO_WORLD = "task.hello.world.q";
+
     /** 结果入库（主服务消费，绑定 result.#） */
     public static final String RESULT_INGEST = "result.ingest.q";
 

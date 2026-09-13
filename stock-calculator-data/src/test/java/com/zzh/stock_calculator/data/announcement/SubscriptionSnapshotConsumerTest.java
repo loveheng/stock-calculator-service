@@ -4,6 +4,7 @@ import com.rabbitmq.client.Channel;
 import com.zzh.stockcalc.contract.MessageEnvelope;
 import com.zzh.stockcalc.contract.MessageType;
 import com.zzh.stockcalc.contract.message.SubscriptionSnapshotPayload;
+import com.zzh.stock_calculator.data.mq.PullConfigCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ class SubscriptionSnapshotConsumerTest {
     @Mock
     private SubscriptionSnapshotCache snapshotCache;
     @Mock
+    private PullConfigCache pullConfigCache;
+    @Mock
     private Channel channel;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -42,7 +45,7 @@ class SubscriptionSnapshotConsumerTest {
 
     @BeforeEach
     void setUp() {
-        consumer = new SubscriptionSnapshotConsumer(snapshotCache, objectMapper);
+        consumer = new SubscriptionSnapshotConsumer(snapshotCache, pullConfigCache, objectMapper);
     }
 
     private Message messageOf(String json) {

@@ -20,7 +20,7 @@ import java.time.Duration;
  */
 @Configuration
 @ConditionalOnProperty(prefix = "datasvc.collector", name = "enabled", havingValue = "true")
-@EnableConfigurationProperties(CollectorProperties.class)
+@EnableConfigurationProperties({CollectorProperties.class, PullLoopProperties.class})
 public class CollectorConfig {
 
     /**

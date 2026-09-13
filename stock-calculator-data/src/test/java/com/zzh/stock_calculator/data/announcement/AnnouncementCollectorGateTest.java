@@ -1,6 +1,8 @@
 package com.zzh.stock_calculator.data.announcement;
 
 import com.zzh.stock_calculator.data.config.CollectorProperties;
+import com.zzh.stock_calculator.data.config.PullLoopProperties;
+import com.zzh.stock_calculator.data.mq.PullLoopRenewer;
 import com.zzh.stock_calculator.data.mq.ResultPublisher;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -19,7 +21,7 @@ import static org.mockito.Mockito.mock;
 class AnnouncementCollectorGateTest {
 
     @Configuration(proxyBeanMethods = false)
-    @EnableConfigurationProperties(CollectorProperties.class)
+    @EnableConfigurationProperties({CollectorProperties.class, PullLoopProperties.class})
     static class Deps {
         @Bean
         CninfoClient cninfoClient() {
@@ -30,18 +32,23 @@ class AnnouncementCollectorGateTest {
         ResultPublisher resultPublisher() {
             return mock(ResultPublisher.class);
         }
+
+        @Bean
+        PullLoopRenewer pullLoopRenewer() {
+            return mock(PullLoopRenewer.class);
+        }
     }
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withUserConfiguration(Deps.class, AnnouncementCollectorService.class,
-                    SubscriptionSnapshotCache.class, AnnouncementCollectTask.class);
+                    SubscriptionSnapshotCache.class, AnnouncementCollectConsumer.class);
 
     @Test
     void doubleGateEnabledAssemblesTask() {
         runner.withPropertyValues("datasvc.collector.enabled=true",
                         "datasvc.collector.announcement.enabled=true")
                 .run(context -> {
-                    assertThat(context).hasBean("announcementCollectTask");
+                    assertThat(context).hasBean("announcementCollectConsumer");
                     assertThat(context).hasBean("announcementCollectorService");
                     assertThat(context).hasBean("subscriptionSnapshotCache");
                 });
@@ -54,7 +61,7 @@ class AnnouncementCollectorGateTest {
         runner.withPropertyValues("datasvc.collector.enabled=true",
                         "datasvc.collector.announcement.enabled=false")
                 .run(context -> {
-                    assertThat(context).doesNotHaveBean("announcementCollectTask");
+                    assertThat(context).doesNotHaveBean("announcementCollectConsumer");
                     assertThat(context).hasBean("subscriptionSnapshotCache");
                 });
     }
@@ -62,7 +69,7 @@ class AnnouncementCollectorGateTest {
     @Test
     void gateMissingDefaultsToDisabled() {
         runner.withPropertyValues("datasvc.collector.enabled=true")
-                .run(context -> assertThat(context).doesNotHaveBean("announcementCollectTask"));
+                .run(context -> assertThat(context).doesNotHaveBean("announcementCollectConsumer"));
     }
 
     @Test
@@ -70,7 +77,7 @@ class AnnouncementCollectorGateTest {
         runner.withPropertyValues("datasvc.collector.enabled=false",
                         "datasvc.collector.announcement.enabled=true")
                 .run(context -> {
-                    assertThat(context).doesNotHaveBean("announcementCollectTask");
+                    assertThat(context).doesNotHaveBean("announcementCollectConsumer");
                     assertThat(context).doesNotHaveBean("subscriptionSnapshotCache");
                 });
     }

@@ -48,6 +48,37 @@ public class TaskPublisher {
         publish(MqExchange.CONTROL, type, payload);
     }
 
+    /**
+     * 发布自循环种子到延迟队列（docs/pull-loop-unification-design.md，L1）：
+     * 无信封（内部循环消息，消费端不解析载荷），routing key = delay 队列绑定 key，
+     * per-message expiration 逐条携带（per-queue x-message-ttl 声明期不可变，L5）。
+     * 幂等性由 data 侧深度守卫保证（补多不炸）。
+     */
+    public void dispatchSeed(String delayKey, long ttlMs) {
+        MessageProperties props = new MessageProperties();
+        props.setContentType(MessageProperties.CONTENT_TYPE_TEXT_PLAIN);
+        props.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+        props.setExpiration(String.valueOf(ttlMs));
+        rabbitTemplate.send(MqExchange.TASKS, delayKey,
+                new Message("seed".getBytes(StandardCharsets.UTF_8), props),
+                new CorrelationData(UUID.randomUUID().toString()));
+        log.info("dispatched pull-loop seed delayKey={} ttl={}ms", delayKey, ttlMs);
+    }
+
+    /**
+     * 发布日历任务（docs/pull-loop-unification-design.md §8，L8）：种子同款裸消息直发
+     * 工作队列（无 TTL、无信封，消费端不解析载荷）；投递资格由看门狗 CAS 认领保证（L12）。
+     */
+    public void dispatchCalendarTask(String taskKey) {
+        MessageProperties props = new MessageProperties();
+        props.setContentType(MessageProperties.CONTENT_TYPE_TEXT_PLAIN);
+        props.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+        rabbitTemplate.send(MqExchange.TASKS, taskKey,
+                new Message("seed".getBytes(StandardCharsets.UTF_8), props),
+                new CorrelationData(UUID.randomUUID().toString()));
+        log.info("dispatched calendar task taskKey={}", taskKey);
+    }
+
     private void publish(String exchange, String type, Object payload) {
         MessageEnvelope envelope = MessageEnvelope.builder()
                 .messageId(UUID.randomUUID().toString())

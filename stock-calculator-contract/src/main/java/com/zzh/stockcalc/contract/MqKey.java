@@ -14,6 +14,22 @@ public final class MqKey {
     public static final String TASK_EMBEDDING_COMPUTE = "task.embedding.compute";
     public static final String TASK_HISTORY_SYNC = "task.history.sync";
 
+    /** 自循环拉取任务（种子经 delay 队列 TTL 到期后以此 key 死信进工作队列） */
+    public static final String TASK_CLS_PULL = "task.cls.pull";
+    public static final String TASK_ANNOUNCEMENT_COLLECT = "task.announcement.collect";
+
+    /** 自循环延迟队列绑定 key（种子发布目标；到期后 DLX 改写为对应 work key） */
+    public static final String TASK_CLS_PULL_DELAY = "task.cls.pull.delay";
+    public static final String TASK_ANNOUNCEMENT_COLLECT_DELAY = "task.announcement.collect.delay";
+
+    /** 日历型定时任务（docs/pull-loop-unification-design.md §8，CALENDAR 模式：
+     *  无 delay 队列，main 看门狗 CAS 认领后直发本 key 到 TASKS 交换机） */
+    public static final String TASK_HELLO_WORLD = "task.hello.world";
+
+    /** 常态拉取配置快照（main → collector，覆盖式缓存）与续期心跳回报（data → main） */
+    public static final String CONTROL_PULL_CONFIG = "control.pull.config";
+    public static final String RESULT_PULL_HEARTBEAT = "result.pull.heartbeat";
+
     // ========== result.*（数据服务 → 主服务） ==========
 
     /** CLS 电报：解析好的文章 + 字典 + 关联（阶段 1 链路） */
