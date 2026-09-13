@@ -86,12 +86,15 @@ jobs:
       contents: read
       packages: write
 
-    # build-native.sh 步骤 4 的启动测试需要真实连库（EMF 初始化时 Hikari
-    # 要拿连接探测方言），与本地 docker-compose 的 postgres 保持同版本同账号。
+    # build-native.sh 步骤 4 的启动测试需要真实连库，且不只是探测方言——
+    # 启动期 watchdog @PostConstruct 会查 pull_task_config（空库直接 BeanCreation
+    # 异常炸掉启动），schema 必须由下方「初始化数据库 schema」步骤预先灌入。
+    # 用 pgvector 镜像与本地 docker-compose 的 postgres 同镜像同版本同账号
+    # （裸 postgres 镜像没有 vector 扩展，schema.sql 的 CREATE EXTENSION 会失败）。
     # 口令经 POSTGRES_PASS 注入下方编译步骤（优先取 secrets.CI_POSTGRES_PASSWORD）。
     services:
       postgres:
-        image: postgres:18.4
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: root
           POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
@@ -109,12 +112,23 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 2. 安全处理：将仓库名强制转为全小写，防止推送 GHCR 时大小写不合规报错
+      # 2. 初始化数据库 schema（启动测试硬前置）：main 启动期 watchdog @PostConstruct
+      #    查 pull_task_config，空库直接 BeanCreationException 炸掉启动、Tomcat 起不来。
+      #    应用侧 ddl-auto=none 不建表，schema 以 postgres/*.sql 为事实源；脚本幂等
+      #    （IF NOT EXISTS / ON CONFLICT DO NOTHING），重复执行安全。
+      - name: 初始化数据库 schema
+        env:
+          PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: |
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/schema.sql
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
+
+      # 3. 安全处理：将仓库名强制转为全小写，防止推送 GHCR 时大小写不合规报错
       - name: 格式化镜像名称 (全小写)
         run: |
           echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
-      # 3. 扩展 Runner 虚拟内存 (Swap Space)
+      # 4. 扩展 Runner 虚拟内存 (Swap Space)
       #    main 变体含 Spring AI 全家桶（173 jar），native-image 用 -J-Xmx12g，
       #    增加 8GB Swap 确保编译不 OOM。
       - name: 扩展虚拟内存 (Swap Space)
@@ -122,7 +136,7 @@ jobs:
         with:
           swap-size-gb: 8
 
-      # 4. 配置 GraalVM JDK 25 环境（含 native-image 组件）
+      # 5. 配置 GraalVM JDK 25 环境（含 native-image 组件）
       #    build-native.sh 会自动探测 JAVA_HOME（setup-graalvm 会设置）并校验 25.x 版本。
       #    cache: 'maven' 缓存 ~/.m2，加快父 POM + contract 的 install 与依赖下载。
       - name: 配置 GraalVM JDK 25 环境
@@ -135,7 +149,7 @@ jobs:
           cache: 'maven'
           native-image-job-reports: true
 
-      # 5. 编译 Native 二进制 + 冒烟验证
+      # 6. 编译 Native 二进制 + 冒烟验证
       #    全部逻辑收敛在 build-native.sh（本地与 CI 走完全相同的路径）：
       #    install 父POM/contract -> mvnw compile + spring-boot:process-aot
       #    -> 生成 classpath 并剥离 test jar -> native-image -> 启动测试（失败即中止）
@@ -144,7 +158,7 @@ jobs:
           POSTGRES_PASS: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
         run: bash stock-calculator-main/build-native.sh
 
-      # 6. 登录 GitHub Container Registry (GHCR)
+      # 7. 登录 GitHub Container Registry (GHCR)
       - name: 登录 GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -153,7 +167,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. 解析镜像 Tag 和 Labels
+      # 8. 解析镜像 Tag 和 Labels
       - name: 解析镜像 Tag 和 Label 标签
         id: meta
         uses: docker/metadata-action@v5
@@ -165,11 +179,11 @@ jobs:
             type=semver,pattern={{version}}
             type=sha,prefix=
 
-      # 8. 初始化 Docker Buildx
+      # 9. 初始化 Docker Buildx
       - name: 初始化 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 9. 构建并推送最小镜像（Dockerfile.native 在 main 模块目录内，
+      # 10. 构建并推送最小镜像（Dockerfile.native 在 main 模块目录内，
       #    context 必须同为该目录，才能 COPY 到模块 target/ 下的二进制）
       - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v5
