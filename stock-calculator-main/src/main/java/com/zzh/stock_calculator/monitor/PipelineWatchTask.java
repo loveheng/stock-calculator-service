@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 数据管线巡检（data-service-split-design.md R4 落地，MQ 单路径终态的可靠性兜底面）。
+ * 数据管线巡检（docs/architecture/data-service-split.md R4 落地，MQ 单路径终态的可靠性兜底面）。
  * 数据管线无进程内回退路径：停摆的发现与提醒由本任务承担，恢复靠数据源窗口自愈（D3）
  * + 对账器（D6）+ 人工重启 data 服务。
  *

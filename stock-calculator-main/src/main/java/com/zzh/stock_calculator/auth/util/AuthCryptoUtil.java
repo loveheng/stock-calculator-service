@@ -7,7 +7,7 @@ import java.util.Base64;
 import java.util.regex.Pattern;
 
 /**
- * E2EE 用户服务密码学杂项工具（docs/e2ee-auth-backend-design.md §D.4.3 / §D.5）：无状态静态方法。
+ * E2EE 用户服务密码学杂项工具（docs/e2ee-auth/design.md §D.4.3 / §D.5）：无状态静态方法。
  *
  * @description 会话令牌 / OTP 的生成与哈希、常量时间比较、入参形态校验、邮箱归一化。
  *              邮箱归一化必须与前端约定一致（trim + 小写，《前端 spec》§5.2）。

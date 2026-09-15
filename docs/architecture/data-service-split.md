@@ -1,3 +1,8 @@
+---
+status: active
+updated: 2026-09-13
+---
+
 # 数据服务拆分与 MQ 通信 · 后端设计文档
 
 > 版本：v2.5（2026-09-13，单镜像多副本改造：worker 变体退役，「恰一个」语义从打包
@@ -10,7 +15,7 @@
 > ④ 主服务发布端零改动（CONTROL topic 交换机与 routing key 不变）；⑤ 退役
 > Dockerfile.worker / VARIANT=worker（CI 双 job 并一、compose data-worker 块删除），
 > 部署矩阵收敛为单镜像任意副本；一次性迁移（删 task.history.sync 旧队列、清理
-> collector.control.q）见 docs/data-worker-replica-deploy.md §4。
+> collector.control.q）见 docs/deploy/data-worker-replica.md §4。
 > 踩坑：native 下 @RabbitListener 队列名 SpEL 引 bean（JVM 可跑）冒烟即挂
 > Expression parsing failed，改 @QueueBinding 声明式（见 lessons）。
 > 验收：data 79 用例全绿；JVM+AOT 上下文与 native 二进制分别对一次性 LavinMQ
@@ -54,7 +59,7 @@
 > R1 native PASS；遗留：worker-only/collector-only 变体拆分（当前仅 all-in-one）、
 > main native 二进制待用 ContractHintsConfig 重建）
 > 历版本：v2.2（2026-09-11，阶段 5 完成：通用 webhook 摄取管道 + 扩展规范，详见接入
-> 文档 docs/data-source-onboarding.md；开放问题 1 定案 HMAC-SHA256；遗留：native data 构建
+> 文档 docs/architecture/data-source-onboarding.md；开放问题 1 定案 HMAC-SHA256；遗留：native data 构建
 > （本版补课）、CLS 表多源复用泛化、sourceUrl/tags 落库）
 > 历版本：v2.1（2026-09-11，阶段 4 任务 5：公告 worker 闭环 E2E（AnnouncementWorkerE2ETest，
 > RABBIT_E2E=true 门控）——task 下发 → 真实监听器（手动 ack + prefetch=2）→ 解析/建树/
@@ -155,7 +160,7 @@
 > 历版本：v1.1（2026-09-11，阶段 1 已实现并验收：contract 契约模块 + 全量 MQ 拓扑声明 + CLS 滚动窗口链路迁移；
 > 验收 E2E：数据服务发布 → result.ingest.q → 主服务消费幂等入库，重复投递无副作用；见 §8）
 > 范围：把「拉取 + 处理数据」能力从 stock-calculator-main 拆出为独立数据服务（无 DB、native、可水平伸缩），与主服务经 RabbitMQ 通信；含队列拓扑、消息协议、可靠性语义、扩缩容与分阶段路线
-> 关联：docs/announcement-rag-pipeline-design.md（公告管道，状态机语义沿用）、docs/cls-article-vector-backend-design.md（embedding 基座与 CF 额度治理）、docs/news-search-backend-implementation.md（search 域留守主服务）
+> 关联：docs/ai-pipeline/announcement-rag.md（公告管道，状态机语义沿用）、docs/ai-pipeline/cls-article-vector.md（embedding 基座与 CF 额度治理）、docs/news-search/implementation.md（search 域留守主服务）
 > 状态：实现前须过 §7 实证清单
 
 ## 0. 决策记录
@@ -399,8 +404,8 @@ datasvc:   # 数据服务侧（stock-calculator-data）
 | 优雅停机 | listener shutdown-timeout 30s 排空在途消息；terminationGracePeriodSeconds=60；未 ack 消息回归队列由其他副本接管 |
 | 缩容安全 | 消息持久化 + 快速 native 冷启动 → 缩容丢弃的是「空闲」，不是「在途」 |
 | RabbitMQ 本身 | 单机部署，quorum 队列持久化；消息均可对账重发（D6），MQ 单点可接受 |
-| 部署形态 | 单镜像：`-data`（collector/worker/ingest 全开）× 任意副本，跨机/云上按需增减；「恰一个」语义由 MQ 协议仲裁（v2.5：常态拉取=种子+深度守卫、历史补录=队列 SAC、控制面=每副本匿名队列广播、worker=竞争消费），worker 变体已退役——打包不再承载角色区分，主服务不变；部署手册见 docs/data-worker-replica-deploy.md |
-| 常态拉取统一化（已实施） | collector 两个 cron 已改为 TTL+DLX 自循环延迟任务（LavinMQ per-message TTL 已实证），main 升级为控制面（配置/心跳两表 + 看门狗补种 + control 快照下发）；完整推演（含被否方案与约束修正）与实施记录见 docs/pull-loop-unification-design.md |
+| 部署形态 | 单镜像：`-data`（collector/worker/ingest 全开）× 任意副本，跨机/云上按需增减；「恰一个」语义由 MQ 协议仲裁（v2.5：常态拉取=种子+深度守卫、历史补录=队列 SAC、控制面=每副本匿名队列广播、worker=竞争消费），worker 变体已退役——打包不再承载角色区分，主服务不变；部署手册见 docs/deploy/data-worker-replica.md |
+| 常态拉取统一化（已实施） | collector 两个 cron 已改为 TTL+DLX 自循环延迟任务（LavinMQ per-message TTL 已实证），main 升级为控制面（配置/心跳两表 + 看门狗补种 + control 快照下发）；完整推演（含被否方案与约束修正）与实施记录见 docs/architecture/pull-loop-unification.md |
 
 ## 7. 实证清单（实现前/中验证）
 
@@ -437,7 +442,7 @@ datasvc:   # 数据服务侧（stock-calculator-data）
 
 ## 10. 开放问题
 
-1. webhook 推送源的认证强度：静态 token 还是 HMAC 签名（~~阶段 5 定~~ 已定案 HMAC-SHA256 + 时间戳防重放，v2.2，见 docs/data-source-onboarding.md）
+1. webhook 推送源的认证强度：静态 token 还是 HMAC 签名（~~阶段 5 定~~ 已定案 HMAC-SHA256 + 时间戳防重放，v2.2，见 docs/architecture/data-source-onboarding.md）
 2. CLS/CNINFO 的配置（category、longTermKeywords 等）归属哪侧：跟随部署在数据服务 yml，还是经 control 消息由主服务下发
 3. contract 模块版本策略：随 monorepo 同版本发布即可，还是独立版本号（当前建议同版本）
 4. dead.q 的处置方式：仅告警人工处理，还是加管理端点重放

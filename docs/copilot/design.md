@@ -1,11 +1,16 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # Context-Aware Copilot · 设计方案
 
 > 版本：v1.0.1（2026-09-02；同步实施文档 v1.5.1 代码审查补丁）
 > 定位：页面感知型 AI 助手（Copilot）的**总体设计基线**。前端以页面注册的快照上下文提问，后端以 scopeId 隔离会话、复用 llm 域双渠道容灾，轻量持久化支持历史回放。
-> 配套文档：《Context-Aware Copilot 开发实施文档》v1.4（文件级落点/骨架/验收，**尚未入库**，建议收录为 `docs/copilot-implementation.md`）；设计决策编号 D1-D32 以实施文档引用为准，本文以 C1-Cn 承载本仓后端侧决策。
-> 关联：`docs/ocr-llm-pipeline.md`（llm 域现状）、`docs/e2ee-auth-backend-design.md`（信封/限流先例）、skill `cls-article-patterns`（后端编码模板）。
+> 配套文档：《Context-Aware Copilot 开发实施文档》v1.4（文件级落点/骨架/验收，**尚未入库**，建议收录为 `docs/copilot/implementation.md`）；设计决策编号 D1-D32 以实施文档引用为准，本文以 C1-Cn 承载本仓后端侧决策。
+> 关联：`docs/ai-pipeline/ocr-llm.md`（llm 域现状）、`docs/e2ee-auth/design.md`（信封/限流先例）、skill `cls-article-patterns`（后端编码模板）。
 > 状态：待评审冻结（对应实施文档 P0 启动前）。
-> **现状注记（2026-09-12）**：本文 C1/C5「复用 llm 域 gemini→groq 容灾链」未实现——实际为 copilot 专用 DeepSeek 渠道（`copilot.llm.deepseek.*`，`channel=deepseek` 落库）；限流实际顺序为「校验→限流→幂等门控」（AiChatOrchestrationService.beginAsk，cid 重放/续跑会消耗限流额度）；SSE 流式端点、Prompt 模板管理子系统、custom-stats 动作块提取均已实现但本文未覆盖。冲突处以 `docs/copilot-api.md` 与代码为准。
+> **现状注记（2026-09-12）**：本文 C1/C5「复用 llm 域 gemini→groq 容灾链」未实现——实际为 copilot 专用 DeepSeek 渠道（`copilot.llm.deepseek.*`，`channel=deepseek` 落库）；限流实际顺序为「校验→限流→幂等门控」（AiChatOrchestrationService.beginAsk，cid 重放/续跑会消耗限流额度）；SSE 流式端点、Prompt 模板管理子系统、custom-stats 动作块提取均已实现但本文未覆盖。冲突处以 `docs/copilot/api.md` 与代码为准。
 
 ---
 
@@ -339,7 +344,7 @@ turns        = [user:【页面上下文】contextSummary 序列化] + 历史交�
 | 期 | 内容 | 验收 |
 |---|---|---|
 | P0 前端 | types + copilotService(mock) + copilotSlice + usePageContext（含 §3.2 修正）+ GlobalCopilot + App 挂载 + Statistics/Home builder | tsc 零错 / check:arch 过 / 新单测绿 / mock 全链路可演示 |
-| P1 后端 | DDL + 实体/仓储 + 编排（含 llm 包扩展，复用链天然带双渠道容灾）+ Controller + CopilotProperties + 限流 | mvnw test 全绿（排除 TaskServiceTest）；curl 三端点走通；软删后 scopeId 复用验证；get-or-create 竞态单测绿 |
+| P1 后端 | DDL + 实体/仓储 + 编排（含 llm 包扩展，复用链天然带双渠道容灾）+ Controller + CopilotProperties + 限流 | mvnw test 全绿（无 DB 环境排除两个 @SpringBootTest）；curl 三端点走通；软删后 scopeId 复用验证；get-or-create 竞态单测绿 |
 | P2 联调 | 历史/翻页/级联触发/错误子码反馈/墓碑补发全链路 + llm 扩展单测 + tokens 落库核对 | 容灾与生命周期端到端手工验收（含离线删除→补发场景） |
 | P3 native | build-native.sh 全量重建 + 冒烟 + 带 Key 真实 ask；usage 反序列化若报反射缺口 → gen-logger-config.py EXTRA_CLASSES 迭代（预留 1 轮，OCR 链路已验证主路径） | spec §8 P3 验收标准 |
 
@@ -353,7 +358,7 @@ turns        = [user:【页面上下文】contextSummary 序列化] + 历史交�
 | R4 | contextOverview <255 字符若仅靠前端自律 | 后端 413 兜底（§4.3）+ builder 单测 |
 | R5 | ApiResponse 增 subCode 的影响面 | 可空 + NON_NULL，缺省序列化形状不变；前端以 code 优先解析，无影响 |
 | R6 | 前端仓库事实（ulid 依赖/persistence 模式/测试基线）未在本仓验证 | 以实施文档为准，P0 启动时先核验 |
-| R7 | 实施文档 v1.4 引用的 `docs/copilot-spec.md` 不存在 | 差异已收敛到本文 §8；后续建 spec 或以本文为决策基线 |
+| R7 | 实施文档 v1.4 引用的 `docs/copilot/spec.md` 不存在 | 差异已收敛到本文 §8；后续建 spec 或以本文为决策基线 |
 | 开放 | 明细重放（D32）排期 | 倾向 V2；P2 仅交付纯函数占位 |
 
 ## 8. 与实施文档 v1.4 的差异清单（评估结论）
@@ -378,7 +383,7 @@ turns        = [user:【页面上下文】contextSummary 序列化] + 历史交�
 
 **前端（前端仓库）**：`npx tsc --noEmit` 零错；`npm test`（pretest 自动 check:arch）；`npm run map:features` 登记 copilot 关键词后未归类为 0。新增单测：slice 注册/注销幂等与泄漏回归（§3.2 场景）、发送乐观更新与失败态、墓碑对账补发、service mock 与级联端点、builder 白名单与 255 字符截断。
 
-**后端**：`./mvnw compile`；DDL 手动执行入 postgres；`POSTGRES_PASS=... ./mvnw install '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'`。单测：llm 扩展（多轮组装 / usage 提取 / 降级识别，mock ChatModel）；编排（幂等两段式、滑窗条数、懒清理、轻量字段落库、级联软删语义、get-or-create 竞态回退）；错误子码（413/429/503/404 恒 200 信封）——LLM 一律 mock，禁止真实 API。
+**后端**：`./mvnw compile`；DDL 手动执行入 postgres；`POSTGRES_PASS=... ./mvnw install -pl stock-calculator-main -am`（需本地 PG；原 TaskServiceTest 排除项已随该测试删除失效）。单测：llm 扩展（多轮组装 / usage 提取 / 降级识别，mock ChatModel）；编排（幂等两段式、滑窗条数、懒清理、轻量字段落库、级联软删语义、get-or-create 竞态回退）；错误子码（413/429/503/404 恒 200 信封）——LLM 一律 mock，禁止真实 API。
 
 **native（P3）**：build-native.sh 全量 → 8s/90s 冒烟 → smoke-curl 403 门禁 → 带 GEMINI_API_KEY 真实 ask 一次；确认无 AesGcmUtil 遗留引用（v1.2 架构迁移）。
 

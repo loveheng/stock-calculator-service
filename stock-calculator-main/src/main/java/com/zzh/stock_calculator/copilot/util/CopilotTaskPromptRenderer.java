@@ -21,7 +21,7 @@ import java.util.function.Function;
  * </ul>
  *
  * <p>容错红线：taskType 缺省/未知、模版未配置或读取异常一律返回 null，由编排层回落
- * 既有聊天模版链路（宽松降级不报错，custom-stats-backend-support.md §7.3）；contextSummary
+ * 既有聊天模版链路（宽松降级不报错，docs/custom-stats/support.md §7.3）；contextSummary
  * 非合法 JSON 视为无该键。全链路不落库不打日志（样例行含用户真实数据）。</p>
  */
 public final class CopilotTaskPromptRenderer {

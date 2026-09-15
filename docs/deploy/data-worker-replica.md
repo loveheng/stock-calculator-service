@@ -1,3 +1,8 @@
+---
+status: active
+updated: 2026-09-13
+---
+
 # Data 副本部署手册（单镜像任意副本）
 
 > 单镜像多副本改造（2026-09-13，v2.5）配套文档。目标形态：全舰队只有一个镜像
@@ -64,7 +69,9 @@
      ```
      注意：`--no-cpu-throttling` + `min-instances>=1` 是硬要求（AMQP 消费者是
      后台长任务，不能缩零/请求期外断粮）；Cloud Run 不感知 MQ 积压，扩容上限
-     靠 max-instances 手工定。
+     靠 max-instances 手工定。Cloud Run 无法加入 overlay，AMQP 走公网明文
+     5672 直连（数据非敏感不配 TLS），完整步骤（公网暴露/GHCR 直接拉取/
+     Secret Manager/验收/故障速查）见 docs/deploy/cloud-run-data.md。
 4. 同宿主机多副本：`data` service 的 `18081:8080` 端口映射会冲突——加副本时
    去掉映射（仅 ingest webhook 需要；webhook 收口副本保留映射即可）。
 

@@ -3,7 +3,7 @@ package com.zzh.stock_calculator.monitor;
 import com.zzh.stockcalc.contract.message.PullConfigPayload;
 
 /**
- * 自循环控制面发布端口（docs/pull-loop-unification-design.md L4）：monitor 看门狗
+ * 自循环控制面发布端口（docs/architecture/pull-loop-unification.md L4）：monitor 看门狗
  * 对 MQ 的全部出向依赖收敛于此接口，实现挂在 crawler（PullLoopDispatchAdapter，
  * 委托 TaskPublisher）——保证依赖单向（crawler → monitor），避免
  * monitor → crawler 的 TaskDispatchApi 引用与心跳事件引用构成 Modulith 环。

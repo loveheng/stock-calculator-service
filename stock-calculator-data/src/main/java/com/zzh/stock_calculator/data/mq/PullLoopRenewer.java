@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * 自循环续种器（docs/pull-loop-unification-design.md §3.3 步骤 3-5）：深度守卫 →
+ * 自循环续种器（docs/architecture/pull-loop-unification.md §3.3 步骤 3-5）：深度守卫 →
  * 续种（per-message TTL）→ 心跳回报。两个拉取消费者（CLS/公告）共用。
  * <p>任何异常只落日志不上抛——循环存活优先，种子断绝由 main 看门狗兜底补种；
  * 深度守卫是唯一防双种子机制（SAC 仅串行不降噪，见设计文档 L2），续期日志是

@@ -12,7 +12,7 @@
     <artifactId>stock-calculator-data</artifactId>
     <name>stock-calculator-data</name>
     <description>
-        数据服务（docs/data-service-split-design.md §2/D3/D4）：拉取 + 处理数据，零 DB 依赖。
+        数据服务（docs/architecture/data-service-split.md §2/D3/D4）：拉取 + 处理数据，零 DB 依赖。
         collector 角色：CLS 电报滚动窗口拉取 → 归一化 → result.cls.article 上行；
         worker 角色（阶段 3）：竞争消费 task.embedding.compute → CF 向量化 → result.embedding.done。
         部署形态：native/JVM 均可；collector 副本恒=1，worker 副本=N（KEDA 伸缩）。

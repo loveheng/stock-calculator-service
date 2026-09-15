@@ -4,7 +4,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * pipeline.watch.* 配置（data-service-split-design.md R4：队列堆积/数据服务停机告警）。
+ * pipeline.watch.* 配置（docs/architecture/data-service-split.md R4：队列堆积/数据服务停机告警）。
  * 数据管线无回退开关（MQ 单路径终态），可靠性由「源头窗口自愈 + 对账器 + 本巡检告警」承担。
  */
 @Data

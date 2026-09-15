@@ -42,7 +42,7 @@ ON CONFLICT (tag) DO NOTHING;
 -- 占位符 SAMPLE_ROWS/DRAFT_CONTEXT/USER_CONTENT（花括号包裹）由 CopilotTaskPromptRenderer
 -- 渲染填充；copilot-actions 动作块格式与 CopilotStatActionExtractor 的
 -- OPEN_TAG/CLOSE_TAG 常量保持一致，改一处必须同步另一处。
--- 内容件（执行契约/字段字典）维护约定见 docs/custom-stats-backend-support.md §4/§8：
+-- 内容件（执行契约/字段字典）维护约定见 docs/custom-stats/support.md §4/§8：
 -- 前端仓 types/domain.ts 为字段权威源，字段变更时同步本模文。
 -- =====================================================================
 
@@ -105,7 +105,7 @@ INSERT INTO copilot_prompt_template (tag, content, ctime, mtime) VALUES
 ON CONFLICT (tag) DO NOTHING;
 
 -- =====================================================================
--- 常态拉取自循环配置播种（docs/pull-loop-unification-design.md §3/§8）：
+-- 常态拉取自循环配置播种（docs/architecture/pull-loop-unification.md §3/§8）：
 -- task_code = data 侧 work routing key；LOOP 行 ttl_ms = 原生节奏（CLS 8min / 公告 1h）；
 -- CALENDAR 行按 §8 接入：cron_expression 为 Spring CronExpression 六域方言（无 ?），
 -- timezone 显式钉死（不依赖服务器默认值），ttl_ms 不参与日历调度（哨兵 0）

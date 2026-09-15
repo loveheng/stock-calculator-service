@@ -78,7 +78,7 @@ public class MqTopologyConfig {
                 .build();
     }
 
-    // ---- 自循环拉取队列（docs/pull-loop-unification-design.md §3） ----
+    // ---- 自循环拉取队列（docs/architecture/pull-loop-unification.md §3） ----
 
     /** CLS 电报常态拉取工作队列：quorum、无 DLX——消费恒 ack（失败走下一轮续种），retry 环不适用 */
     @Bean

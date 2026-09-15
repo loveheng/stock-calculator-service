@@ -14,7 +14,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * E2EE 密文档案（docs/e2ee-auth-backend-design.md §D.3.2），列名与前端 user_profiles 完全一致。
+ * E2EE 密文档案（docs/e2ee-auth/design.md §D.3.2），列名与前端 user_profiles 完全一致。
  *
  * @description 服务端只存密文四元组、不解其语义（零知识红线）；
  *              updatedAt 由服务端维护，每次更新自动刷新，兼作 If-Match 版本号（决策 B5）。

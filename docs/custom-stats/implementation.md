@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # 自定义统计（AI 生成代码）· 后端实现文档
 
 > 版本：v1.0（2026-09-07）
 > 范围：custom_stat 后端 P0 的落地记录——文件清单、模块契约、模板登记、测试映射与验证结果。「为什么这样设计」见两份设计文档，本文只写「实现成了什么、怎么验证、前端怎么接」
-> 关联：`docs/custom-stats-api.md`（接口变更清单 v1.0）、`docs/custom-stats-backend-support.md`（契约详解与字段字典）、`docs/copilot-design.md`（Copilot 架构）；前端仓 `docs/custom-stats-spec.md`、`docs/copilot-implementation.md`
+> 关联：`docs/custom-stats/api.md`（接口变更清单 v1.0）、`docs/custom-stats/support.md`（契约详解与字段字典）、`docs/copilot/design.md`（Copilot 架构）；前端仓 `docs/custom-stats-spec.md`、前端仓 `docs/copilot-implementation.md`（同名前端文档，非本仓 `docs/copilot/implementation.md`）
 > 验证基线：`./mvnw compile -q`；单测命令见 §5.2
 > 状态：后端已实现（P0）· 单测全绿 · 待前端联调
 
@@ -198,7 +203,7 @@ ON CONFLICT (tag) DO NOTHING;
   → Tests run: 212, Failures: 0, Errors: 0   （含 ModulithVerifyTest 域边界守护）
 ```
 
-> 三个排除项均为 @SpringBootTest（需本地 PG + POSTGRES_PASS），本机无 DB 环境未跑，属环境限制非回归。部署前建议补全量：`POSTGRES_PASS=… ./mvnw install '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'`（同时验证 data.sql 播种被启动执行 + Redis 镜像同步）。
+> 存量排除项均为 @SpringBootTest（需本地 PG + POSTGRES_PASS），本机无 DB 环境未跑，属环境限制非回归（TaskServiceTest 后续已随 2026-09 MQ 化改造删除，排除项失效但无害）。部署前建议补全量：`POSTGRES_PASS=… ./mvnw install -pl stock-calculator-main -am`（同时验证 data.sql 播种被启动执行 + Redis 镜像同步）。
 
 ### 5.3 DoD 对照（api/support 文档 §9）
 
@@ -221,7 +226,7 @@ ON CONFLICT (tag) DO NOTHING;
 | 项 | 说明 | 处置 |
 |---|---|---|
 | SSE 抑制位无专项单测 | `suppressRef` 逻辑在 `askStream` chunk 回调内，纯 Mockito 单测不覆盖（需 SSE 测试设施） | 联调阶段冒烟覆盖；块剔除/残块语义已被 Extractor 15 用例锚定，风险面窄 |
-| DB 级验证未跑 | contextLoads（含 data.sql 播种执行）/ TaskServiceTest / SyncBackupL1 需本地 PG | 见 §5.2 建议命令，部署前补跑 |
+| DB 级验证未跑 | contextLoads（含 data.sql 播种执行）/ SyncBackupL1 需本地 PG（TaskServiceTest 已删除） | 见 §5.2 建议命令，部署前补跑 |
 | token 用量观察 | 生成代码输出 token 显著高于普通聊天，限流沿用同阈值 | P0 按现状跑；预留为 taskType=custom_stat 设独立阈值（api 文档 §4，暂不做） |
 | 模板漂移 | 线上经 admin 改行后，再次部署 data.sql 因 `ON CONFLICT DO NOTHING` 不覆盖 | 有意为之：Redis 为运行时权威，data.sql 仅首装播种；模板大改时走 admin 接口或手工 UPDATE 并留 history |
 | 字段字典防腐 | 字段字典是模板内静态内容件，domain 字段变更时模板会静默腐化 | 按 support §7.2：前端 `types/domain.ts` 字典一致性测试报警；后端无自动化手段 |

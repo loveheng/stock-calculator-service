@@ -21,7 +21,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 /**
- * 公告主表（docs/announcement-rag-pipeline-design.md §3）：元数据 + 状态机游标，
+ * 公告主表（docs/ai-pipeline/announcement-rag.md §3）：元数据 + 状态机游标，
  * 不存 PDF、不存正文（D5/D7）。唯一长期留存文本 = summary 蒸馏摘要。
  */
 @Data

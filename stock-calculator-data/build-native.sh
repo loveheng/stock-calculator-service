@@ -10,7 +10,7 @@
 #      协议仲裁，打包不再承载角色区分：
 #        常态拉取 = 自循环种子 + 续种深度守卫；历史补录 = 队列 x-single-active-consumer；
 #        worker = 竞争消费 quorum 队列；控制面 = 每副本匿名队列广播
-#        （见 docs/data-worker-replica-deploy.md）
+#        （见 docs/deploy/data-worker-replica.md）
 #   4. process-aot 会实例化全部单例 → CF/LLM fail-fast 在构建期就会触发，
 #      须注入 dummy 凭据（运行期值仍从环境变量取）。
 #

@@ -14,7 +14,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * 自循环启动种子（docs/pull-loop-unification-design.md §3.3）：ApplicationReady 后
+ * 自循环启动种子（docs/architecture/pull-loop-unification.md §3.3）：ApplicationReady 后
  * 逐源检查延迟队列，空则投种子拉起循环。与 main 看门狗构成双保险——本类保证
  * 部署后第一时间起拉，看门狗兜底运行期种子断绝；深度守卫保证两处补种不产生双种子。
  */

@@ -32,7 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * PullLoopWatchdogTask 单测（docs/pull-loop-unification-design.md §3.4 / L6）：
+ * PullLoopWatchdogTask 单测（docs/architecture/pull-loop-unification.md §3.4 / L6）：
  * 配置快照周期性重推、心跳超期补种、进程内补种节流、enabled=false 不补种。
  */
 @ExtendWith(MockitoExtension.class)
@@ -120,7 +120,7 @@ class PullLoopWatchdogTaskTest {
         verify(dispatchPort).pushConfig(any(PullConfigPayload.class));
     }
 
-    // ==================== 日历任务认领（docs/pull-loop-unification-design.md §8.3.2） ====================
+    // ==================== 日历任务认领（docs/architecture/pull-loop-unification.md §8.3.2） ====================
 
     @Test
     @DisplayName("CALENDAR 游标 NULL：初始化为下一日历点，不触发执行（crontab 语义）")

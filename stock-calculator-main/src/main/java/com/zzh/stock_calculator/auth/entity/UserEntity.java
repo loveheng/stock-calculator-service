@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * E2EE 用户账号（docs/e2ee-auth-backend-design.md §D.3.1）。
+ * E2EE 用户账号（docs/e2ee-auth/design.md §D.3.1）。
  *
  * @description 密码列为 bcrypt(10) over authHash（前端 PBKDF2-SHA256 派生的 64 位小写 hex）；
  *              authHash 明文不落任何存储，日志不得输出（零知识红线，决策 B2）。

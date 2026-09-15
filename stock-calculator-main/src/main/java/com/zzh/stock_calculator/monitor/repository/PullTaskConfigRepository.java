@@ -12,7 +12,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * 常态拉取任务配置仓库（docs/pull-loop-unification-design.md §3/§8）。
+ * 常态拉取任务配置仓库（docs/architecture/pull-loop-unification.md §3/§8）。
  * 日历认领三语句（§8.3.2，L12）各自独立短事务——认领/回滚不跨 MQ 投递持锁；
  * 批量 UPDATE 绕过 @UpdateTimestamp 生命周期，故显式写 updatedAt。
  */

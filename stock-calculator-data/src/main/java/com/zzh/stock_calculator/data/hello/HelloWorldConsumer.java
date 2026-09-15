@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 
 /**
- * 日历型定时任务一次性消费者（docs/pull-loop-unification-design.md §8.3.4，首个接入：
+ * 日历型定时任务一次性消费者（docs/architecture/pull-loop-unification.md §8.3.4，首个接入：
  * 每日 07:00 Asia/Shanghai 打印 hello world）。与拉取消费者（ClsPullConsumer）的差异
  * 仅三点——无续种、无深度守卫、无 bootstrap：「钟」在 main 侧 pull_task_config 调度
  * 游标（L8/L9），本类只执行 + 心跳回报 + 手动 ack，对配置零依赖（L10）。

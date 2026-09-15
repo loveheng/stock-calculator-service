@@ -2,7 +2,7 @@ spring:
   application:
     name: stock-calculator-data
   main:
-    # 阶段 5 起暴露 ingest HTTP 端点（docs/data-source-onboarding.md），需内嵌 web 服务器；
+    # 阶段 5 起暴露 ingest HTTP 端点（docs/architecture/data-source-onboarding.md），需内嵌 web 服务器；
     # 测试仍显式 web-application-type=none 保持零端口依赖
     banner-mode: "off"
   rabbitmq:
@@ -47,7 +47,7 @@ datasvc:
     api-key: ${LLM_API_KEY:}
     model: ${LLM_MODEL:}
   # webhook 摄取端点（阶段 5）：默认关闭；部署经 DATASVC_INGEST_ENABLED=true +
-  # INGEST_SECRET 开启（HMAC-SHA256 共享密钥，见 docs/data-source-onboarding.md）
+  # INGEST_SECRET 开启（HMAC-SHA256 共享密钥，见 docs/architecture/data-source-onboarding.md）
   ingest:
     enabled: false
     secret: ${INGEST_SECRET:}
@@ -60,7 +60,7 @@ datasvc:
     timeout-ms: 10000
     failure-threshold: 3
     file: /tmp/datasvc-heartbeat
-  # 常态拉取自循环（docs/pull-loop-unification-design.md）：代码默认值兜底，
+  # 常态拉取自循环（docs/architecture/pull-loop-unification.md）：代码默认值兜底，
   # control.pull.config 快照可覆盖；仅 collector 门控实例生效
   pullloop:
     cls:

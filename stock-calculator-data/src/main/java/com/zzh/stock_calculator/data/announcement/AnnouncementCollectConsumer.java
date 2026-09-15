@@ -17,7 +17,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 /**
- * 公告常态采集消费者（docs/pull-loop-unification-design.md，原 AnnouncementCollectTask
+ * 公告常态采集消费者（docs/architecture/pull-loop-unification.md，原 AnnouncementCollectTask
  * 的任务化改造）：消费自循环工作队列 task.announcement.collect.q 执行一轮按订阅快照的
  * 采集，finally 中续种 + 手动 ack（顺序同 ClsPullConsumer，L3）。
  * <p>以本地快照缓存为标的源（首帧快照到达前缓存为空 → 本轮空转，续种照常——

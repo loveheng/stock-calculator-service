@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * L1 回归用例（验收必选项，docs/server-sync-backend-implementation.md §9.2）：
+ * L1 回归用例（验收必选项，docs/server-sync/implementation.md §9.2）：
  * 真 PostgreSQL + 真实 JPA 栈，selectVersion 不 mock——验证 CAS 成功后 native 标量回读
  * 绕开持久化上下文（若被改回 findById，覆盖路径返回 CAS 前旧版本，用例 1 即失败）。
  * SessionService 仅伪造认证（token → 会话），仓库/JPA/HTTP 全真实。

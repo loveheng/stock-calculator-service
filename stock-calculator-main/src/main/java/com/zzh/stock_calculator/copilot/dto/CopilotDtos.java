@@ -27,7 +27,7 @@ public final class CopilotDtos {
         private String timeAnchor;       // 时间截面标记
         /** 区块级聚焦 ID（如 home:short_term）：仅参与 Prompt 模版路由编排，不落库、不打日志；缺省 = 整页口径 */
         private String focusBlockId;
-        /** 任务类型（custom-stats-api.md §2.1）：custom_stat = 自定义统计代码生成，路由专用提示词模版；
+        /** 任务类型（docs/custom-stats/api.md §2.1）：custom_stat = 自定义统计代码生成，路由专用提示词模版；
          *  缺省/未知值 = 现有聊天模版，行为零变化。仅参与模版路由编排，不落库、不打日志 */
         private String taskType;
     }

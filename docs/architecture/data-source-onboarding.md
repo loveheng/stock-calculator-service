@@ -1,3 +1,8 @@
+---
+status: active
+updated: 2026-09-12
+---
+
 # 新数据源接入指南（webhook ingest · 阶段 5）
 
 > 面向对象：向 stock-calculator 接入新数据源（webhook 推送型）的开发者。

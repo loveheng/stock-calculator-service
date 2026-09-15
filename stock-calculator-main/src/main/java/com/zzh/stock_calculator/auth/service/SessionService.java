@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 不透明会话令牌服务（docs/e2ee-auth-backend-design.md §D.4.3，决策 B3 / B11）。
+ * 不透明会话令牌服务（docs/e2ee-auth/design.md §D.4.3，决策 B3 / B11）。
  *
  * @description token 原文仅存在于签发响应体，落库为 SHA-256；校验失败一律 401。
  *              吊销以表为准：logout 吊销当前、改密吊销他端（决策 B4），无 JWT、无隐式状态。

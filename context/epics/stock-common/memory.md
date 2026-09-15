@@ -9,7 +9,7 @@ last-merge: 2026-09-13
 # stock-common：main 与 data 模块公共实体抽取评估
 
 > 结论：**不新建共享模块**。当前类重复是双路径门控下的过渡态，终态是删除 main 侧旧路径副本。
-> 评估日期：2026-09-11 ｜ 依据：docs/data-service-split-design.md（§0 决策记录 / §3 迁移映射 / §8 回退策略）+ 两侧 diff 实证
+> 评估日期：2026-09-11 ｜ 依据：docs/architecture/data-service-split.md（§0 决策记录 / §3 迁移映射 / §8 回退策略）+ 两侧 diff 实证
 
 ## 1. 背景与问题
 
@@ -66,7 +66,7 @@ last-merge: 2026-09-13
 
 ## 6. 证据索引
 
-- 设计决策：docs/data-service-split-design.md §0 D2/D9、§3.1/§3.2 迁移映射、§8 回退策略、§9 R2
+- 设计决策：docs/architecture/data-service-split.md §0 D2/D9、§3.1/§3.2 迁移映射、§8 回退策略、§9 R2
 - 配置门控：stock-calculator-main/src/main/resources/application.yml（datasvc.mq.enabled 默认 false、crawler.enabled true、announcement.process.enabled false）
 - 平移实证：data 侧 ClsSignUtil javadoc「算法不变」；AnnouncementProcessWorker 注释「与主服务 processOne 同口径」
 

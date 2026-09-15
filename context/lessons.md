@@ -27,3 +27,4 @@ terminal 沙箱下静默写命令（cat >> / sed -i / mkdir）报 exit 2 "Cannot
 native 模块注解属性禁止运行期 SpEL 引 bean 属性：@RabbitListener 队列名写 `#{bean.name}` JVM 可跑、native 启动即 "Expression parsing failed"（SpEL 属性访问无反射元数据，Queue.getName() 不在可达性集合）。匿名队列用 @QueueBinding 声明式：@Queue(value="", durable="false", exclusive="true", autoDelete="true")（内部即 AnonymousQueue），一切注解属性用常量。(Ref: misc)
 
 ## 追加区
+- [grep 工具] 全仓引用核查 include_pattern 写 'docs/**' 全部落空 → 断言「零断链」假阴性（docs 重组断链漏检）➔ glob 以含项目根的全路径为锚，正确写法 'stock-calculator-service/docs/**'；全仓核查免 include_pattern、用精确文件名模式 (Ref: misc)

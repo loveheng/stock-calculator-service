@@ -18,7 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.OffsetDateTime;
 
 /**
- * 找回验证码（docs/e2ee-auth-backend-design.md §D.5.2）：找回唯一通道的最后一道防线。
+ * 找回验证码（docs/e2ee-auth/design.md §D.5.2）：找回唯一通道的最后一道防线。
  *
  * @description 6 位 / 10 分钟 / 单次消费 / 5 次尝试锁死 / 60s 同邮箱冷却 / 哈希落库。
  *              校验失败统一 400 "验证码错误或已过期"，不泄露具体失败原因。

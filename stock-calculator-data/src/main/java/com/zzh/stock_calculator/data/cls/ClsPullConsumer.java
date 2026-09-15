@@ -15,7 +15,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 /**
- * CLS 电报常态拉取消费者（docs/pull-loop-unification-design.md，原 ClsPullTask 的
+ * CLS 电报常态拉取消费者（docs/architecture/pull-loop-unification.md，原 ClsPullTask 的
  * 任务化改造）：消费自循环工作队列 task.cls.pull.q 执行一轮拉取，finally 中续种 +
  * 手动 ack（顺序 = 拉取 → 续种 → ack，L3：崩溃重投自愈，种子丢失窗口最小化）。
  * <p>恒 ack 语义：单轮失败不 nack——下一轮续种照常，retry 环不适用（工作队列无 DLX）。

@@ -49,7 +49,7 @@ public class TaskPublisher {
     }
 
     /**
-     * 发布自循环种子到延迟队列（docs/pull-loop-unification-design.md，L1）：
+     * 发布自循环种子到延迟队列（docs/architecture/pull-loop-unification.md，L1）：
      * 无信封（内部循环消息，消费端不解析载荷），routing key = delay 队列绑定 key，
      * per-message expiration 逐条携带（per-queue x-message-ttl 声明期不可变，L5）。
      * 幂等性由 data 侧深度守卫保证（补多不炸）。
@@ -66,7 +66,7 @@ public class TaskPublisher {
     }
 
     /**
-     * 发布日历任务（docs/pull-loop-unification-design.md §8，L8）：种子同款裸消息直发
+     * 发布日历任务（docs/architecture/pull-loop-unification.md §8，L8）：种子同款裸消息直发
      * 工作队列（无 TTL、无信封，消费端不解析载荷）；投递资格由看门狗 CAS 认领保证（L12）。
      */
     public void dispatchCalendarTask(String taskKey) {

@@ -15,7 +15,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.OffsetDateTime;
 
 /**
- * 找回验证码（docs/e2ee-auth-backend-design.md §D.3.4）。
+ * 找回验证码（docs/e2ee-auth/design.md §D.3.4）。
  *
  * @description 6 位码哈希落库（SHA-256(email + ":" + code)），不存原文；
  *              10 分钟有效、单次消费、5 次尝试锁死（决策 B2 / §D.5.2）。

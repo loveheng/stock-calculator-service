@@ -1,3 +1,8 @@
+---
+status: active
+updated: 2026-09-03
+---
+
 # Copilot AI 聊天接口文档 v1.0
 
 > 生成时间：2026-09-02  

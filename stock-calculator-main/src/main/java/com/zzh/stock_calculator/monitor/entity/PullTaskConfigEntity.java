@@ -14,7 +14,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.OffsetDateTime;
 
 /**
- * 常态拉取任务配置（docs/pull-loop-unification-design.md §3/§8）：每任务一行，
+ * 常态拉取任务配置（docs/architecture/pull-loop-unification.md §3/§8）：每任务一行，
  * main 控制面的调速/停启/调度事实源；LOOP 行配置经看门狗快照下发 data（D2，data 零 DB），
  * CALENDAR 行配置不下发（L10，data 对日历任务零配置依赖）。
  * task_code 手动维护（data.sql 播种）。

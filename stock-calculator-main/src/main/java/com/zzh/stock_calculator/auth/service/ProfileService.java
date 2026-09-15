@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 密文档案存取（docs/e2ee-auth-backend-design.md §D.4.2 端点 4/5）。
+ * 密文档案存取（docs/e2ee-auth/design.md §D.4.2 端点 4/5）。
  *
  * @description 仅属主可读写（userId 来自会话拦截器，非请求参数）；
  *              updatedAt 兼作 If-Match 版本号（决策 B5），防御跨设备孤儿竞态（§D.6.4）。

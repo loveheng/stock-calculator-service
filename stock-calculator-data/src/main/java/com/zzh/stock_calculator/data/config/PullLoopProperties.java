@@ -4,7 +4,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 自循环常态拉取配置（datasvc.pullloop 前缀，docs/pull-loop-unification-design.md §3）。
+ * 自循环常态拉取配置（datasvc.pullloop 前缀，docs/architecture/pull-loop-unification.md §3）。
  * 代码内置默认值为冷启动兜底（循环等不到配置 = 死循环，设计不变量 5）；
  * control.pull.config 快照只做覆盖。注册在 CollectorConfig（collector 门控），
  * worker 变体无此配置也无拉取消费者。

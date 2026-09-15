@@ -13,7 +13,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.OffsetDateTime;
 
 /**
- * 常态拉取自循环心跳（docs/pull-loop-unification-design.md §3）：每拉取源一行 upsert，
+ * 常态拉取自循环心跳（docs/architecture/pull-loop-unification.md §3）：每拉取源一行 upsert，
  * 看门狗判活依据（last_renew_time 超期 → 补种）+ 仪表盘展示口径。心跳为观测信号，
  * 写入失败不影响循环（设计不变量 3）。
  */

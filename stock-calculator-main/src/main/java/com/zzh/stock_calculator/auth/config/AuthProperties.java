@@ -3,7 +3,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * E2EE 用户服务参数（docs/e2ee-auth-backend-design.md §D.4.3 / §D.5.2），默认值即评审定稿值。
+ * E2EE 用户服务参数（docs/e2ee-auth/design.md §D.4.3 / §D.5.2），默认值即评审定稿值。
  *
  * @description enabled 为鉴权组件总开关：main 的 application.yml 显式开启；
  *              native 变体不配置 → 鉴权 Bean 整体不装配（决策 B10，防 common 层污染 native）。

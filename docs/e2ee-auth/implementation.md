@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # E2EE 用户服务后端 · 实行方案
 
 > 版本：v1.0（2026-08-31）
-> 前置：设计方案 docs/e2ee-auth-backend-design.md（下称《设计》）契约冻结后执行；章节引用 §D.x 指《设计》章节。
-> 验证基线：./mvnw compile -pl stock-calculator-main -am -q 与 ./mvnw test -pl stock-calculator-main -am；native 回归：./mvnw compile -pl stock-calculator-native -am -q
+> 前置：设计方案 docs/e2ee-auth/design.md（下称《设计》）契约冻结后执行；章节引用 §D.x 指《设计》章节。
+> 验证基线：./mvnw compile -pl stock-calculator-main -am -q 与 ./mvnw test -pl stock-calculator-main -am；native 回归：main 的 build-native.sh（stock-calculator-native 模块已于 2026-08-31 删除）
 
 ---
 
@@ -202,9 +207,9 @@ ProfileResponse upsert(UUID userId, ProfileUpsertRequest req, String ifMatchHead
 
 - common 层鉴权 @Service 类统一标注 @ConditionalOnProperty(name = "app.auth.enabled", havingValue = "true")；
 - main 的 application.yml 显式开启；native 不配置 → Bean 不装配；
-- 回归命令：./mvnw compile -pl stock-calculator-native -am -q（编译通过即可，本期不在 native 联调鉴权）。
+- 回归命令：./mvnw compile -pl stock-calculator-main -am -q（编译通过即可；native 模块已删除，变体验证由 main 的 build-native.sh 承载，本期不在 native 联调鉴权）。
 
-### 4.4 单测清单（风格对齐 TaskServiceTest：Mockito + 断言，不开 Spring 上下文）
+### 4.4 单测清单（风格对齐既有 Service 单测：Mockito + 断言，不开 Spring 上下文）
 
 | 测试类 | 覆盖 |
 |--------|------|
@@ -250,7 +255,7 @@ ProfileResponse upsert(UUID userId, ProfileUpsertRequest req, String ifMatchHead
 
 ## 7. 完成定义（DoD）
 
-- [ ] ./mvnw compile -pl stock-calculator-main -am 与 ./mvnw compile -pl stock-calculator-native -am 均通过
+- [ ] ./mvnw compile -pl stock-calculator-main -am 通过（2026-09-15 修正：原 native 模块编译项已随模块删除失效）
 - [ ] ./mvnw test 全绿（含 §4.4 全部测试类）
 - [ ] §4.5 冒烟 10 步全过 + 真实邮箱收码
 - [ ] 前端全链路联调通过（对齐《前端 spec》§12.2 步骤 8 的用户旅程）

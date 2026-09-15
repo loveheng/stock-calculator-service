@@ -1,10 +1,15 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # Context-Aware Copilot · 设计决策规范（spec）
 
 > 版本：v1.5.1（2026-09-02；重建版同步实施文档 v1.5.1 代码审查补丁）
-> 定位：Copilot 功能的**决策总表与规范基线**。原 spec v1.4 未随仓入库，本版按《开发实施文档》v1.4 的 D 引用重建：被引用的 D 编号按其引用语义落表，未被引用的编号明确标注缺失待补；与 `docs/copilot-design.md` 的 C1-C17 互相映射。若原 v1.4 手稿日后找回，缺失条目以其为准补录。
-> 配套：`docs/copilot-design.md`（架构与后端设计基线）、`docs/copilot-implementation.md`（文件级实施，v1.5 收录版）。
+> 定位：Copilot 功能的**决策总表与规范基线**。原 spec v1.4 未随仓入库，本版按《开发实施文档》v1.4 的 D 引用重建：被引用的 D 编号按其引用语义落表，未被引用的编号明确标注缺失待补；与 `docs/copilot/design.md` 的 C1-C17 互相映射。若原 v1.4 手稿日后找回，缺失条目以其为准补录。
+> 配套：`docs/copilot/design.md`（架构与后端设计基线）、`docs/copilot/implementation.md`（文件级实施，v1.5 收录版）。
 > 状态：待评审（与实施文档 v1.5 同批冻结）。
-> **现状注记（2026-09-12）**：本文 LLM 渠道与端点行为描述部分过时——实际聊天渠道为 **copilot 专用 DeepSeek 付费渠道**（`copilot.llm.deepseek.*`，见 `docs/copilot-api.md` 与 `DeepSeekConfig`），「复用 llm 域容灾链」从未实现；SSE 流式提问、Prompt 模板管理（`/api/copilot/prompt/templates`）与 custom-stats `taskType` 集成为既有代码但本文未覆盖。冲突处以 `docs/copilot-api.md` 与代码为准。
+> **现状注记（2026-09-12）**：本文 LLM 渠道与端点行为描述部分过时——实际聊天渠道为 **copilot 专用 DeepSeek 付费渠道**（`copilot.llm.deepseek.*`，见 `docs/copilot/api.md` 与 `DeepSeekConfig`），「复用 llm 域容灾链」从未实现；SSE 流式提问、Prompt 模板管理（`/api/copilot/prompt/templates`）与 custom-stats `taskType` 集成为既有代码但本文未覆盖。冲突处以 `docs/copilot/api.md` 与代码为准。
 
 ---
 
@@ -36,7 +41,7 @@
 
 ## 1. 定位与范围
 
-页面感知型 AI 助手：页面注册快照上下文，用户在全局浮窗内就当前页面提问。范围边界（In/Out）同 `copilot-design.md` §1.2：9 页面共用 3 端点、P0 试点 statistics/home、轻量持久化回放、级联软删 + 墓碑；不做专用接口、子级会话、原始快照落库、RAG、游客提问。
+页面感知型 AI 助手：页面注册快照上下文，用户在全局浮窗内就当前页面提问。范围边界（In/Out）同 `docs/copilot/design.md` §1.2：9 页面共用 3 端点、P0 试点 statistics/home、轻量持久化回放、级联软删 + 墓碑；不做专用接口、子级会话、原始快照落库、RAG、游客提问。
 
 ## 2. scopeId 协议（D30）
 
@@ -55,7 +60,7 @@
 ## 4. LLM 接入（D11/D12 → C1/C2）
 
 - 复用 llm 域 `LlmChainRouter` + Gemini/Groq 渠道 Bean（连接参数全工程仅 `llm.gemini.*` / `llm.groq.*` 一处）；copilot 零新增渠道配置。
-- llm 包向后兼容扩展（vision 零改动）：`LlmTurn` / `LlmConversation` / `LlmChatResult` / `LlmService.chat(LlmConversation)` 默认方法 / `LlmChainRouter.chatDetailed`，细化见 `copilot-design.md` §4.5。
+- llm 包向后兼容扩展（vision 零改动）：`LlmTurn` / `LlmConversation` / `LlmChatResult` / `LlmService.chat(LlmConversation)` 默认方法 / `LlmChainRouter.chatDetailed`，细化见 `docs/copilot/design.md` §4.5。
 - 降级：`isDegradedResponse` 命中（fallback 模板）按 `UPSTREAM_ERROR` 处理，不归档 assistant 消息。
 
 ## 5. 前端状态与注册
@@ -115,6 +120,6 @@ scope 变化调 `ensureThreadLoaded(newScope)`（内置墓碑对账）；前一 
 | 期 | 验收 |
 |---|---|
 | P0 | 前端 tsc 零错 / check:arch 过 / 新单测绿 / mock（VITE_COPILOT_MOCK=1）全链路可演示 |
-| P1 | 后端 mvnw test 全绿（排除 TaskServiceTest）；curl 三端点走通（含级联 DELETE、软删后 scopeId 复用、get-or-create 竞态单测、幂等两段式单测）；双渠道容灾由复用链天然具备 |
+| P1 | 后端 mvnw test 全绿（无 DB 环境排除两个 @SpringBootTest）；curl 三端点走通（含级联 DELETE、软删后 scopeId 复用、get-or-create 竞态单测、幂等两段式单测）；双渠道容灾由复用链天然具备 |
 | P2 | 全链路手工验收：历史/翻页/级联触发端到端、离线删除→墓碑补发、错误子码反馈闭环；llm 扩展单测绿 |
 | P3 | native 全量重建 + 8s/90s 冒烟 + smoke-curl 403 门禁 + 带 GEMINI_API_KEY 真实 ask 一次；usage 反射缺口按报错类名补 gen-logger-config.py EXTRA_CLASSES 迭代（预留 1 轮）；无 AesGcmUtil 遗留引用 |

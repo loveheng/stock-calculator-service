@@ -1,9 +1,14 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # 服务端密文同步（登录即备份）· 后端设计文档
 
 > 版本：v1.0（2026-09-04）
 > 范围：stock-calculator-service 侧的 sync 领域包设计——两表存储、3 端点 API、CAS 版本协议、频控与历史裁剪。承接前端仓库 `docs/server-sync-spec.md` 的决策 D1-D15 中与后端相关的部分（D2/D5/D7/D8/D10/D11 为主）。
-> 关联：前端仓库 `docs/server-sync-spec.md` / `docs/server-sync-implementation.md`；本仓库 `docs/e2ee-auth-backend-design.md`（鉴权拦截）、`docs/copilot-design.md`（恒 200 信封与领域包先例）
-> 状态：设计定稿，待开发（落点见 `docs/server-sync-backend-implementation.md`）
+> 关联：前端仓库 `docs/server-sync-spec.md` / `docs/server-sync-implementation.md`；本仓库 `docs/e2ee-auth/design.md`（鉴权拦截）、`docs/copilot/design.md`（恒 200 信封与领域包先例）
+> 状态：设计定稿，待开发（落点见 `docs/server-sync/implementation.md`）
 > **现状注记（2026-09-12）**：本文 native 变体相关表述已过时（native 模块 2026-08-31 删除；现为 contract/main/data 三模块，sync 域留守 main）。CAS/频控/历史裁剪等核心协议语义仍与代码一致。
 
 ---
@@ -329,7 +334,7 @@ SELECT version FROM user_sync_data WHERE user_id = :userId
 | Service 单测 | Mockito（`@ExtendWith(MockitoExtension.class)`，同 SessionServiceTest 模式） | 仓库全部 mock；覆盖校验全分支 / 去重两分支 / 频控 / 冲突映射 / 历史落库与裁剪 / 版本回读（用例表见 implementation §9.1） |
 | Repository CAS | 真库验证（本地 PG） | psql 冒烟脚本（implementation §9.2）；勿用 @DataJpaTest（无 H2 依赖，且 `ON CONFLICT … WHERE` 兼容性存疑）；@SpringBootTest 可选，需本地库环境变量 |
 | Modulith | ModulithVerifyTest | 自动覆盖新 sync 包，无额外工作 |
-| 全量验证 | `./mvnw test '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'` | TaskServiceTest 打真实 API 必挂，永远排除 |
+| 全量验证 | `./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-DfailIfNoTests=false'` | 两个 @SpringBootTest 需本地 PG，无 DB 环境排除（原 TaskServiceTest 已随 2026-09 MQ 化改造删除） |
 
 ## 9. 部署与回滚
 

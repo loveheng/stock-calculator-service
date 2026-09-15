@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # 资讯搜索（News Search）· 后端技术实现（Spring Boot :18080）
 
 > 版本：v1.4（2026-09-10；v1.4 = 修正 Q3 终版定案：没有早报/晚报，edition 恒 'telegraph'，无条目映射回填；v1.3 = 关闭 Q3：早/晚报 = 财联社电报流内条目，M4 无渠道前置；v1.2 = 关闭 Q4：C1 隐私红线定案（永不落库/永不持久化、日志严禁打 query/stockCodes 明文）；v1.1 = 回写拍板结论：限流阈值 B6、回填路线 B8、composite SSE C9、LLM 渠道 C10、检索初始参数 C11、基包 API 落位 C12，§8 补本地/正式库数据口径注）
-> 读者：后端开发。配套 `docs/news-search-api.md`（契约 v1.1）使用：本文给出现状盘点、search 领域包设计、四个端点的实现路径、通用管道（429/认证/校验）、存量回填与测试拆解。
-> 关联：前端仓 `docs/news-search-spec.md`（需求 D1-D10）、前端仓 `docs/news-search-implementation.md`（前端实现）；`docs/news-search-api.md`（接口契约 v1.1，本仓库）
+> 读者：后端开发。配套 `docs/news-search/api.md`（契约 v1.1）使用：本文给出现状盘点、search 领域包设计、四个端点的实现路径、通用管道（429/认证/校验）、存量回填与测试拆解。
+> 关联：前端仓 `docs/news-search-spec.md`（需求 D1-D10）、前端仓 `docs/news-search-implementation.md`（前端实现）；`docs/news-search/api.md`（接口契约 v1.1，本仓库）
 > 核心原则：**复用优先**——announcement/crawler/copilot/llm 四域已有大量现成能力（pgvector 向量库、LLM 责任链、SSE 骨架、限流先例全部在库），新增代码集中在 search 领域包的「检索编排层」，禁止重复建设管线。
 
 ---
@@ -163,7 +168,7 @@ search:
 - **IT**（本地库，环境变量口令见 workflow skill）：向量召回 + secCode/seDate 过滤 + summary 非空过滤；空命中空态；SSE 事件序（meta→delta…→done / error）；429 信封带 data.retryAfterSeconds；隐私断言：检索全链路日志输出不含 query/stockCodes 明文（C1/Q4）。
 - **ModulithVerifyTest**：search 只 import 各域基包公开类型（新增 AnnouncementQueryApi / StockDirectoryApi / ClsArticleQueryApi + 上提的检索门面）。
 - **联调**：按 api 文档 §7.2 清单前后端各跑一遍；前端已有 mock 全链路与 A8/A9/A10 验收可对拍。
-- 全量验证命令（TaskServiceTest 永远排除）：`./mvnw test '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'`
+- 全量验证命令（无 DB 环境排除两个 @SpringBootTest；TaskServiceTest 已随 2026-09 MQ 化改造删除）：`./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-DfailIfNoTests=false'`
 
 ## 11. 里程碑（粗估）
 

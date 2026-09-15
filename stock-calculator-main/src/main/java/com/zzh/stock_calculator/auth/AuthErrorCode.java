@@ -1,7 +1,7 @@
 package com.zzh.stock_calculator.auth;
 
 /**
- * E2EE 用户服务业务码（docs/e2ee-auth-backend-design.md §D.4.1），配合 ApiResponse 信封使用。
+ * E2EE 用户服务业务码（docs/e2ee-auth/design.md §D.4.1），配合 ApiResponse 信封使用。
  *
  * @description HTTP 状态除拦截器 401 外恒 200（决策 B8）；前端适配器按 code 语义分支，不解析 message。
  */

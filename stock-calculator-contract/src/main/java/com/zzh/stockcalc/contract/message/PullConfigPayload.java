@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * control.pull.config 的 payload（docs/pull-loop-unification-design.md §3）：
+ * control.pull.config 的 payload（docs/architecture/pull-loop-unification.md §3）：
  * main → collector 的常态拉取配置快照，覆盖式语义（订阅快照同款）——collector 以
  * 收到的 tasks 全量替换本地缓存。data 侧代码内置默认值（enabled=true、TTL=8min|1h），
  * 本快照只做覆盖；丢失由 main 看门狗周期性重推兜底。

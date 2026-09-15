@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # E2EE 用户服务后端 · 设计方案
 
 > 版本：v1.0（2026-08-31）
 > 定位：为前端《E2EE 鉴权与密钥管理系统 v1.0》（下称《前端 spec》，位于前端仓库 docs/e2ee-auth-spec.md，章节号 §x 均指该文档）提供**用户相关服务**，与现有 /api/import（OCR 识别）并列的后端服务模块。
-> 配套文档：实行方案 docs/e2ee-auth-backend-implementation.md（文件级任务拆解与验收标准）。
+> 配套文档：实行方案 docs/e2ee-auth/implementation.md（文件级任务拆解与验收标准）。
 > 状态：待评审冻结（对应实行方案 B0 阶段）。
 > **现状注记（2026-09-12）**：本文模块结构引用（common/main/native 划分）已过时——native 模块 2026-08-31 删除，现为 **contract/main/data 三模块**；限流阈值以代码为准（`RateLimitService`：login = IP 30 次 + email 10 次 / 15 分钟双桶；verify = IP 20 次 + email 10 次 / 小时，Redis 固定窗口 fail-open），本文与 api.md 中不一致的数字作废。
 
@@ -23,7 +28,7 @@
 | B9 | 限流实现 | Caffeine（main 模块已有依赖）；限流拦截器放 main 模块，common 不新增依赖 |
 | B10 | native 隔离 | 鉴权相关 Bean 标注 @ConditionalOnProperty("app.auth.enabled")，仅 main 变体开启；防止 common 层鉴权组件污染 native 变体（历史已有 JPA 泄漏教训） |
 | B11 | 存储分层 | PostgreSQL 唯一事实源 + Redis 热读缓存（cache-aside：resolve 缓存优先→回源回填，TTL=min(300s, 剩余有效期)，吊销/续期写库后立即驱逐）；限流计数同步迁 Redis（INCR 固定窗口，重启不清零，消除 B9 的 P2 取舍）；Redis 故障降级：会话回源 DB、限流 fail-open 放行，不阻塞认证主链路；spring-boot-starter-data-redis 仅引入 main 模块 |
-| B12 | 内存缓存退场 | 全应用内存缓存代码移除（Caffeine 依赖、spring-boot-starter-cache、@EnableCaching、spring.cache 配置全部删除），视觉识别结果同步迁 Redis（决策 B11 的延伸）：OCR 文本 `vision:ocr:text:<MD5>` / 交易草稿 `vision:ai:draft:<MD5>`（JSON）/ 多模态执行器 `vision:executor:<cacheKey>`（TTL 24h 沿用原 genericVisionCache 语义），统一经 `VisionCacheStore` 接口（Redis 实现，故障降级同 B11），详见 docs/ocr-llm-pipeline.md |
+| B12 | 内存缓存退场 | 全应用内存缓存代码移除（Caffeine 依赖、spring-boot-starter-cache、@EnableCaching、spring.cache 配置全部删除），视觉识别结果同步迁 Redis（决策 B11 的延伸）：OCR 文本 `vision:ocr:text:<MD5>` / 交易草稿 `vision:ai:draft:<MD5>`（JSON）/ 多模态执行器 `vision:executor:<cacheKey>`（TTL 24h 沿用原 genericVisionCache 语义），统一经 `VisionCacheStore` 接口（Redis 实现，故障降级同 B11），详见 docs/ai-pipeline/ocr-llm.md |
 
 ---
 
@@ -64,6 +69,8 @@ flowchart TD
 | stock-calculator-common | entity / repository / dto / service（AuthService、ProfileService、OtpService、MailService、SessionService） | 项目分层惯例（实体与业务在 common） |
 | stock-calculator-main | AuthController、AuthInterceptor、RateLimitInterceptor、AuthProperties、application.yml 变更 | Controller 惯例（参照 ImportController）；生产镜像仅构建 main 变体（Dockerfile 现状） |
 | stock-calculator-native | 不改动；靠 @ConditionalOnProperty("app.auth.enabled") 隔离 | 决策 B10 |
+
+> 2026-09-15 修正注记：stock-calculator-common 已于 2026-09-01 并入 main、stock-calculator-native 已于 2026-08-31 删除，上表 common/native 归属现均由 `stock-calculator-main` 承载（auth 代码落 `com.zzh.stock_calculator.auth`）；@ConditionalOnProperty 隔离机制（决策 B10）不变。
 
 ### 2.2 复用清单（不重复造轮子）
 

@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * E2EE 用户服务 8 端点（docs/e2ee-auth-backend-design.md §D.4.2）。
+ * E2EE 用户服务 8 端点（docs/e2ee-auth/design.md §D.4.2）。
  *
  * @description 响应遵循项目 ApiResponse 信封，HTTP 恒 200（决策 B8），唯一例外：
  *              AuthInterceptor 对未认证请求写 HTTP 401 + 信封体。

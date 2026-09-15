@@ -14,7 +14,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.OffsetDateTime;
 
 /**
- * 服务端密文同步主表：每用户一行，最新密文快照（docs/server-sync-backend-design.md §3）。
+ * 服务端密文同步主表：每用户一行，最新密文快照（docs/server-sync/design.md §3）。
  *
  * @description 零知识哑存储：只存信封密文，永不解析/解密。version 服务端单调自增（D5），
  *              仅经 Repository.casUpsert（native CAS）写入，JPA 侧只读；

@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-12
+---
+
 # 自定义统计（AI 生成代码）· 后端接口文档 v1.0
 
 > 版本：v1.0（2026-09-07）
 > 范围：自定义统计功能对后端的**全部接口需求**——设计原则是最大化复用现有 Copilot 通道，后端改动收敛为「请求可选字段 + 系统提示词模板」，**无新端点、无新表**
-> 关联：`docs/custom-stats-backend-support.md`（信息支持文档：动作契约详解、字段字典、模板草稿）；前端仓 `docs/custom-stats-spec.md`（需求）
+> 关联：`docs/custom-stats/support.md`（信息支持文档：动作契约详解、字段字典、模板草稿）；前端仓 `docs/custom-stats-spec.md`（需求）
 > 状态：设计定稿，待 P0 开发启动
 > **现状注记（2026-09-12）**：本文「无新端点、无新表/零服务端存储」口径已过时——2026-09-07（commit b274fe4）已落地 `customstat` 域：`user_custom_stat` 表（明文 JSONB，**非 E2EE 通道**）+ `GET/PUT/DELETE /api/custom-stats`（指标定义服务端持久化）。「计算执行在前端沙箱、服务端不理解 code 语义」仍然成立。见 `customstat` 域代码。
 
@@ -63,7 +68,7 @@ SSE 事件结构、消息落库行为完全不变。唯一新增：LLM 输出的
 
 - 模板 key：`copilot_custom_stat_gen`
 - 登记方式走既有 CopilotPromptTemplate 体系（admin 接口 + history）
-- 模板内容 = 固定部分（输出契约 + 输出纪律）+ 可变部分（执行契约代码块 + 字段字典）——全文见 `custom-stats-backend-support.md` §4
+- 模板内容 = 固定部分（输出契约 + 输出纪律）+ 可变部分（执行契约代码块 + 字段字典）——全文见 `docs/custom-stats/support.md` §4
 - 模板属 DB 数据非代码，native-image 无 AOT 影响
 
 ## 3. 数据流约定

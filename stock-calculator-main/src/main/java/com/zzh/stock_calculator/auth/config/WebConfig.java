@@ -8,7 +8,7 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Web 装配：会话拦截器仅挂受保护路径（docs/e2ee-auth-backend-design.md §D.2.5）。
+ * Web 装配：会话拦截器仅挂受保护路径（docs/e2ee-auth/design.md §D.2.5）。
  *
  * @description register / login / recovery request+verify 为无会话端点，不经过 AuthInterceptor
  *              （其限流由 RateLimitService 承担）；AuthProperties 经此注册（决策 B10：

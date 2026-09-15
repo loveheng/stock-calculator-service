@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 服务端密文同步控制层（3 端点，docs/server-sync-backend-implementation.md §7）。
+ * 服务端密文同步控制层（3 端点，docs/server-sync/implementation.md §7）。
  *
  * @description 鉴权复用 AuthInterceptor——成功时注入 @RequestAttribute("authUserId") String
  *              （与 CopilotController 同法，UUID 文本，绝不从请求体读取）；401 由拦截器统一直写。

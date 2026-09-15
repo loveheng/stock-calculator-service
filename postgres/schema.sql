@@ -97,7 +97,7 @@ CREATE TABLE if not exists public.stock (
 );
 
 -- ============================================================
--- E2EE 用户服务（docs/e2ee-auth-backend-design.md §D.3）
+-- E2EE 用户服务（docs/e2ee-auth/design.md §D.3）
 -- IF NOT EXISTS 幂等，无需停机；gen_random_uuid() 为 PG13+ 内置
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.users (
@@ -220,7 +220,7 @@ CREATE INDEX IF NOT EXISTS idx_cpt_history_tag_ctime
 
 
 -- ============================================================
--- 服务端密文同步（docs/server-sync-backend-design.md §3 / D5 / D8 / D10 / D11 / E1 / E7）
+-- 服务端密文同步（docs/server-sync/design.md §3 / D5 / D8 / D10 / D11 / E1 / E7）
 -- ============================================================
 
 -- DROP TABLE IF EXISTS public.user_sync_history;
@@ -275,7 +275,7 @@ CREATE INDEX IF NOT EXISTS idx_user_custom_stat_user ON public.user_custom_stat 
 --     对齐 user_sync_data / ai_chat_session 既有先例（E1）
 
 -- ============================================================
--- cls_article 向量化基础设施（docs/cls-article-vector-backend-design.md §3.2）
+-- cls_article 向量化基础设施（docs/ai-pipeline/cls-article-vector.md §3.2）
 -- pgvector 扩展 + 状态表；vector_store 主表由 Spring AI PgVectorStore
 -- initialize-schema 自动建表（vector(1024) + HNSW cosine 索引），不手写 DDL
 -- ============================================================
@@ -305,7 +305,7 @@ ALTER TABLE public.cls_article_embedding ADD COLUMN IF NOT EXISTS fail_count int
 --     model 留档支撑将来换模型全量重嵌（R9）
 
 -- ============================================================
--- announcement 域三表（docs/announcement-rag-pipeline-design.md §3）
+-- announcement 域三表（docs/ai-pipeline/announcement-rag.md §3）
 -- 主表：元数据 + 状态机游标（PENDING/DONE/FAILED）；不存 PDF、不存正文（D5/D7）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.announcement (
@@ -363,14 +363,14 @@ CREATE INDEX IF NOT EXISTS idx_ann_sub_stock ON public.announcement_subscription
 -- 注：三表均幂等建表；announcement_content 对主表物理外键级联（设计 §3）；
 --     subscription.org_id 可空（订阅时未必已知，采集期 topSearch 回填）
 
--- 常态拉取自循环控制面（docs/pull-loop-unification-design.md §3，monitor 域）：
+-- 常态拉取自循环控制面（docs/architecture/pull-loop-unification.md §3，monitor 域）：
 -- 配置表为调速/停启事实源（data.sql 播种，看门狗周期性快照下发 data）；
 -- 心跳表为判活依据（last_renew_time 超期 → 补种）与仪表盘口径。
 CREATE TABLE IF NOT EXISTS public.pull_task_config (
 	task_code varchar(64) NOT NULL,
 	enabled boolean DEFAULT true NOT NULL,
 	ttl_ms int8 DEFAULT 480000 NOT NULL,
-	-- 日历型定时任务扩展（docs/pull-loop-unification-design.md §8，L8-L13）：
+	-- 日历型定时任务扩展（docs/architecture/pull-loop-unification.md §8，L8-L13）：
 	-- schedule_mode=CALENDAR 时 cron_expression/timezone/next_expected_time 生效，
 	-- ttl_ms 不参与日历调度（哨兵 0）；LOOP 行为与此四列无关
 	schedule_mode varchar(16) DEFAULT 'LOOP' NOT NULL,

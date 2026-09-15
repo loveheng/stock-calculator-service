@@ -1,7 +1,12 @@
+---
+status: active
+updated: 2026-09-13
+---
+
 # E2EE 用户服务 · 接口文档 v1.0
 
 > 后端：stock-calculator-service（Spring Boot 4.1.1，端口 18080）
-> 对应设计：docs/e2ee-auth-backend-design.md（决策 B1-B10）
+> 对应设计：docs/e2ee-auth/design.md（决策 B1-B10）
 > 前端规范：前端《E2EE 鉴权与密钥管理系统 · 功能实现文档 v1.0》
 > 本文所有示例均为 2026-08-31 真实环境冒烟实测记录。
 

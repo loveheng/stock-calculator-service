@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # 自定义统计 · 后端开发信息支持文档 v1.0
 
 > 版本：v1.0（2026-09-07）
 > 读者：stock-calculator-service 后端开发（本功能后端侧改动极小，本文档补齐「为什么」与「内容件」）
-> 前置阅读：`docs/copilot-design.md`（架构）、`docs/copilot-api.md`（现有接口）、本文档姊妹篇 `docs/custom-stats-api.md`（接口变更清单）
+> 前置阅读：`docs/copilot/design.md`（架构）、`docs/copilot/api.md`（现有接口）、本文档姊妹篇 `docs/custom-stats/api.md`（接口变更清单）
 > 状态：设计定稿，待 P0 开发启动
 
 ---
@@ -207,5 +212,5 @@ sequenceDiagram
 - [ ] taskType 缺省回归零变化（现有模板路由/SSE/落库 diff 为空）
 - [ ] taskType=custom_stat 路由新模板；未知值回落默认
 - [ ] CopilotPromptTemplate 新模板 admin 登记 + history 可追溯
-- [ ] `./mvnw test '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'` 全绿
+- [ ] `./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-DfailIfNoTests=false'` 全绿
 - [ ] 与前端联调：一轮真实生成的 action JSON 通过前端守卫 + 夹具 + Guard 三道关

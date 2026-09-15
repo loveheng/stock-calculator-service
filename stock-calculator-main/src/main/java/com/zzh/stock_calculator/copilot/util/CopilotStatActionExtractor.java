@@ -16,7 +16,7 @@ import java.util.Map;
  * 不做 payload 语义校验（形状守卫责任在前端 utils/copilotActions 白名单）。</p>
  *
  * <p>容错红线（fail-open，绝不抛错）：无块 / 块内 JSON 非法 / 结构不符 → 返回 null，
- * 聊天文本原样保留（custom-stats-backend-support.md §6：前端守卫静默丢弃是设计内兜底）；
+ * 聊天文本原样保留（docs/custom-stats/support.md §6：前端守卫静默丢弃是设计内兜底）；
  * 完整块全部从权威全文中剔除（聊天气泡/归档不显示机器 JSON），未闭合的尾部残块同样剔除。</p>
  */
 public final class CopilotStatActionExtractor {

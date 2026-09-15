@@ -24,7 +24,7 @@ public final class MqQueue {
     public static final String TASK_CLS_PULL = "task.cls.pull.q";
 
     /** CLS 拉取自循环延迟队列（classic、无消费者、无 x-message-ttl——TTL 逐条消息自带，
-     *  DLX=TASKS 交换机 + DLK=task.cls.pull；见 docs/pull-loop-unification-design.md） */
+     *  DLX=TASKS 交换机 + DLK=task.cls.pull；见 docs/architecture/pull-loop-unification.md） */
     public static final String TASK_CLS_PULL_DELAY = "task.cls.pull.delay.q";
 
     /** 公告常态采集任务（自循环工作队列，collector 门控消费，恒 ack 无 retry 环） */

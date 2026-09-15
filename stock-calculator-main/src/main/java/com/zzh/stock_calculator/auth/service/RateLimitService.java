@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 
 /**
- * 端点限流（docs/e2ee-auth-backend-design.md §D.5.4，决策 B9 → B11 升级为 Redis 计数）。
+ * 端点限流（docs/e2ee-auth/design.md §D.5.4，决策 B9 → B11 升级为 Redis 计数）。
  *
  * @description 双维度：IP（X-Forwarded-For 首跳）+ 邮箱；计数桶 INCR + 首次 EXPIRE 定窗，
  *              存 Redis：应用重启不清零（原 Caffeine 方案的 P2 取舍就此消除），未来多实例天然共享。

@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * LavinMQ per-message TTL + DLX 机制实证（pull-loop-unification-design.md §5 立项先决）：
+ * LavinMQ per-message TTL + DLX 机制实证（docs/architecture/pull-loop-unification.md §5 立项先决）：
  * 自循环方案的延迟队列依赖"逐条消息自带 TTL 到期后经死信交换机转发"，与 retry 环用的
  * per-queue TTL 是不同特性，LavinMQ 上未验过，立项前必须实证。
  * <p>纯 amqp-client 直连（不起 Spring），验证三件事：① 带 expiration 的种子到期经 DLX

@@ -1,9 +1,14 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # cls_article 向量化（语义检索基座）· 后端设计文档
 
 > 版本：v1.6（2026-09-12，数据服务拆分终态回填：进程内 CF 计算/存量回填/增量嵌入移交 data worker（task/result.embedding.*），主服务仅存 查询嵌入（search 相似检索）与结果落账（EmbeddingResultService）；§4.4/§4.5/§4.6/§6.1 的进程内回填语义为历史基线；§7.1 的 batch-size/batch-interval-ms 键已删除；C5 完成邮件事件随进程内路径退役（周期统计报告邮件保留）；CfUsageFixingClient 两侧各一份——main 服务查询嵌入、data 服务计算嵌入，非双控）
 > 历版本：v1.5（2026-09-09，R1 运行期门控重构：native 终态自带向量化，见 §9.3 C8）
 > 范围：crawler 域 embedding 子包——cls_article 全量向量化管道（存量回填 + 增量）、pgvector 存储、Cloudflare Workers AI 配额治理与熔断；相似检索 service 能力随 P0 就绪，消费场景（copilot RAG）为 P1 待定。
-> 关联：`docs/copilot-design.md`（P1 消费方先例）、`postgres/schema.sql`（表结构落点）
+> 关联：`docs/copilot/design.md`（P1 消费方先例）、`postgres/schema.sql`（表结构落点）
 > 状态：P0 已实现（2026-09-09 编码完成；R1 重构后全量回归 300 测试 0 失败 1 skip；存量回填待生产库开闸）
 
 ---
@@ -433,7 +438,7 @@ embedding:
 | # | 验证项 | 命令 / 步骤 |
 |---|---|---|
 | V1 | 编译 | `./mvnw compile` |
-| V2 | 全量测试（含 ModulithVerifyTest） | `./mvnw test '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'`（需 POSTGRES_PASS） |
+| V2 | 全量测试（含 ModulithVerifyTest） | `POSTGRES_PASS=... ./mvnw test -pl stock-calculator-main -am`（需本地 PG；TaskServiceTest 排除项已随 2026-09 MQ 化改造删除失效） |
 | V3 | CF 连通冒烟 | ✅ 2026-09-09 远程库试点覆盖：实调 32 篇均 dim=1024（附录 A.3）；语义检索 sanity（如「固态电池」命中相关电报）留 P1 场景联调一并验证 |
 | V4 | 幂等验证 | 同批重跑两次 → vector_store 行数不增（S3 原子性 + 确定性 UUID upsert 生效） |
 | V5 | 熔断验证 | mock 429 / 500 / 401 三分支单测 |

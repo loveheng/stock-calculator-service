@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 
 /**
- * 自循环心跳落表（docs/pull-loop-unification-design.md L4）：监听 crawler 消费端
+ * 自循环心跳落表（docs/architecture/pull-loop-unification.md L4）：监听 crawler 消费端
  * 转发的 PullHeartbeatEvent，按 task_code upsert。观测信号非控制信号——写失败
  * 不重试不告警（下轮心跳 8min 后自然覆盖，设计不变量 3）。
  */

@@ -22,7 +22,7 @@ public final class MqKey {
     public static final String TASK_CLS_PULL_DELAY = "task.cls.pull.delay";
     public static final String TASK_ANNOUNCEMENT_COLLECT_DELAY = "task.announcement.collect.delay";
 
-    /** 日历型定时任务（docs/pull-loop-unification-design.md §8，CALENDAR 模式：
+    /** 日历型定时任务（docs/architecture/pull-loop-unification.md §8，CALENDAR 模式：
      *  无 delay 队列，main 看门狗 CAS 认领后直发本 key 到 TASKS 交换机） */
     public static final String TASK_HELLO_WORLD = "task.hello.world";
 

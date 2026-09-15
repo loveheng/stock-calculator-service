@@ -12,7 +12,7 @@
     <artifactId>stock-calculator-contract</artifactId>
     <name>stock-calculator-contract</name>
     <description>
-        数据服务与主服务的消息契约（docs/data-service-split-design.md §4.3/D9）：
+        数据服务与主服务的消息契约（docs/architecture/data-service-split.md §4.3/D9）：
         交换机/队列/routing key 常量 + 统一信封 + 消息 DTO。
         纯 POJO，禁引 JPA 实体与 Spring 类型（ContractRuntimeHints AOT 辅助类例外，
         spring-core 为 optional 不传递）；schemaVersion 管协议演进。

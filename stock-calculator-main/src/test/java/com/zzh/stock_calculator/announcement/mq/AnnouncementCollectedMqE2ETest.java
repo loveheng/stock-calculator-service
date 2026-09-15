@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 阶段 4 任务 2 验收 E2E（docs/data-service-split-design.md §8 阶段 4）：
+ * 阶段 4 任务 2 验收 E2E（docs/architecture/data-service-split.md §8 阶段 4）：
  * 真实链路 result.announcement.collected → RabbitMQ → 主服务消费 →
  * announcementId 幂等落 PENDING + orgId 回填订阅行（R3 对账）；
  * 重复投递无副作用（不翻倍、不覆盖），超体积直接终态 FAILED，正常消费无死信。

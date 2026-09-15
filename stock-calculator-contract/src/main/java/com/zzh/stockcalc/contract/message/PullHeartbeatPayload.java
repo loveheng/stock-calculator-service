@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * result.pull.heartbeat 的 payload（docs/pull-loop-unification-design.md §3）：
+ * result.pull.heartbeat 的 payload（docs/architecture/pull-loop-unification.md §3）：
  * data → main 的自循环续期回报，每轮一条（8min/1h 量级，可忽略）。
  * main 写 pull_heartbeat 表供看门狗判活与仪表盘展示；回报失败不影响循环
  * ——心跳是观测信号非控制信号（设计不变量 3），控制信号只有种子与深度守卫。

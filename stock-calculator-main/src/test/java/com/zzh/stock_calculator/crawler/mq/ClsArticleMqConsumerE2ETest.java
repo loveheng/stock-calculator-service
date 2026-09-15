@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 阶段 1 验收 E2E（docs/data-service-split-design.md §8 阶段 1）：
+ * 阶段 1 验收 E2E（docs/architecture/data-service-split.md §8 阶段 1）：
  * 真实链路 result.cls.article → RabbitMQ → 主服务消费 → 幂等入库；
  * 重复投递无副作用（关联不翻倍、无死信）。
  * <p>依赖本地 PostgreSQL + RabbitMQ（docker compose），用 RABBIT_E2E=true 显式开启

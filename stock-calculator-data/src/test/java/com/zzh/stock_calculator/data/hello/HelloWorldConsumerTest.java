@@ -23,7 +23,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 /**
- * HelloWorldConsumer 单测（docs/pull-loop-unification-design.md §8.3.4）：一次性消费
+ * HelloWorldConsumer 单测（docs/architecture/pull-loop-unification.md §8.3.4）：一次性消费
  * 形态——执行 + 心跳回报（appliedTtlMs=0 哨兵，不变量 8）+ 恒 ack；心跳失败不影响 ack。
  */
 @ExtendWith(MockitoExtension.class)

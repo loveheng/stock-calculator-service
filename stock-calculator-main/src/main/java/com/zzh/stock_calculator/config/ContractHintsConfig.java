@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportRuntimeHints;
 
 /**
- * 契约 DTO 反射注册（无条件装配，docs/data-service-split-design.md R2）：
+ * 契约 DTO 反射注册（无条件装配，docs/architecture/data-service-split.md R2）：
  * 反射注册不能挂在任何条件装配类下——条件 Bean 在 AOT 构建期被固化/裁剪时，
  * 注册随之丢失 → native 反射缺失，消费信封必挂
  * （data 模块 R1 冒烟实证：InvalidDefinitionException no delegate- or property-based Creator）。

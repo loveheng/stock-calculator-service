@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * 注册 / 登录 / 登出 / 找回（docs/e2ee-auth-backend-design.md §D.4.2）。
+ * 注册 / 登录 / 登出 / 找回（docs/e2ee-auth/design.md §D.4.2）。
  *
  * @description 零知识红线（决策 B2）：password 即前端 authHash（64 位 hex），落库前 bcrypt(10)，
  *              任何日志不得输出 password；用户不存在时登录路径跑 dummy bcrypt 抹平时序（§D.5.1）。

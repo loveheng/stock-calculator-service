@@ -30,7 +30,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * SyncBackupService 单元测试（docs/server-sync-backend-implementation.md §9.1）：
+ * SyncBackupService 单元测试（docs/server-sync/implementation.md §9.1）：
  * 校验全分支 / 去重两分支 / 频控 / 冲突映射 / 历史落库与裁剪 / 版本回读（E2）。
  * 仓库全部 mock；CAS SQL 与 L1 回归由 SyncBackupL1IntegrationTest（真 PG）承担。
  */

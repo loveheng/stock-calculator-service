@@ -34,7 +34,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * PullLoopRenewer 单测（docs/pull-loop-unification-design.md §3.3 / L2）：深度守卫
+ * PullLoopRenewer 单测（docs/architecture/pull-loop-unification.md §3.3 / L2）：深度守卫
  * 三路分支——正常续种（expiration 逐条携带）、深度>0 跳过、disabled 跳过；心跳回报
  * 是观测信号，任何分支都不上抛。
  */

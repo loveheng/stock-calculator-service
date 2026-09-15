@@ -7,7 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 服务端密文同步 DTO 集合（docs/server-sync-backend-implementation.md §5）。
+ * 服务端密文同步 DTO 集合（docs/server-sync/implementation.md §5）。
  * updatedAt 序列化为 ISO-8601（Jackson 3 默认，OffsetDateTime 带偏移）。
  */
 public final class SyncDtos {

@@ -13,7 +13,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * 不透明会话（docs/e2ee-auth-backend-design.md §D.3.3 / §D.4.3，决策 B3）。
+ * 不透明会话（docs/e2ee-auth/design.md §D.3.3 / §D.4.3，决策 B3）。
  *
  * @description token 原文仅存在于签发响应体，落库为 SHA-256；吊销以 revoked_at 为准，
  *              无 JWT、无隐式状态，改密/登出即吊销（决策 B4）。

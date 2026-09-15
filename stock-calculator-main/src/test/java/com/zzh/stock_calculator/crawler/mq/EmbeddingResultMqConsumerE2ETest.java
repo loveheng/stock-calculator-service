@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 阶段 3 验收 E2E（docs/data-service-split-design.md §8 阶段 3）：
+ * 阶段 3 验收 E2E（docs/architecture/data-service-split.md §8 阶段 3）：
  * 真实链路 result.embedding.done → RabbitMQ → 主服务消费 → 确定性 UUID 向量 upsert
  * + 状态行 DONE；重复投递无副作用（向量行不重复、指纹跳过、无死信）。
  * <p>依赖本地 PostgreSQL + RabbitMQ（docker compose），用 RABBIT_E2E=true 显式开启；

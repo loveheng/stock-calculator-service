@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * 服务端密文同步业务层：校验 → 去重 → 频控 → CAS → 历史裁剪 → 版本回读
- * （docs/server-sync-backend-design.md §4.4 / §5）。
+ * （docs/server-sync/design.md §4.4 / §5）。
  *
  * @description 零知识哑存储（D2）：只验信封结构，永不解析/解密业务内容。
  *              冲突与频控以 PushOutcome 返回（E4：BusinessException 无 data 通道），

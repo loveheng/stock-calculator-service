@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 阶段 4 任务 1 验收 E2E（docs/data-service-split-design.md §8 阶段 4）：
+ * 阶段 4 任务 1 验收 E2E（docs/architecture/data-service-split.md §8 阶段 4）：
  * 真实链路 订阅快照 → stockcalc.control 交换机 → collector.control.q，
  * 信封与 payload 契约（version/stocks[{stockId,orgId,since}]）落队可还原；
  * unsubscribe 事务提交后 AFTER_COMMIT 触发重推（覆盖式语义：新快照不含已退订标的）。

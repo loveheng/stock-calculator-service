@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 自循环配置本地缓存（docs/pull-loop-unification-design.md §3）：collector 无 DB（D2），
+ * 自循环配置本地缓存（docs/architecture/pull-loop-unification.md §3）：collector 无 DB（D2），
  * 拉取源配置以「version + overrides」内存态持有，由 control.pull.config 覆盖式更新，
  * 订阅快照同款语义。version 单调（epoch millis）拒绝旧快照回灌。
  * resolve 以 control 覆盖优先、代码内置默认兜底（配置缺发/丢失不死锁循环）。

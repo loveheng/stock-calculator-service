@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 阶段 4 任务 3 验收 E2E（docs/data-service-split-design.md §8 阶段 4）：
+ * 阶段 4 任务 3 验收 E2E（docs/architecture/data-service-split.md §8 阶段 4）：
  * 主服务发布端 PENDING 扫描 → task.announcement.process 落队（元数据四件套）；
  * 测试扮演 worker 消费后回报 result.announcement.done → content 溯源行 upsert +
  * summary 落账 + 二段向量化任务自动下发（task.embedding.compute kind=announcement）；

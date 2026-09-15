@@ -21,7 +21,7 @@ last-merge: none
 - 常态拉取：维持种子 + 续种深度守卫不变（L2 复核成立：探-种顺序使多余种子自愈
   收敛，SAC 对拉取环无增益，不加）。
 - worker 两域：竞争消费 quorum 队列，天然扩容单位（吞吐天花板 = LLM key RPM 与
-  embedding 日额度 D8，见 docs/data-worker-replica-deploy.md §7）。
+  embedding 日额度 D8，见 docs/deploy/data-worker-replica.md §7）。
 - worker 变体退役：删 Dockerfile.worker / CI build-data-worker job / build-native.sh
   VARIANT 分支 / compose data-worker 块；每次发布省一次 native 构建。
 
@@ -36,13 +36,13 @@ last-merge: none
 - data 79 用例全绿；JVM+AOT 上下文与 native 二进制分别对一次性 LavinMQ 实例实测：
   SAC 参数落盘、匿名队列声明/绑定/消费者注册、0.34s 启动零报错；native 13m29s
   重建冒烟双绿（启动 + ingest 503）。
-- 文档：docs/data-worker-replica-deploy.md 重写（部署三选一含 Cloud Run 命令 +
-  §4 一次性迁移）；data-service-split-design.md v2.5 条目 + §6 部署形态行更新。
+- 文档：docs/deploy/data-worker-replica.md 重写（部署三选一含 Cloud Run 命令 +
+  §4 一次性迁移）；docs/architecture/data-service-split.md v2.5 条目 + §6 部署形态行更新。
 
 ## 待办
 
 - 提交推送 dev → 观察 CI build-data 单 job 全链（双 job 并一后的首次运行）
-- 部署时执行 docs/data-worker-replica-deploy.md §4 一次性迁移：新镜像启动前删
+- 部署时执行 docs/deploy/data-worker-replica.md §4 一次性迁移：新镜像启动前删
   task.history.sync 旧队列（本机 dev 栈 data 容器升级同理，否则 PRECONDITION_FAILED），
   割接后清理 collector.control.q
 - Cloud Run 部署（可选）：--no-cpu-throttling --min-instances=1（不能缩零），

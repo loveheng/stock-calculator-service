@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # 服务端密文同步 · 后端开发实施文档
 
-> 版本：v1.0（2026-09-04，对应 `server-sync-backend-design.md` v1.0 修正 E1-E9）
+> 版本：v1.0（2026-09-04，对应 `docs/server-sync/design.md` v1.0 修正 E1-E9）
 > 范围：sync 领域包全部文件骨架、schema.sql 增量、WebConfig 接线、单测与真库冒烟、验证命令与里程碑
-> 关联：`docs/server-sync-backend-design.md`（设计与修正表 E1-E9）、前端仓库 `docs/server-sync-implementation.md`（前端落点）；skill `cls-article-patterns`（编码模板）、`stock-calculator-workflow`（环境限制）
+> 关联：`docs/server-sync/design.md`（设计与修正表 E1-E9）、前端仓库 `docs/server-sync-implementation.md`（前端落点）；skill `cls-article-patterns`（编码模板）、`stock-calculator-workflow`（环境限制）
 > 状态：待开发
 
 ---
@@ -21,9 +26,9 @@
 | JSON 栈为 Jackson 3 | `tools.jackson.databind.ObjectMapper`（Boot 4 自动装配 Bean，AuthInterceptor 注入同款） |
 | 表结构手工管理 | `spring.jpa.hibernate.ddl-auto: none`；仓库根 `postgres/schema.sql`（`public.` 前缀、缩写类型、`IF NOT EXISTS`、显式约束名） |
 | 测试基建 | 纯 Mockito 单测（`auth/service/SessionServiceTest` 模式）；无 H2 / Testcontainers；`@SpringBootTest` contextLoads 需本地 PG 环境变量 |
-| 验证命令 | `./mvnw compile -q`；`POSTGRES_PASS=… ./mvnw install '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'` |
+| 验证命令 | `./mvnw compile -q`；`POSTGRES_PASS=… ./mvnw install -pl stock-calculator-main -am`（需本地 PG） |
 
-**环境约束**：文件分段写入；终端命令禁含 `${...}` 字符串——Service 的 `@Value` defaultValue 含 `${...}`，该文件必须用 write_file 写入，禁止终端 heredoc；全量验证永远排除 TaskServiceTest。
+**环境约束**：文件分段写入；终端命令禁含 `${...}` 字符串——Service 的 `@Value` defaultValue 含 `${...}`，该文件必须用 write_file 写入，禁止终端 heredoc；全量验证无 DB 环境排除 StockCalculatorApplicationTests / SyncBackupL1IntegrationTest（TaskServiceTest 已删除）。
 
 ## 1. 文件清单
 
@@ -51,7 +56,7 @@ Modulith：sync 只依赖 `common` 基包；userId 经 `@RequestAttribute` 注�
 
 ```sql
 -- ============================================================
--- 服务端密文同步（server-sync-backend-design.md §3 / D5 / D8 / D10 / D11 / E1 / E7）
+-- 服务端密文同步（docs/server-sync/design.md §3 / D5 / D8 / D10 / D11 / E1 / E7）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.user_sync_data (
 	user_id           varchar(64) NOT NULL,
@@ -503,14 +508,14 @@ WHERE user_sync_data.version = 0;
 | 里程碑 | 内容 | 完成标准 |
 |---|---|---|
 | M-B1 | schema.sql 增量 + 领域包骨架（entity/repository/dto）+ WebConfig | `./mvnw compile -q` 零错误 |
-| M-B2 | Service/Controller 全量 + SyncBackupServiceTest | `./mvnw test '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'` 全绿（含 Modulith） |
+| M-B2 | Service/Controller 全量 + SyncBackupServiceTest | `./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-DfailIfNoTests=false'` 全绿（含 Modulith） |
 | M-B3 | §9.2 真库冒烟 + 前端联调 | 冒烟 4 步全过；前端仓库 M5 验收清单通过 |
 
 验证命令：
 
 ```sh
 ./mvnw compile -q
-POSTGRES_PASS=… ./mvnw install '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'
+POSTGRES_PASS=… ./mvnw install -pl stock-calculator-main -am
 ```
 
 ## 11. 边界情况自测清单（后端侧）

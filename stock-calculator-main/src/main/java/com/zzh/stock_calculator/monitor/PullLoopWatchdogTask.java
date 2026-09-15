@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 常态拉取自循环看门狗（docs/pull-loop-unification-design.md §3.4）：main 控制面的
+ * 常态拉取自循环看门狗（docs/architecture/pull-loop-unification.md §3.4）：main 控制面的
  * 两个周期性职责合一——① 配置快照周期性重推（覆盖式，改配置表后 ≤ 一周期生效）；
  * ② 心跳判活补种（last_renew + ttl + 宽限超期 → 补种子），enabled=false 不补种
  * （L6 停用语义执行者）。补种幂等由 data 侧深度守卫兜底（补多不炸）。
@@ -114,7 +114,7 @@ public class PullLoopWatchdogTask {
                 .orElse(true);
     }
 
-    // ==================== 日历任务认领（docs/pull-loop-unification-design.md §8.3.2，L8-L14） ====================
+    // ==================== 日历任务认领（docs/architecture/pull-loop-unification.md §8.3.2，L8-L14） ====================
 
     /** 启动校验（L13 fail-fast）：CALENDAR 行 cron 表达式必须可解析，坏行阻止 main 启动 */
     @PostConstruct

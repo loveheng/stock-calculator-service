@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 自循环续期心跳事件（docs/pull-loop-unification-design.md L4）：crawler 消费端收到
+ * 自循环续期心跳事件（docs/architecture/pull-loop-unification.md L4）：crawler 消费端收到
  * result.pull.heartbeat 后经本事件跨域移交 monitor 落表。事件对象置于 monitor 基包，
  * crawler 仅引用基包（Modulith 红线）。观测信号非控制信号（设计不变量 3）。
  */

@@ -1,8 +1,13 @@
+---
+status: active
+updated: 2026-09-12
+---
+
 # 主/数据模块拆分 · 测试计划
 
 > 版本：v1.0（2026-09-12）
 > 被测对象：提交 `4c70110 系统拆分为主模块和数据模块` + 工作区未提交的终态清理（main 侧回退路径删除、MQ 单路径化、monitor 巡检域、历史补录 MQ 化）。
-> 关联设计：docs/data-service-split-design.md（v2.4）、docs/data-source-onboarding.md、docs/announcement-rag-pipeline-design.md、docs/cls-article-vector-backend-design.md
+> 关联设计：docs/architecture/data-service-split.md（v2.4）、docs/architecture/data-source-onboarding.md、docs/ai-pipeline/announcement-rag.md、docs/ai-pipeline/cls-article-vector.md
 
 ## 1. 被测对象与范围
 

@@ -1,10 +1,15 @@
+---
+status: active
+updated: 2026-09-15
+---
+
 # Context-Aware Copilot · 开发实施文档
 
-> 版本：v1.5.1（2026-09-02 代码审查补丁；v1.5 收录版 = v1.4 定稿按 `docs/copilot-design.md` §8 差异清单修订后入库）
+> 版本：v1.5.1（2026-09-02 代码审查补丁；v1.5 收录版 = v1.4 定稿按 `docs/copilot/design.md` §8 差异清单修订后入库）
 > 范围：前端契约/状态/服务/UI 落点与骨架、后端领域包/表结构/编排/容灾实现要点、API 契约、验证清单
-> 关联：`docs/copilot-spec.md`（决策 D 编号总表，v1.5 重建版）、`docs/copilot-design.md`（C1-C17 设计基线）、`docs/e2ee-auth-spec.md`（鉴权）、skill `cls-article-patterns`（后端编码模板）
+> 关联：`docs/copilot/spec.md`（决策 D 编号总表，v1.5 重建版）、`docs/copilot/design.md`（C1-C17 设计基线）、`docs/e2ee-auth/design.md`（鉴权）、skill `cls-article-patterns`（后端编码模板）
 > 状态：待 P0 开发启动
-> **现状注记（2026-09-12）**：本文「单模块」表述已过时（现为 contract/main/data 三模块）；SSE 流式提问（`askStream`）、Prompt 模板管理（`CopilotPromptAdminController` + `copilot_prompt_template/_history` 两表 + Redis 镜像）、custom-stats `taskType` 路由与 `CopilotStatActionExtractor` 动作块均为既有实现，本文未覆盖；LLM 渠道为 DeepSeek 专用渠道。冲突处以代码与 `docs/copilot-api.md` 为准。
+> **现状注记（2026-09-15 更新）**：模块结构已于 §0 修正为 contract/main/data 三模块；SSE 流式提问（`askStream`）、Prompt 模板管理（`CopilotPromptAdminController` + `copilot_prompt_template/_history` 两表 + Redis 镜像）、custom-stats `taskType` 路由与 `CopilotStatActionExtractor` 动作块均为既有实现，本文未覆盖；LLM 渠道为 DeepSeek 专用渠道。冲突处以代码与 `docs/copilot/api.md` 为准。
 
 **v1.5 修订摘要**（相对 v1.4，逐项对应 design §8 差异清单 #1-#13）：
 
@@ -33,10 +38,10 @@
 | 项 | 事实 |
 |---|---|
 | 前端 | React 19 + zustand 5（slices 模式）+ react-router-dom 7 + Dexie 4.4 + Tailwind 3.4 + TypeScript + Vite + vitest（基线 472/472） |
-| 后端 | stock-calculator-service：Spring Boot 4.1.1 + Java 21 + Jakarta + PostgreSQL + Spring Data JPA（Hibernate），Maven Wrapper，单模块 `stock-calculator-main` |
+| 后端 | stock-calculator-service：Spring Boot 4.1.1 + Java 21 + Jakarta + PostgreSQL + Spring Data JPA（Hibernate），Maven Wrapper，三模块 contract/main/data（copilot 落 main） |
 | 鉴权 | 前端 `services/apiClient.ts` 走 Spring Boot `:18080/api/auth`，Bearer 注入 + 恒 200 信封（code 分支）+ 拦截器 401 例外；Copilot 复用同一底座与令牌 |
 | 前端执行环境 | 前端仓库根（stock-calculator/）；验证命令 `npx tsc --noEmit` / `npm test`（pretest 自动跑 `check:arch`） |
-| 后端执行环境 | 本仓库；`./mvnw test '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'`（TaskServiceTest 打真实 API 必挂） |
+| 后端执行环境 | 本仓库；无 DB 环境 `./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-DfailIfNoTests=false'`（两个 @SpringBootTest 需本地 PG；原 TaskServiceTest 已随 2026-09 MQ 化改造删除） |
 | LLM 基建 | **复用 llm 域既有双渠道责任链**（`LlmChainRouter` + `GeminiLlmService`/`GroqLlamaService` + `LlmConfig` 全局 Bean，`llm.*` 配置，native OCR 已验证主路径）；copilot 仅做向后兼容扩展（§8.3），首次真实调用若 usage 反序列化报 native 反射缺口，按报错类名补 `gen-logger-config.py` EXTRA_CLASSES 迭代（P3 预留 1 轮） |
 | 写入约束 | 终端命令禁含占位符展开形式；单次写入过长会被截断，大文件分段写 |
 
@@ -757,7 +762,7 @@ npm run map:features    # copilot 关键词登记后确认「未归类」为 0
 ```sh
 ./mvnw compile -q
 cat postgres/schema.sql | docker exec -i <pg容器> psql -U postgres -d stock_calculator   # 或手动执行 DDL
-POSTGRES_PASS=... ./mvnw install '-Dtest=!TaskServiceTest' '-DfailIfNoTests=false'
+POSTGRES_PASS=... ./mvnw install -pl stock-calculator-main -am
 ```
 
 新增测试：
@@ -783,7 +788,7 @@ POSTGRES_PASS=... bash stock-calculator-main/build-native.sh   # 全量（改 ym
 | 期 | 任务 | 产出/验收 |
 |---|---|---|
 | P0 | §2 契约 + §3 service(mock) + §4 slice + §5 hook（修正版）+ §6 组件 + App 挂载 + Statistics/Home builder | tsc 零错、check:arch 过、新单测绿、mock 全链路可演示 |
-| P1 | §7.1 DDL + §7.2 实体 + §7.3 仓储 + **§1.2 llm/common 扩展** + §8.1 编排 + §8.3 接入 + §8.4 Controller + CopilotRateLimiter | mvnw test 全绿（排除 TaskServiceTest）；curl 三端点走通（含级联 DELETE）；软删后旧 scopeId 可复用验证；get-or-create 竞态单测绿（REQUIRES_NEW）；幂等两段式与 pending 互斥单测绿；双渠道容灾由复用链天然具备 |
+| P1 | §7.1 DDL + §7.2 实体 + §7.3 仓储 + **§1.2 llm/common 扩展** + §8.1 编排 + §8.3 接入 + §8.4 Controller + CopilotRateLimiter | mvnw test 全绿（无 DB 环境排除两个 @SpringBootTest）；curl 三端点走通（含级联 DELETE）；软删后旧 scopeId 可复用验证；get-or-create 竞态单测绿（REQUIRES_NEW）；幂等两段式与 pending 互斥单测绿；双渠道容灾由复用链天然具备 |
 | P2 | 前后端联调（历史/翻页/级联清理触发/错误子码反馈）+ 墓碑对账补发（D29）端到端 + 明细重放纯函数占位（基于 Dexie 历史切片，可顺延 V2） | 全链路手工验收（含 entity-deletion → cascade delete、离线删除 → 墓碑补发场景）；tokens 落库核对 |
 | P3 | native 全量构建 + 冒烟 + 真实 ask（含 usage 反射元数据迭代预算 1 轮）+ 隐私文案打磨 | spec §8 P3 验收标准 |
 
@@ -792,6 +797,6 @@ POSTGRES_PASS=... bash stock-calculator-main/build-native.sh   # 全量（改 ym
 - 前端功能地图（skill `stock-calculator-frontend-dev` §2 表格）加 copilot 行；`scripts/feature-map.mjs` GROUPS 登记关键词（copilot/Copilot），跑一次确认未归类为 0。
 - 后端 feature-index 表加 copilot 域行（子包 controller·dto·entity·repository·service·config）。
 - scopeId 常量表为前后端共享协议：新增页面 = 常量表加一项 + view 注册 + 本文档 §1.1 表格加行。
-- **文档链**：改行为先改 `docs/copilot-spec.md` 决策表（或 `docs/copilot-design.md` §0 C 决策），再同步本文；spec 缺失编号（D1/D3/D6/D7/D10/D14-D17/D21-D27）待原稿补录。
+- **文档链**：改行为先改 `docs/copilot/spec.md` 决策表（或 `docs/copilot/design.md` §0 C 决策），再同步本文；spec 缺失编号（D1/D3/D6/D7/D10/D14-D17/D21-D27）待原稿补录。
 - scopeId 格式变更 → 所有视图注册时动态拼接实体主键；新表按新格式创建，软删后索引自动释放旧条目。
 - v1.2 架构迁移遗留：移除 AES / encryptedContext / contextCtime / AesGcmUtil.java——任何遗留导入或引用需全部清理；context_overview/time_anchor/deleted_at 为新增必填字段。

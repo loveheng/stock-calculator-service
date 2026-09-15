@@ -15,7 +15,7 @@ import java.io.IOException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Bearer 会话拦截（docs/e2ee-auth-backend-design.md §D.2.2）。
+ * Bearer 会话拦截（docs/e2ee-auth/design.md §D.2.2）。
  *
  * @description 解析 → SessionService.resolve → 注入 authUserId / authScope / authTokenHash；
  *              recovery 受限会话仅放行 recovery/confirm 与 logout（§D.4.3）；
