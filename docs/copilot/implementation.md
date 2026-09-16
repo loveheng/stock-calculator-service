@@ -7,7 +7,7 @@ updated: 2026-09-15
 
 > 版本：v1.5.1（2026-09-02 代码审查补丁；v1.5 收录版 = v1.4 定稿按 `docs/copilot/design.md` §8 差异清单修订后入库）
 > 范围：前端契约/状态/服务/UI 落点与骨架、后端领域包/表结构/编排/容灾实现要点、API 契约、验证清单
-> 关联：`docs/copilot/spec.md`（决策 D 编号总表，v1.5 重建版）、`docs/copilot/design.md`（C1-C17 设计基线）、`docs/e2ee-auth/design.md`（鉴权）、skill `cls-article-patterns`（后端编码模板）
+> 关联：`docs/copilot/spec.md`（决策 D 编号总表，v1.5 重建版）、`docs/copilot/design.md`（C1-C17 设计基线）、`docs/e2ee-auth/design.md`（鉴权）、skill `stock-calculator-backend-dev`（后端编码模板）
 > 状态：待 P0 开发启动
 > **现状注记（2026-09-15 更新）**：模块结构已于 §0 修正为 contract/main/data 三模块；SSE 流式提问（`askStream`）、Prompt 模板管理（`CopilotPromptAdminController` + `copilot_prompt_template/_history` 两表 + Redis 镜像）、custom-stats `taskType` 路由与 `CopilotStatActionExtractor` 动作块均为既有实现，本文未覆盖；LLM 渠道为 DeepSeek 专用渠道。冲突处以代码与 `docs/copilot/api.md` 为准。
 
@@ -91,7 +91,7 @@ stock-calculator-main/src/main/java/com/zzh/stock_calculator/copilot/
 **common 域微扩展（C6）：** `ApiResponse` 增可空 `subCode`（`@JsonInclude(NON_NULL)`）+ `fail(code, message, subCode)` 重载；`BusinessException` 增可选 subCode 构造器；`GlobalExceptionHandler` 透传。
 
 - Modulith 边界：copilot 只引用 `common` 基包与 llm **基包**公开类型（LlmChainRouter / LlmConversation / LlmChatResult）；**不 import 任何域的子包**（`ModulithVerifyTest` 守护）。
-- 表结构落 `postgres/schema.sql`（feature-index 变更落点顺序）；新增领域按 feature-index 约定登记。
+- 表结构落 `postgres/schema.sql`（stock-calculator-service-index 变更落点顺序）；新增领域按 stock-calculator-service-index 约定登记。
 
 ## 2. 前端契约（`types/domain.ts` 追加，R3 零依赖）
 
@@ -366,7 +366,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_chat_message_session_id
     ON public.ai_chat_message (session_id, id DESC) WHERE deleted_at = 0;
 ```
 
-### 7.2 Entity 要点（严格按 cls-article-patterns 模板）
+### 7.2 Entity 要点（严格按 stock-calculator-backend-dev 模板）
 
 ```java
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
@@ -794,8 +794,8 @@ POSTGRES_PASS=... bash stock-calculator-main/build-native.sh   # 全量（改 ym
 
 ## 12. 维护约定
 
-- 前端功能地图（skill `stock-calculator-frontend-dev` §2 表格）加 copilot 行；`scripts/feature-map.mjs` GROUPS 登记关键词（copilot/Copilot），跑一次确认未归类为 0。
-- 后端 feature-index 表加 copilot 域行（子包 controller·dto·entity·repository·service·config）。
+- 前端项目索引（skill `stock-calculator-index` 归属表）加 copilot 行；`scripts/feature-map.mjs` GROUPS 登记关键词（copilot/Copilot），跑一次确认未归类为 0。
+- 后端项目索引（skill `stock-calculator-service-index` 归属表）加 copilot 域行（子包 controller·dto·entity·repository·service·config）。
 - scopeId 常量表为前后端共享协议：新增页面 = 常量表加一项 + view 注册 + 本文档 §1.1 表格加行。
 - **文档链**：改行为先改 `docs/copilot/spec.md` 决策表（或 `docs/copilot/design.md` §0 C 决策），再同步本文；spec 缺失编号（D1/D3/D6/D7/D10/D14-D17/D21-D27）待原稿补录。
 - scopeId 格式变更 → 所有视图注册时动态拼接实体主键；新表按新格式创建，软删后索引自动释放旧条目。

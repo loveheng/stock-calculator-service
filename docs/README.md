@@ -50,6 +50,7 @@ updated: 2026-09-15
 - [pull-loop-unification](architecture/pull-loop-unification.md) · 数据拉取自循环化设计（已实施 2026-09-13）
 - [module-split-test-plan](architecture/module-split-test-plan.md) · 主/数据模块拆分测试计划
 - [data-source-onboarding](architecture/data-source-onboarding.md) · 新数据源接入指南（webhook ingest · 阶段 5）
+- [agent-skill-system](architecture/agent-skill-system.md) · AI 辅助开发 skill 体系设计意图与使用手册
 
 ## deploy/ — 部署与运维
 

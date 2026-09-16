@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * 电报单条解析（自 main 模块 ClsDayTaskHelp 的解析段移植）：产出契约 DTO 而非 JPA 实体。
- * 字典与关联分开解析（cls-article-patterns §6.1）；id 缺失返回 null 由调用方跳过。
+ * 字典与关联分开解析（stock-calculator-backend-dev §6.1）；id 缺失返回 null 由调用方跳过。
  */
 public final class ClsArticleParser {
 

@@ -7,7 +7,7 @@ updated: 2026-09-15
 
 > 版本：v1.0（2026-09-04，对应 `docs/server-sync/design.md` v1.0 修正 E1-E9）
 > 范围：sync 领域包全部文件骨架、schema.sql 增量、WebConfig 接线、单测与真库冒烟、验证命令与里程碑
-> 关联：`docs/server-sync/design.md`（设计与修正表 E1-E9）、前端仓库 `docs/server-sync-implementation.md`（前端落点）；skill `cls-article-patterns`（编码模板）、`stock-calculator-workflow`（环境限制）
+> 关联：`docs/server-sync/design.md`（设计与修正表 E1-E9）、前端仓库 `docs/server-sync-implementation.md`（前端落点）；skill `stock-calculator-backend-dev`（编码模板）、`stock-calculator-workflow`（环境限制）
 > 状态：待开发
 
 ---
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS public.user_sync_history (
 -- 历史唯一冲突由 INSERT … ON CONFLICT DO NOTHING 吸收（E7，整库回滚场景）
 ```
 
-## 3. Entity（Lombok 三件套，按 cls-article-patterns）
+## 3. Entity（Lombok 三件套，按 stock-calculator-backend-dev）
 
 ```java
 @Data

@@ -128,7 +128,7 @@ CREATE INDEX if not exists idx_cae_status ON public.cls_article_embedding USING 
 - `model`：留档当前向量由哪个模型生成，支撑将来换模型时的全量重嵌账务（R9）
 - `content_hash`：输入文本 sha256 hex，防御性支撑正文变更重嵌
 
-### 3.3 Entity 映射要点（遵循 cls-article-patterns）
+### 3.3 Entity 映射要点（遵循 stock-calculator-backend-dev）
 
 - `ClsArticleEmbedding`：Lombok 三件套；`@Id` **无** `@GeneratedValue`（外部 ID = article_id 手动写入）；无 `@ManyToOne`（`Long articleId` 平铺）
 - `model` / `status` 用 `@Builder.Default` 给默认值；`createdAt` `@CreationTimestamp`、`updatedAt` `@UpdateTimestamp`
@@ -404,7 +404,7 @@ embedding:
 
 - 新增代码全部位于 crawler 域内，无跨域引用 → `ModulithVerifyTest` 零新增风险
 - P1 门面上基包（`ArticleSearchFacade`）时单独评审：copilot 仅可依赖 crawler 基包类型
-- 登记：`stock-calculator-feature-index` 的 crawler 行子包列表需补 `embedding`
+- 登记：`stock-calculator-service-index` 的 crawler 行子包列表需补 `embedding`
 
 ### 9.3 P1 变更记录（2026-09-09，用户拍板后落地）
 

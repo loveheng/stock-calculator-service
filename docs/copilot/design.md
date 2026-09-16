@@ -8,7 +8,7 @@ updated: 2026-09-15
 > 版本：v1.0.1（2026-09-02；同步实施文档 v1.5.1 代码审查补丁）
 > 定位：页面感知型 AI 助手（Copilot）的**总体设计基线**。前端以页面注册的快照上下文提问，后端以 scopeId 隔离会话、复用 llm 域双渠道容灾，轻量持久化支持历史回放。
 > 配套文档：《Context-Aware Copilot 开发实施文档》v1.4（文件级落点/骨架/验收，**尚未入库**，建议收录为 `docs/copilot/implementation.md`）；设计决策编号 D1-D32 以实施文档引用为准，本文以 C1-Cn 承载本仓后端侧决策。
-> 关联：`docs/ai-pipeline/ocr-llm.md`（llm 域现状）、`docs/e2ee-auth/design.md`（信封/限流先例）、skill `cls-article-patterns`（后端编码模板）。
+> 关联：`docs/ai-pipeline/ocr-llm.md`（llm 域现状）、`docs/e2ee-auth/design.md`（信封/限流先例）、skill `stock-calculator-backend-dev`（后端编码模板）。
 > 状态：待评审冻结（对应实施文档 P0 启动前）。
 > **现状注记（2026-09-12）**：本文 C1/C5「复用 llm 域 gemini→groq 容灾链」未实现——实际为 copilot 专用 DeepSeek 渠道（`copilot.llm.deepseek.*`，`channel=deepseek` 落库）；限流实际顺序为「校验→限流→幂等门控」（AiChatOrchestrationService.beginAsk，cid 重放/续跑会消耗限流额度）；SSE 流式端点、Prompt 模板管理子系统、custom-stats 动作块提取均已实现但本文未覆盖。冲突处以 `docs/copilot/api.md` 与代码为准。
 
@@ -88,7 +88,7 @@ flowchart TD
 | copilot 域（新增包） | CopilotController / CopilotDtos / AiChatSession·AiChatMessage 实体 / 两 Repository / AiChatOrchestrationService / CopilotRateLimiter / CopilotProperties | 领域隔离（ModulithVerifyTest 守护），与 auth/vision 并列 |
 | llm 域（既有包，小扩展） | LlmTurn / LlmConversation / LlmChatResult / LlmService.chat(LlmConversation) / LlmChainRouter.chatDetailed | C1/C2：容灾路由只此一份；扩展向后兼容，vision OCR 零改动 |
 | common（既有包，微扩展） | ApiResponse.subCode（可空）/ BusinessException subCode 构造器 | C6：恒 200 信封的机器可读子码 |
-| postgres/schema.sql | ai_chat_session / ai_chat_message DDL | 变更落点顺序，feature-index 登记 |
+| postgres/schema.sql | ai_chat_session / ai_chat_message DDL | 变更落点顺序，stock-calculator-service-index 登记 |
 | 前端仓库 | types/domain 追加 / copilotService / copilotSlice / usePageContext / GlobalCopilot / App 挂载 / 试点页 builder | C17，实施文档 §1.1 |
 
 ### 2.3 一次产出、两路分发（数据流主干）
@@ -389,6 +389,6 @@ turns        = [user:【页面上下文】contextSummary 序列化] + 历史交�
 
 ## 10. 维护约定
 
-- 后端 feature-index 表登记 copilot 域行（controller/dto/entity/repository/service/config）；前端 feature-map 登记关键词（copilot/Copilot）。
+- 后端 stock-calculator-service-index 表登记 copilot 域行（controller/dto/entity/repository/service/config）；前端 feature-map 登记关键词（copilot/Copilot）。
 - scopeId 常量表（前后端共享）新增页面 = 常量加一项 + view 注册 + 实施文档 §1.1 表加行。
 - 改行为先改决策记录（本文 §0 或 spec），再同步实施文档；本文 §8 差异清单随实施文档修订同步勾销。

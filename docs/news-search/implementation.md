@@ -30,7 +30,7 @@ updated: 2026-09-15
 
 ---
 
-## 1. 新领域包 `search`（包结构按 cls-article-patterns 规约）
+## 1. 新领域包 `search`（包结构按 stock-calculator-backend-dev 规约）
 
 ```
 com.zzh.stock_calculator.search
