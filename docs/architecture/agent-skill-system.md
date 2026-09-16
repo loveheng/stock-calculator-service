@@ -115,7 +115,7 @@ flowchart TD
 | **dev-guide** | 大需求开发、结构性重构、复杂 Bug 的流程引导 Check List：入口判定 → 需求流七步 / Bug 修复流六步，硬卡点检查 + 跨 skill 指针速查；零裁决权（薄路由） | 大需求 / 结构性重构 / 复杂 Bug；单文件微调、散修、纯咨询勿加载 |
 | **project-index** | 通用「功能 → 代码落点 + 文档落点」索引机制：表格式规范、L1/L2 两级调阅、防膨胀预算、维护协议、与 README/规范 skill 的边界 | 定位功能归属、建/维护项目索引、判断改动影响面 |
 | **memo-collector** | 备忘收集台账：AI 回复与用户口述中的待办/风险/未验证假设/测试启发自动收集去重落盘——todos.md 按域分节（活跃 epic + misc 兑底，与 devlog 挂靠同规则），七类内联标签（功能/修复/优化/文档/环境/测试/风险），咒语类信号不落台账、当轮附注建议写入对应 SKILL.md 护栏（经确认，体系自进化）；完成后流转 done.md；人工打勾自动回收（脏读校验）、(block) 阻塞绝对优先、/todo-groom 语义洗盘；与 dev-loop 互补（断点=唯一下一步，本表=全部积压） | 回复将产生「待办/注意/风险/未验证假设/咒语」类信号、用户说「记个待办/收集备忘」、发送 /todo /todos /tdone /todo-clean /todo-groom |
-| **agent-toolbox** | 全局脚本工具箱机制：脚本池（全局 `~/.agents/toolbox/scripts/` + 项目 `<repo>/scripts/agent-tools/`，同名项目覆盖全局）、元工具 `toolbox`（规范 SSOT + 执行器：init/new/check/list/run-hooks/install-hooks/spec/remove）、脚本自描述头部规范 v1、退出码契约（0 过/1 未过/2 自身故障）、金丝雀自测、脚本登记制（持久脚本入池、禁止系统内散放）、fail-open 钩子巡检（bootstrap/audit/cron/pre-commit）；人与 AI 共用同一 CLI，无 AI 可完全人工操作 | 需要复杂校验/巡检/环境体检，新增/修改/退役定制脚本工具，或收编登记散落各处的持久脚本时；写脚本前先 `toolbox spec`，登记用 `toolbox check` |
+| **agent-toolbox** | 全局脚本工具箱机制：脚本池（全局 `~/.agents/toolbox/scripts/` + 项目 `<repo>/scripts/agent-tools/`，同名项目覆盖全局）、元工具 `toolbox`（规范 SSOT + 执行器：init/new/check/list/run-hooks/install-hooks/spec/remove）、脚本自描述头部规范 v1.1（双语言：shell 优先 + python 兜底）、退出码契约（0 过/1 未过/2 自身故障）、金丝雀自测、脚本登记制（持久脚本入池、禁止系统内散放）、fail-open 钩子巡检（bootstrap/audit/cron/pre-commit）；人与 AI 共用同一 CLI，无 AI 可完全人工操作 | 需要复杂校验/巡检/环境体检，新增/修改/退役定制脚本工具，或收编登记散落各处的持久脚本时；写脚本前先 `toolbox spec`，登记用 `toolbox check` |
 
 > **脚本登记制（agent-toolbox）**：AI 产出的持久脚本一律经 `toolbox check` 登记入池——跨项目入全局池，项目专属入 `<repo>/scripts/agent-tools/`；禁止散放于家目录/项目根等处（/tmp 一次性分析脚本豁免，用完即弃）。历史散放脚本按「评估 → 合规化 → 入池 → 原址清理」收编，迁移走同一 check 门禁不豁免。流程细节见 agent-toolbox SKILL.md「散乱脚本治理」节。
 
@@ -226,9 +226,9 @@ flowchart TD
 
 **七条设计原则**：
 
-1. **三层解耦**：法律（SKILL.md + `toolbox spec`）→ 元工具（规范内嵌执行器，只搬运不重生）→ 自描述工具脚本（头部块 v1：name/summary/trigger/platform/self-test；参数/帮助/检测项内聚脚本内）。
+1. **三层解耦**：法律（SKILL.md + `toolbox spec`）→ 元工具（规范内嵌执行器，只搬运不重生）→ 自描述工具脚本（头部块 v1.1，字段 name/summary/trigger/platform/self-test 与语言无关；python 载于 docstring、shell 载于连续 # 注释；参数/帮助/检测项内聚脚本内）。
 2. **零注册表**：没有需要维护的清单文件，`toolbox list` 从脚本头部现场派生——对齐 project-index「可推导的不维护」。
-3. **登记制禁散放**：持久脚本必须经 `toolbox check` 入池（门禁：文件名/头部块/--help/--json/--self-test/纯 stdlib）；散放脚本走收编流程（SKILL.md「散乱脚本治理」节），迁移门禁不豁免。
+3. **登记制禁散放**：持久脚本必须经 `toolbox check` 入池（门禁：文件名/头部块/--help/--json/--self-test/语言门禁——py 静态校验纯 stdlib，sh 校验 shebang + `sh -n` 语法且 platform 必填 unix）；散放脚本走收编流程（SKILL.md「散乱脚本治理」节），迁移门禁不豁免。
 4. **人机同权**：唯一入口是 shim `~/.local/bin/toolbox`，AI 无专属通道；无 AI 时 `toolbox --help` 即说明书，巡检/增删全可人工操作。
 5. **退出码契约 + fail-open**：0 过 / 1 未过 / 2 自身故障，元工具与所有工具脚本一致；`run-hooks` 任一 FAIL → exit 1（供 pre-commit 门禁拦截），工具自身故障仅报 ERROR 不阻塞（防巡检自身瘫痪主流程）。
 6. **金丝雀自证**：guard 类工具（trigger≠manual）必带 `--self-test`，内嵌已知坏样本证明「能抓到坏」，防监控工具静默失效。
@@ -239,7 +239,7 @@ flowchart TD
 | 命令 | 职责 | 详见 |
 |---|---|---|
 | `toolbox init` | 初始化运行时（目录/shim/README），新机器适配入口 | `toolbox init --help` |
-| `toolbox new <名>` | 生成合规脚手架（头部块 + help/json/self-test 骨架） | `toolbox new --help` |
+| `toolbox new <名>` | 生成合规脚手架（默认 shell；`--lang python` 兜底；头部块 + help/json/self-test 骨架） | `toolbox new --help` |
 | `toolbox check <路径>` | 门禁校验并登记入池；引入新能力需用户确认 | `toolbox check --help` |
 | `toolbox list` | 现场派生工具清单（名称/摘要/trigger/平台） | `toolbox list --help` |
 | `toolbox run-hooks <钩>` | 按 trigger 批量执行；FAIL→exit 1，故障 fail-open | `toolbox run-hooks --help` |
@@ -254,7 +254,7 @@ flowchart TD
 - **巡检提醒**：会话开场 dev-loop §3 自动跑 `toolbox run-hooks bootstrap --quiet`（exit 0 静默）；`/audit` 第 11 项跑 `audit` 钩——FAIL 按 memo-collector 口径转 `风险` 待办；
 - **收编散放脚本**：评估复用价值 → 合规化补头部/help/json/自测 → `toolbox check` 入池 → 原址删除或改一行薄指针。
 
-**现状**（2026-09-16）：试点工具 `env-doctor`（本地运行时环境体检，trigger: manual）；钩子池为空 → `run-hooks` 静默通过；`install-hooks` 未安装（决策：不接 pre-commit/profile，按需人工触发）；脚本池与快速上手见 `~/.agents/toolbox/README.md`。
+**现状**（2026-09-16）：试点工具 `env-doctor`（本地运行时环境体检，trigger: manual）；同日 spec 升 v1.1：语言双通道——shell（.sh）一等公民优先，python 兜底，`toolbox new` 默认出 sh 脚手架，shell 门禁含 shebang + `sh -n` 语法检查，manual 类不限时；历史散放脚本已收编 8 项入项目池 `scripts/agent-tools/`（index-lint、docs-index-lint、run-regression、run-e2e、run-native-smoke、run-native-rest、run-jvm-watch、deploy-cloud-run，长任务 --json=预检语义），项目根不再散放持久脚本；`install-hooks` 未安装（决策：不接 pre-commit/profile，按需人工触发）；脚本池与快速上手见 `~/.agents/toolbox/README.md`。
 
 ### 3.5 环境硬约束（workflow 摘要）
 
@@ -280,7 +280,7 @@ flowchart TD
 - **大需求开工即 `/bind`**：拆解交给 `/next`（≤3 候选选定）；全程硬卡点自检；收尾 `/done`（内含强制审计，有 ⚠ 先修复再收尾）。
 - **窗口管理**：看到自动归并附注（⚙️）后，方便时重置会话；恢复成本 = 一句「继续」。
 - **健康节奏**：多机同步 / 分支切换 / 久别重开后跑 `/audit`；里程碑收尾、lessons 归并出新规则后跑 `/verify`（趁热验真）。
-- **改 docs 后**：跑 §八两条 lint + `sh docs-index-lint.sh`；**前端改码后**：`npx tsc --noEmit` + `npm test`（pretest 自动跑架构护栏）。
+- **改 docs 后**：跑 §八两条 lint + `sh scripts/agent-tools/docs-index-lint.sh`；**前端改码后**：`npx tsc --noEmit` + `npm test`（pretest 自动跑架构护栏）。
 - **git 纪律**：Agent 不擅自 commit / 建分支；`context/` 随功能 PR 一起提交。
 
 ### 4.3 灾难恢复与记忆防腐

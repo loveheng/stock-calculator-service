@@ -119,7 +119,7 @@ worker/collector/ingest 三角色开关**不用配**：AOT 构建期已钉死全
 ## 5. 部署（可重复）
 
 ```sh
-bash deploy-cloud-run.sh [tag]    # 仓库根；唯一必填 PROJECT_ID，凭据自动取 .env，
+bash scripts/agent-tools/deploy-cloud-run.sh [tag]    # 项目池；唯一必填 PROJECT_ID，凭据自动取 .env，
                                   # tag 缺省 8ac8b1f
 ```
 
@@ -169,7 +169,7 @@ gcloud run deploy scs-data \
 
 ## 7. 运维
 
-- **发新版**：`bash deploy-cloud-run.sh <新tag>` 即可（镜像 public 直接拉取；
+- **发新版**：`bash scripts/agent-tools/deploy-cloud-run.sh <新tag>` 即可（镜像 public 直接拉取；
   包若改回 private，先按 §3 中转并改脚本 IMAGE 为 AR 地址）。
 - **回滚**：重跑脚本换回旧 tag，或 Cloud Run 控制台 revision 一键回滚。
 - **扩副本**：改 `--max-instances`（Cloud Run 不感知 MQ 积压，靠这里手工定上限）；

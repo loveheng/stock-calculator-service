@@ -84,7 +84,7 @@ index-lint.sh 见下方「维护约定」。
 ## 维护约定
 
 - 新增领域/大功能 → 归属表加一行；**禁止把类名清单写进来**，只允许子包名与固定单文件例外。
-- 域结构变更后跑 `sh index-lint.sh`（归属表↔Base 包目录双向校验：防孤儿域、防断链）。
+- 域结构变更后跑 `sh scripts/agent-tools/index-lint.sh`（归属表↔Base 包目录双向校验：防孤儿域、防断链；已入 toolbox 项目池，也可 `toolbox run-hooks`/直接调用）。
 - 新增 docs 域 → 三处同步：本表文档落点列、stock-calculator-docs §〇 域表、docs/README.md 域头。
 - 命名即定位：路径规律为 `领域/<层>/<类名>.java`，先按规律猜，再用上表命令或 find_path 验证。
 - 关联 skill：stock-calculator-backend-dev（后端 DTO/Entity/Service 等写法规范）、stock-calculator-workflow（终端与文件写入限制、本地库口令）、stock-calculator-frontend-dev（前端项目）、stock-calculator-native-build（native 构建与运行期元数据）。
