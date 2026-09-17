@@ -12,10 +12,12 @@ public final class MqQueue {
     // ========== 业务队列 ==========
 
     /** 公告处理任务（worker 竞争消费，prefetch=2） */
-    public static final String TASK_ANNOUNCEMENT_PROCESS = "task.announcement.process.q";
+    public static final String TASK_ANNOUNCEMENT_PROCESS =
+        "task.announcement.process.q";
 
     /** 向量化计算任务（worker 竞争消费，prefetch=8） */
-    public static final String TASK_EMBEDDING_COMPUTE = "task.embedding.compute.q";
+    public static final String TASK_EMBEDDING_COMPUTE =
+        "task.embedding.compute.q";
 
     /** 历史补录触发（collector 单发单收） */
     public static final String TASK_HISTORY_SYNC = "task.history.sync.q";
@@ -28,10 +30,24 @@ public final class MqQueue {
     public static final String TASK_CLS_PULL_DELAY = "task.cls.pull.delay.q";
 
     /** 公告常态采集任务（自循环工作队列，collector 门控消费，恒 ack 无 retry 环） */
-    public static final String TASK_ANNOUNCEMENT_COLLECT = "task.announcement.collect.q";
+    public static final String TASK_ANNOUNCEMENT_COLLECT =
+        "task.announcement.collect.q";
 
     /** 公告采集自循环延迟队列（语义同 TASK_CLS_PULL_DELAY，DLK=task.announcement.collect） */
-    public static final String TASK_ANNOUNCEMENT_COLLECT_DELAY = "task.announcement.collect.delay.q";
+    public static final String TASK_ANNOUNCEMENT_COLLECT_DELAY =
+        "task.announcement.collect.delay.q";
+
+    /** copilot 记忆提炼任务（worker 竞争消费） */
+    public static final String TASK_MEMORY_EXTRACT = "task.memory.extract.q";
+
+    /** copilot 画像重抽任务（worker 竞争消费） */
+    public static final String TASK_MEMORY_PROFILE = "task.memory.profile.q";
+
+    /** copilot 记忆提炼自延迟队列（classic、无消费者、TTL 逐条消息自带；到期 DLX 改写
+     *  到 RESULTS 交换机 + result.memory.extract.tick 回 main——与拉取环不同，改写目标
+     *  是结果交换机而非 TASKS，定时到期必须回到控制面；见 docs/copilot/memory-profile.md §五） */
+    public static final String TASK_MEMORY_EXTRACT_DELAY =
+        "task.memory.extract.delay.q";
 
     /** 日历型定时任务工作队列（§8 一次性消费：无 delay 队列、无续种，collector 门控消费） */
     public static final String TASK_HELLO_WORLD = "task.hello.world.q";
@@ -47,11 +63,14 @@ public final class MqQueue {
     /** result.ingest.q 的 TTL 重试环（classic，quorum 不支持 per-queue TTL） */
     public static final String RESULT_INGEST_RETRY = "result.ingest.q.retry";
 
-    public static final String TASK_ANNOUNCEMENT_PROCESS_RETRY = "task.announcement.process.q.retry";
+    public static final String TASK_ANNOUNCEMENT_PROCESS_RETRY =
+        "task.announcement.process.q.retry";
 
-    public static final String TASK_EMBEDDING_COMPUTE_RETRY = "task.embedding.compute.q.retry";
+    public static final String TASK_EMBEDDING_COMPUTE_RETRY =
+        "task.embedding.compute.q.retry";
 
-    public static final String TASK_HISTORY_SYNC_RETRY = "task.history.sync.q.retry";
+    public static final String TASK_HISTORY_SYNC_RETRY =
+        "task.history.sync.q.retry";
 
     /** 死信停放队列（消费方 x-death >= 3 后主动投递，绑定 dead.#） */
     public static final String DEAD = "dead.q";

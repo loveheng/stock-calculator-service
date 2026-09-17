@@ -1,3 +1,5 @@
+server:
+  port: 18081
 spring:
   application:
     name: stock-calculator-data
@@ -34,7 +36,7 @@ datasvc:
   # worker 竞争消费角色（阶段 3）：缺省关闭；JVM 部署经 DATASVC_WORKER_ENABLED=true
   # 开启，native 构建须在构建期钉死该值（AOT 固化条件装配，R1 教训，collector 同）
   worker:
-    enabled: false
+    enabled: true
     prefetch:
       # 公告监听器并发消费者数（默认 1=原行为；运行期 env 可覆盖，值非 AOT 条件）
       announcement-concurrency: 1

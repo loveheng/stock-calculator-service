@@ -161,7 +161,10 @@ CREATE TABLE IF NOT EXISTS ai_chat_session (
     title             VARCHAR(100) NOT NULL,
     last_message_at   BIGINT,
     ctime             BIGINT       NOT NULL,
-    deleted_at        BIGINT       DEFAULT 0
+    deleted_at        BIGINT       DEFAULT 0,
+    -- 记忆提炼水位与在途锁（docs/copilot/memory-profile.md §四）
+    last_memory_extracted_message_id BIGINT   DEFAULT 0,
+    memory_extract_dispatched_at     TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_chat_session_user_scope
     ON ai_chat_session(user_id, scope_id) WHERE deleted_at = 0;
@@ -188,6 +191,45 @@ CREATE INDEX IF NOT EXISTS idx_ai_chat_message_session_id
     ON ai_chat_message(session_id, id DESC) WHERE deleted_at = 0;
 CREATE INDEX IF NOT EXISTS idx_ai_chat_message_cid
     ON ai_chat_message(client_message_id) WHERE client_message_id IS NOT NULL;
+
+-- =====================================================================
+-- Copilot 记忆固化与用户画像（docs/copilot/memory-profile.md §四）
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS copilot_memory (
+    id                  BIGSERIAL     PRIMARY KEY,
+    user_id             VARCHAR(64)   NOT NULL,
+    session_id          BIGINT        NOT NULL,
+    topic               VARCHAR(64)   NOT NULL,
+    content             VARCHAR(2000) NOT NULL,
+    source_message_ids  JSONB,
+    status              VARCHAR(10)   DEFAULT 'active',
+    pinned              BOOLEAN       DEFAULT FALSE,
+    ctime               BIGINT        NOT NULL,
+    created_at          TIMESTAMPTZ   DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMPTZ   DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_copilot_memory_session_topic UNIQUE (session_id, topic)
+);
+-- user_id 对齐 ai_chat_session.user_id（auth 用户 UUID 文本，user_custom_stat 同款修正先例）；
+-- 窗口内 (session_id, topic) 唯一 = 提炼即改写；跨窗口不去重（窗口即用户自分类主题）
+CREATE INDEX IF NOT EXISTS idx_copilot_memory_user_topic_ctime
+    ON copilot_memory(user_id, topic, ctime DESC);
+CREATE INDEX IF NOT EXISTS idx_copilot_memory_user_updated
+    ON copilot_memory(user_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS copilot_user_profile (
+    user_id                    VARCHAR(64)  PRIMARY KEY,
+    profile                    JSONB,
+    profile_version            INTEGER      DEFAULT 0 NOT NULL,
+    blacklisted_features       JSONB        DEFAULT '[]',
+    last_profile_extracted_at  TIMESTAMPTZ,
+    created_at                 TIMESTAMPTZ  DEFAULT CURRENT_TIMESTAMP,
+    updated_at                 TIMESTAMPTZ  DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 记忆链存量库幂等升级（新库由上方 CREATE 直接带列，以下 ALTER 为 no-op）
+ALTER TABLE public.ai_chat_session ADD COLUMN IF NOT EXISTS last_memory_extracted_message_id bigint DEFAULT 0 NOT NULL;
+ALTER TABLE public.ai_chat_session ADD COLUMN IF NOT EXISTS memory_extract_dispatched_at timestamptz;
 
 -- =====================================================================
 -- Copilot Prompt 模版（P1 配置驱动路由）：DB 为唯一准源，启动由 CopilotPromptSync

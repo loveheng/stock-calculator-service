@@ -12,10 +12,15 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "ai_chat_session", uniqueConstraints = {
-        @UniqueConstraint(name = "uq_ai_chat_session_user_scope",
-                columnNames = {"user_id", "scope_id"})
-})
+@Table(
+    name = "ai_chat_session",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uq_ai_chat_session_user_scope",
+            columnNames = { "user_id", "scope_id" }
+        ),
+    }
+)
 public class AiChatSession {
 
     @Id
@@ -40,4 +45,13 @@ public class AiChatSession {
 
     @Column(name = "deleted_at")
     private Long deletedAt;
+
+    /** 记忆提炼水位：该窗口内 id > 水位的消息为待提炼差量；result 成功才推进（决策 #5/#20） */
+    @Column(name = "last_memory_extracted_message_id", nullable = false)
+    @Builder.Default
+    private Long lastMemoryExtractedMessageId = 0L;
+
+    /** 记忆提炼在途锁：NULL=无在途；CAS 置位（tick 闸门），result 成功清锁，超时兑底（决策 #20） */
+    @Column(name = "memory_extract_dispatched_at")
+    private java.time.OffsetDateTime memoryExtractDispatchedAt;
 }

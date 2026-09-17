@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: data-single-image
-total-merged: 0
-last-merge: none
+total-merged: 1
+last-merge: 2026-09-17
 ---
 
 # data-single-image：data 域单镜像多副本改造（设计文档 v2.5）
@@ -11,6 +11,7 @@ last-merge: none
 > 目标：全舰队唯一 data 镜像（-data，collector/worker/ingest 三角色全开），副本数/
 > 位置不限、按需增减（主机 1、其他主机、Cloud Run）；「恰好一个」语义全部由 MQ
 > 协议仲裁，打包不再承载角色区分。状态：代码与文档完成、本地验证全绿（2026-09-13）。
+> 来源：2026-09-13 自 misc 转正，v2.5 改造随本 epic 归档。
 
 ## 决策与语义（已实施）
 

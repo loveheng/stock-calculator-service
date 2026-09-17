@@ -1,6 +1,16 @@
 package com.zzh.stock_calculator.crawler.mq;
 
 import com.rabbitmq.client.Channel;
+import com.zzh.stock_calculator.crawler.AnnouncementIngestApi;
+import com.zzh.stock_calculator.crawler.CopilotMemoryIngestApi;
+import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingResultService;
+import com.zzh.stock_calculator.crawler.entity.ClsArticle;
+import com.zzh.stock_calculator.crawler.entity.ClsArticleStock;
+import com.zzh.stock_calculator.crawler.entity.ClsArticleSubject;
+import com.zzh.stock_calculator.crawler.entity.ClsSubject;
+import com.zzh.stock_calculator.crawler.entity.Stock;
+import com.zzh.stock_calculator.crawler.service.ClsArticleService;
+import com.zzh.stock_calculator.monitor.PullHeartbeatEvent;
 import com.zzh.stockcalc.contract.MessageEnvelope;
 import com.zzh.stockcalc.contract.MessageType;
 import com.zzh.stockcalc.contract.MqExchange;
@@ -12,37 +22,27 @@ import com.zzh.stockcalc.contract.message.AnnouncementDonePayload;
 import com.zzh.stockcalc.contract.message.AnnouncementFailedPayload;
 import com.zzh.stockcalc.contract.message.ArticleIngestedPayload;
 import com.zzh.stockcalc.contract.message.ClsArticleDto;
-import com.zzh.stockcalc.contract.message.PullHeartbeatPayload;
-import com.zzh.stock_calculator.monitor.PullHeartbeatEvent;
-import org.springframework.context.ApplicationEventPublisher;
 import com.zzh.stockcalc.contract.message.ClsArticlePayload;
 import com.zzh.stockcalc.contract.message.ClsStockDict;
 import com.zzh.stockcalc.contract.message.ClsStockLink;
 import com.zzh.stockcalc.contract.message.ClsSubjectDict;
 import com.zzh.stockcalc.contract.message.ClsSubjectLink;
 import com.zzh.stockcalc.contract.message.EmbeddingComputeResult;
-import com.zzh.stock_calculator.crawler.AnnouncementIngestApi;
-import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingResultService;
-import com.zzh.stock_calculator.crawler.entity.ClsArticle;
-import com.zzh.stock_calculator.crawler.entity.ClsArticleStock;
-import com.zzh.stock_calculator.crawler.entity.ClsArticleSubject;
-import com.zzh.stock_calculator.crawler.entity.ClsSubject;
-import com.zzh.stock_calculator.crawler.entity.Stock;
-import com.zzh.stock_calculator.crawler.service.ClsArticleService;
+import com.zzh.stockcalc.contract.message.PullHeartbeatPayload;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
-
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
 
 /**
  * result.* 消费端（阶段 1/3，设计文档 §3.2/§4.3）：信封还原 → 按 type 分发 →
@@ -65,17 +65,25 @@ public class ClsArticleMqConsumer {
     private final RabbitTemplate rabbitTemplate;
     /** 公告摄取端口（announcement 域实现；ObjectProvider 防实现缺失阻启动） */
     private final ObjectProvider<AnnouncementIngestApi> announcementIngestProvider;
+    /** copilot 记忆链入库端口（copilot 基包接口；ObjectProvider 防实现缺失阻启动） */
+    private final ObjectProvider<CopilotMemoryIngestApi> copilotMemoryProvider;
     /** 跨域事件通道（result.pull.heartbeat → monitor 落表，事件对象在 monitor 基包） */
     private final ApplicationEventPublisher eventPublisher;
 
     @RabbitListener(queues = MqQueue.RESULT_INGEST)
-    public void onMessage(org.springframework.amqp.core.Message message,
-                          Channel channel,
-                          @org.springframework.messaging.handler.annotation.Header(
-                                  org.springframework.amqp.support.AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
+    public void onMessage(
+        org.springframework.amqp.core.Message message,
+        Channel channel,
+        @org.springframework.messaging.handler.annotation.Header(
+            org.springframework.amqp.support.AmqpHeaders.DELIVERY_TAG
+        ) long deliveryTag
+    ) {
         String body = new String(message.getBody(), StandardCharsets.UTF_8);
         try {
-            MessageEnvelope envelope = objectMapper.readValue(body, MessageEnvelope.class);
+            MessageEnvelope envelope = objectMapper.readValue(
+                body,
+                MessageEnvelope.class
+            );
             dispatch(envelope);
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
@@ -86,67 +94,120 @@ public class ClsArticleMqConsumer {
     private void dispatch(MessageEnvelope envelope) {
         switch (envelope.getType() == null ? "" : envelope.getType()) {
             case MessageType.RESULT_CLS_ARTICLE -> handleClsArticle(envelope);
-            case MessageType.RESULT_EMBEDDING_DONE -> handleEmbeddingDone(envelope);
-            case MessageType.RESULT_ANNOUNCEMENT_COLLECTED -> handleAnnouncementCollected(envelope);
-            case MessageType.RESULT_ANNOUNCEMENT_DONE -> handleAnnouncementDone(envelope);
-            case MessageType.RESULT_ANNOUNCEMENT_FAILED -> handleAnnouncementFailed(envelope);
-            case MessageType.RESULT_ARTICLE_INGESTED -> handleArticleIngested(envelope);
-            case MessageType.RESULT_PULL_HEARTBEAT -> handlePullHeartbeat(envelope);
+            case MessageType.RESULT_EMBEDDING_DONE -> handleEmbeddingDone(
+                envelope
+            );
+            case MessageType.RESULT_ANNOUNCEMENT_COLLECTED -> handleAnnouncementCollected(
+                envelope
+            );
+            case MessageType.RESULT_ANNOUNCEMENT_DONE -> handleAnnouncementDone(
+                envelope
+            );
+            case MessageType.RESULT_ANNOUNCEMENT_FAILED -> handleAnnouncementFailed(
+                envelope
+            );
+            case MessageType.RESULT_ARTICLE_INGESTED -> handleArticleIngested(
+                envelope
+            );
+            case MessageType.RESULT_PULL_HEARTBEAT -> handlePullHeartbeat(
+                envelope
+            );
+            case MessageType.RESULT_MEMORY_EXTRACT_TICK -> handleMemoryExtractTick(
+                envelope
+            );
+            case MessageType.RESULT_MEMORY_EXTRACTED -> handleMemoryExtracted(
+                envelope
+            );
+            case MessageType.RESULT_MEMORY_PROFILE -> handleMemoryProfile(
+                envelope
+            );
             case MessageType.RESULT_CLS_HISTORY_REPORT -> log.info(
-                    "cls history report requestId={} window=[{}, {}] inserted={}",
-                    historyReportField(envelope, "requestId"),
-                    historyReportField(envelope, "startTime"),
-                    historyReportField(envelope, "endTime"),
-                    historyReportField(envelope, "inserted"));
+                "cls history report requestId={} window=[{}, {}] inserted={}",
+                historyReportField(envelope, "requestId"),
+                historyReportField(envelope, "startTime"),
+                historyReportField(envelope, "endTime"),
+                historyReportField(envelope, "inserted")
+            );
             // 其余 result.* 类型按阶段逐步接入；先记录后丢弃，避免堆积
-            default -> log.info("skip unsupported result type={} messageId={}",
-                    envelope.getType(), envelope.getMessageId());
+            default -> log.info(
+                "skip unsupported result type={} messageId={}",
+                envelope.getType(),
+                envelope.getMessageId()
+            );
         }
     }
 
     /** 历史补录回执为日志级（§4.3 无需幂等）：直接读 payload 字段打印 */
     private Object historyReportField(MessageEnvelope envelope, String field) {
-        return envelope.getPayload() instanceof Map<?, ?> payload ? payload.get(field) : null;
+        return envelope.getPayload() instanceof Map<?, ?> payload
+            ? payload.get(field)
+            : null;
     }
 
     /** result.pull.heartbeat → 转交 monitor 域落表（事件对象在 monitor 基包，基包引用合规） */
     private void handlePullHeartbeat(MessageEnvelope envelope) {
-        PullHeartbeatPayload payload =
-                objectMapper.convertValue(envelope.getPayload(), PullHeartbeatPayload.class);
+        PullHeartbeatPayload payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            PullHeartbeatPayload.class
+        );
         if (payload == null || payload.getTaskCode() == null) {
-            log.warn("pull heartbeat payload 缺失 messageId={}", envelope.getMessageId());
+            log.warn(
+                "pull heartbeat payload 缺失 messageId={}",
+                envelope.getMessageId()
+            );
             return;
         }
-        eventPublisher.publishEvent(PullHeartbeatEvent.builder()
+        eventPublisher.publishEvent(
+            PullHeartbeatEvent.builder()
                 .taskCode(payload.getTaskCode())
                 .depth(payload.getDepth())
                 .appliedTtlMs(payload.getAppliedTtlMs())
                 .renewedAt(payload.getRenewedAt())
-                .build());
+                .build()
+        );
     }
 
     private void handleClsArticle(MessageEnvelope envelope) {
         if (!schemaSupported(envelope)) {
-            log.error("unsupported schemaVersion={} type={} messageId={}",
-                    envelope.getSchemaVersion(), envelope.getType(), envelope.getMessageId());
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
             return;
         }
-        ClsArticlePayload payload = objectMapper.convertValue(envelope.getPayload(), ClsArticlePayload.class);
-        if (payload == null || payload.getArticle() == null || payload.getArticle().getId() == null) {
-            log.warn("cls article payload missing article.id, messageId={}", envelope.getMessageId());
+        ClsArticlePayload payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            ClsArticlePayload.class
+        );
+        if (
+            payload == null ||
+            payload.getArticle() == null ||
+            payload.getArticle().getId() == null
+        ) {
+            log.warn(
+                "cls article payload missing article.id, messageId={}",
+                envelope.getMessageId()
+            );
             return;
         }
 
         ClsArticle article = toArticleEntity(payload.getArticle());
         boolean saved = clsArticleService.saveArticleWithRelations(
-                article,
-                toSubjectLinks(payload),
-                toStockLinks(payload),
-                toStockDicts(payload),
-                toSubjectDicts(payload));
+            article,
+            toSubjectLinks(payload),
+            toStockLinks(payload),
+            toStockDicts(payload),
+            toSubjectDicts(payload)
+        );
 
         if (saved) {
-            log.info("mq ingested new cls article id={} messageId={}", article.getId(), envelope.getMessageId());
+            log.info(
+                "mq ingested new cls article id={} messageId={}",
+                article.getId(),
+                envelope.getMessageId()
+            );
         } else {
             log.debug("mq ingest dedup skip article id={}", article.getId());
         }
@@ -154,7 +215,10 @@ public class ClsArticleMqConsumer {
 
     /** 协议演进护栏：不兼容版本直接丢弃（dead 语义由协议契约保证，见 D9） */
     private boolean schemaSupported(MessageEnvelope envelope) {
-        return envelope.getSchemaVersion() == MessageEnvelope.CURRENT_SCHEMA_VERSION;
+        return (
+            envelope.getSchemaVersion() ==
+            MessageEnvelope.CURRENT_SCHEMA_VERSION
+        );
     }
 
     /**
@@ -164,23 +228,39 @@ public class ClsArticleMqConsumer {
      */
     private void handleAnnouncementCollected(MessageEnvelope envelope) {
         if (!schemaSupported(envelope)) {
-            log.error("unsupported schemaVersion={} type={} messageId={}",
-                    envelope.getSchemaVersion(), envelope.getType(), envelope.getMessageId());
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
             return;
         }
-        AnnouncementCollectedPayload payload =
-                objectMapper.convertValue(envelope.getPayload(), AnnouncementCollectedPayload.class);
-        AnnouncementIngestApi ingestApi = announcementIngestProvider.getIfAvailable();
+        AnnouncementCollectedPayload payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            AnnouncementCollectedPayload.class
+        );
+        AnnouncementIngestApi ingestApi =
+            announcementIngestProvider.getIfAvailable();
         if (ingestApi == null) {
-            log.error("announcement ingest api absent, dropped, messageId={}", envelope.getMessageId());
+            log.error(
+                "announcement ingest api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
             return;
         }
         boolean ingested = ingestApi.ingestCollected(payload);
         if (ingested) {
-            log.info("mq announcement collected ingested, announcementId={}, messageId={}",
-                    payload == null ? null : payload.getAnnouncementId(), envelope.getMessageId());
+            log.info(
+                "mq announcement collected ingested, announcementId={}, messageId={}",
+                payload == null ? null : payload.getAnnouncementId(),
+                envelope.getMessageId()
+            );
         } else {
-            log.debug("mq announcement collected skipped, messageId={}", envelope.getMessageId());
+            log.debug(
+                "mq announcement collected skipped, messageId={}",
+                envelope.getMessageId()
+            );
         }
     }
 
@@ -191,23 +271,39 @@ public class ClsArticleMqConsumer {
      */
     private void handleAnnouncementDone(MessageEnvelope envelope) {
         if (!schemaSupported(envelope)) {
-            log.error("unsupported schemaVersion={} type={} messageId={}",
-                    envelope.getSchemaVersion(), envelope.getType(), envelope.getMessageId());
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
             return;
         }
-        AnnouncementDonePayload payload =
-                objectMapper.convertValue(envelope.getPayload(), AnnouncementDonePayload.class);
-        AnnouncementIngestApi ingestApi = announcementIngestProvider.getIfAvailable();
+        AnnouncementDonePayload payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            AnnouncementDonePayload.class
+        );
+        AnnouncementIngestApi ingestApi =
+            announcementIngestProvider.getIfAvailable();
         if (ingestApi == null) {
-            log.error("announcement ingest api absent, dropped, messageId={}", envelope.getMessageId());
+            log.error(
+                "announcement ingest api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
             return;
         }
         boolean ingested = ingestApi.ingestDone(payload);
         if (ingested) {
-            log.info("mq announcement done ingested, announcementId={}, messageId={}",
-                    payload == null ? null : payload.getAnnouncementId(), envelope.getMessageId());
+            log.info(
+                "mq announcement done ingested, announcementId={}, messageId={}",
+                payload == null ? null : payload.getAnnouncementId(),
+                envelope.getMessageId()
+            );
         } else {
-            log.debug("mq announcement done skipped, messageId={}", envelope.getMessageId());
+            log.debug(
+                "mq announcement done skipped, messageId={}",
+                envelope.getMessageId()
+            );
         }
     }
 
@@ -218,23 +314,39 @@ public class ClsArticleMqConsumer {
      */
     private void handleAnnouncementFailed(MessageEnvelope envelope) {
         if (!schemaSupported(envelope)) {
-            log.error("unsupported schemaVersion={} type={} messageId={}",
-                    envelope.getSchemaVersion(), envelope.getType(), envelope.getMessageId());
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
             return;
         }
-        AnnouncementFailedPayload payload =
-                objectMapper.convertValue(envelope.getPayload(), AnnouncementFailedPayload.class);
-        AnnouncementIngestApi ingestApi = announcementIngestProvider.getIfAvailable();
+        AnnouncementFailedPayload payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            AnnouncementFailedPayload.class
+        );
+        AnnouncementIngestApi ingestApi =
+            announcementIngestProvider.getIfAvailable();
         if (ingestApi == null) {
-            log.error("announcement ingest api absent, dropped, messageId={}", envelope.getMessageId());
+            log.error(
+                "announcement ingest api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
             return;
         }
         boolean ingested = ingestApi.ingestFailed(payload);
         if (ingested) {
-            log.info("mq announcement failed ingested, announcementId={}, messageId={}",
-                    payload == null ? null : payload.getAnnouncementId(), envelope.getMessageId());
+            log.info(
+                "mq announcement failed ingested, announcementId={}, messageId={}",
+                payload == null ? null : payload.getAnnouncementId(),
+                envelope.getMessageId()
+            );
         } else {
-            log.debug("mq announcement failed skipped, messageId={}", envelope.getMessageId());
+            log.debug(
+                "mq announcement failed skipped, messageId={}",
+                envelope.getMessageId()
+            );
         }
     }
 
@@ -245,23 +357,38 @@ public class ClsArticleMqConsumer {
      */
     private void handleEmbeddingDone(MessageEnvelope envelope) {
         if (!schemaSupported(envelope)) {
-            log.error("unsupported schemaVersion={} type={} messageId={}",
-                    envelope.getSchemaVersion(), envelope.getType(), envelope.getMessageId());
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
             return;
         }
-        EmbeddingComputeResult payload =
-                objectMapper.convertValue(envelope.getPayload(), EmbeddingComputeResult.class);
+        EmbeddingComputeResult payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            EmbeddingComputeResult.class
+        );
         if (payload == null) {
-            log.warn("embedding result payload missing, messageId={}", envelope.getMessageId());
+            log.warn(
+                "embedding result payload missing, messageId={}",
+                envelope.getMessageId()
+            );
             return;
         }
         boolean applied = embeddingResultService.applyComputeResult(payload);
         if (applied) {
-            log.info("mq embedding result ingested, refId={}, messageId={}",
-                    payload.getRefId(), envelope.getMessageId());
+            log.info(
+                "mq embedding result ingested, refId={}, messageId={}",
+                payload.getRefId(),
+                envelope.getMessageId()
+            );
         } else {
-            log.debug("mq embedding result skipped, refId={}, messageId={}",
-                    payload.getRefId(), envelope.getMessageId());
+            log.debug(
+                "mq embedding result skipped, refId={}, messageId={}",
+                payload.getRefId(),
+                envelope.getMessageId()
+            );
         }
     }
 
@@ -278,46 +405,186 @@ public class ClsArticleMqConsumer {
      */
     private void handleArticleIngested(MessageEnvelope envelope) {
         if (!schemaSupported(envelope)) {
-            log.error("unsupported schemaVersion={} type={} messageId={}",
-                    envelope.getSchemaVersion(), envelope.getType(), envelope.getMessageId());
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
             return;
         }
         ArticleIngestedPayload payload = objectMapper.convertValue(
-                envelope.getPayload(), ArticleIngestedPayload.class);
-        if (payload == null || payload.getArticleId() == null
-                || payload.getContent() == null || payload.getContent().isBlank()) {
-            log.warn("article ingested payload invalid, messageId={}", envelope.getMessageId());
+            envelope.getPayload(),
+            ArticleIngestedPayload.class
+        );
+        if (
+            payload == null ||
+            payload.getArticleId() == null ||
+            payload.getContent() == null ||
+            payload.getContent().isBlank()
+        ) {
+            log.warn(
+                "article ingested payload invalid, messageId={}",
+                envelope.getMessageId()
+            );
             return;
         }
         ClsArticleDto dto = ClsArticleDto.builder()
-                .id(payload.getArticleId())
-                .type(-1)
-                .title(payload.getTitle())
-                .brief(payload.getBrief())
-                .content(payload.getContent())
-                .ctime(payload.getPublishedAt() == null ? 0L : payload.getPublishedAt())
-                .author(payload.getAuthor() == null ? "webhook:" + payload.getSource() : payload.getAuthor())
-                .level("C")
-                .build();
+            .id(payload.getArticleId())
+            .type(-1)
+            .title(payload.getTitle())
+            .brief(payload.getBrief())
+            .content(payload.getContent())
+            .ctime(
+                payload.getPublishedAt() == null ? 0L : payload.getPublishedAt()
+            )
+            .author(
+                payload.getAuthor() == null
+                    ? "webhook:" + payload.getSource()
+                    : payload.getAuthor()
+            )
+            .level("C")
+            .build();
         boolean saved = clsArticleService.saveArticleWithRelations(
-                toArticleEntity(dto), List.of(), List.of(), List.of(), List.of());
-        log.info("article ingested source={} externalId={} articleId={} saved={}",
-                payload.getSource(), payload.getExternalId(), payload.getArticleId(), saved);
+            toArticleEntity(dto),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of()
+        );
+        log.info(
+            "article ingested source={} externalId={} articleId={} saved={}",
+            payload.getSource(),
+            payload.getExternalId(),
+            payload.getArticleId(),
+            saved
+        );
     }
 
-    private void handleFailure(org.springframework.amqp.core.Message message, Channel channel,
-                               long deliveryTag, Exception e) {
+    /**
+     * copilot 记忆链三型 result（docs/copilot/memory-profile.md §五）：载荷转换后交
+     * copilot 入库端口（实现内部自吞业务异常，固化链路失败不影响主链路）；
+     * 端口缺失降级丢弃（与公告端口同款防护）。
+     */
+    private void handleMemoryExtractTick(MessageEnvelope envelope) {
+        if (!schemaSupported(envelope)) {
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
+            return;
+        }
+        com.zzh.stockcalc.contract.message.MemoryExtractTickPayload payload =
+            objectMapper.convertValue(
+                envelope.getPayload(),
+                com.zzh.stockcalc.contract.message.MemoryExtractTickPayload.class
+            );
+        var api = copilotMemoryProvider.getIfAvailable();
+        if (api == null) {
+            log.error(
+                "copilot memory api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
+            return;
+        }
+        api.onExtractTick(payload);
+        log.debug(
+            "mq memory extract tick dispatched, messageId={}",
+            envelope.getMessageId()
+        );
+    }
+
+    private void handleMemoryExtracted(MessageEnvelope envelope) {
+        if (!schemaSupported(envelope)) {
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
+            return;
+        }
+        com.zzh.stockcalc.contract.message.MemoryExtractedResult payload =
+            objectMapper.convertValue(
+                envelope.getPayload(),
+                com.zzh.stockcalc.contract.message.MemoryExtractedResult.class
+            );
+        var api = copilotMemoryProvider.getIfAvailable();
+        if (api == null) {
+            log.error(
+                "copilot memory api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
+            return;
+        }
+        api.onExtracted(payload);
+        log.info(
+            "mq memory extracted dispatched, messageId={}",
+            envelope.getMessageId()
+        );
+    }
+
+    private void handleMemoryProfile(MessageEnvelope envelope) {
+        if (!schemaSupported(envelope)) {
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
+            return;
+        }
+        com.zzh.stockcalc.contract.message.MemoryProfileResult payload =
+            objectMapper.convertValue(
+                envelope.getPayload(),
+                com.zzh.stockcalc.contract.message.MemoryProfileResult.class
+            );
+        var api = copilotMemoryProvider.getIfAvailable();
+        if (api == null) {
+            log.error(
+                "copilot memory api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
+            return;
+        }
+        api.onProfile(payload);
+        log.info(
+            "mq memory profile dispatched, messageId={}",
+            envelope.getMessageId()
+        );
+    }
+
+    private void handleFailure(
+        org.springframework.amqp.core.Message message,
+        Channel channel,
+        long deliveryTag,
+        Exception e
+    ) {
         int attempts = deathCount(message) + 1;
         try {
             if (attempts >= MqPolicy.MAX_DELIVERY_ATTEMPTS) {
-                rabbitTemplate.send(MqExchange.DLX,
-                        MqKey.DEAD_PREFIX + safeType(message), message);
+                rabbitTemplate.send(
+                    MqExchange.DLX,
+                    MqKey.DEAD_PREFIX + safeType(message),
+                    message
+                );
                 channel.basicAck(deliveryTag, false);
-                log.error("message moved to dead.q attempts={} body={}", attempts, brief(message), e);
+                log.error(
+                    "message moved to dead.q attempts={} body={}",
+                    attempts,
+                    brief(message),
+                    e
+                );
             } else {
                 // requeue=false → 经 DLX 进 retry 队列，TTL 后回原队列
                 channel.basicNack(deliveryTag, false, false);
-                log.warn("message nacked to retry ring attempts={} err={}", attempts, e.getMessage());
+                log.warn(
+                    "message nacked to retry ring attempts={} err={}",
+                    attempts,
+                    e.getMessage()
+                );
             }
         } catch (Exception ackError) {
             log.error("failed to ack/nack, broker will redeliver", ackError);
@@ -342,7 +609,10 @@ public class ClsArticleMqConsumer {
     /** x-death 累计计数（各队列 entry 的 count 求和） */
     @SuppressWarnings("unchecked")
     private int deathCount(org.springframework.amqp.core.Message message) {
-        Object xDeath = message.getMessageProperties().getHeaders().get("x-death");
+        Object xDeath = message
+            .getMessageProperties()
+            .getHeaders()
+            .get("x-death");
         if (!(xDeath instanceof List<?> entries)) {
             return 0;
         }
@@ -362,17 +632,17 @@ public class ClsArticleMqConsumer {
 
     private ClsArticle toArticleEntity(ClsArticleDto a) {
         return ClsArticle.builder()
-                .id(a.getId())
-                .type(a.getType() == null ? -1 : a.getType())
-                .title(a.getTitle())
-                .brief(a.getBrief())
-                .content(a.getContent())
-                .ctime(a.getCtime() == null ? 0L : a.getCtime())
-                .author(a.getAuthor() == null ? "" : a.getAuthor())
-                .level(a.getLevel() == null ? "C" : a.getLevel())
-                .images(a.getImages())
-                .audioUrl(a.getAudioUrl())
-                .build();
+            .id(a.getId())
+            .type(a.getType() == null ? -1 : a.getType())
+            .title(a.getTitle())
+            .brief(a.getBrief())
+            .content(a.getContent())
+            .ctime(a.getCtime() == null ? 0L : a.getCtime())
+            .author(a.getAuthor() == null ? "" : a.getAuthor())
+            .level(a.getLevel() == null ? "C" : a.getLevel())
+            .images(a.getImages())
+            .audioUrl(a.getAudioUrl())
+            .build();
     }
 
     private List<ClsSubject> toSubjectDicts(ClsArticlePayload payload) {
@@ -380,12 +650,17 @@ public class ClsArticleMqConsumer {
         if (dicts == null || dicts.isEmpty()) {
             return List.of();
         }
-        return dicts.stream().map(d -> ClsSubject.builder()
-                .subjectId(d.getSubjectId())
-                .subjectName(d.getSubjectName())
-                .plateId(d.getPlateId())
-                .channel(d.getChannel())
-                .build()).toList();
+        return dicts
+            .stream()
+            .map(d ->
+                ClsSubject.builder()
+                    .subjectId(d.getSubjectId())
+                    .subjectName(d.getSubjectName())
+                    .plateId(d.getPlateId())
+                    .channel(d.getChannel())
+                    .build()
+            )
+            .toList();
     }
 
     private List<Stock> toStockDicts(ClsArticlePayload payload) {
@@ -393,12 +668,19 @@ public class ClsArticleMqConsumer {
         if (dicts == null || dicts.isEmpty()) {
             return List.of();
         }
-        return dicts.stream().map(d -> Stock.builder()
-                .stockId(d.getStockId())
-                .name(d.getName())
-                .oldName(d.getOldName() == null ? d.getName() : d.getOldName())
-                .isStib(Boolean.TRUE.equals(d.getIsStib()))
-                .build()).toList();
+        return dicts
+            .stream()
+            .map(d ->
+                Stock.builder()
+                    .stockId(d.getStockId())
+                    .name(d.getName())
+                    .oldName(
+                        d.getOldName() == null ? d.getName() : d.getOldName()
+                    )
+                    .isStib(Boolean.TRUE.equals(d.getIsStib()))
+                    .build()
+            )
+            .toList();
     }
 
     private List<ClsArticleSubject> toSubjectLinks(ClsArticlePayload payload) {
@@ -406,10 +688,15 @@ public class ClsArticleMqConsumer {
         if (links == null || links.isEmpty()) {
             return List.of();
         }
-        return links.stream().map(l -> ClsArticleSubject.builder()
-                .articleId(l.getArticleId())
-                .subjectId(l.getSubjectId())
-                .build()).toList();
+        return links
+            .stream()
+            .map(l ->
+                ClsArticleSubject.builder()
+                    .articleId(l.getArticleId())
+                    .subjectId(l.getSubjectId())
+                    .build()
+            )
+            .toList();
     }
 
     private List<ClsArticleStock> toStockLinks(ClsArticlePayload payload) {
@@ -417,11 +704,16 @@ public class ClsArticleMqConsumer {
         if (links == null || links.isEmpty()) {
             return List.of();
         }
-        return links.stream().map(l -> ClsArticleStock.builder()
-                .articleId(l.getArticleId())
-                .stockId(l.getStockId())
-                .lastPrice(l.getLastPrice())
-                .riseRange(l.getRiseRange())
-                .build()).toList();
+        return links
+            .stream()
+            .map(l ->
+                ClsArticleStock.builder()
+                    .articleId(l.getArticleId())
+                    .stockId(l.getStockId())
+                    .lastPrice(l.getLastPrice())
+                    .riseRange(l.getRiseRange())
+                    .build()
+            )
+            .toList();
     }
 }

@@ -161,6 +161,32 @@ copilot:
       # read-timeout 经 OpenAiChatOptions.timeout 映射为 OkHttp callTimeout（整次请求上限，含流式全程）；
       # callLlm 底层走 SSE 流式（中转渠道网关 60s 掐非流式），实测该渠道长文生成可达 253s，故放宽到 300s
       read-timeout: 300s
+  memory:
+    # 记忆固化链路（docs/copilot/memory-profile.md §十一 5）：enabled=false 时种子不发布、tick 丢弃，
+    # 既有聊天行为零变化
+    enabled: true
+    # 轻量种子 per-message TTL（毫秒）＝ 合批窗：60s 内连发多轮仅 1 次提炼（tick 中转重算差量）
+    seed-ttl-ms: 60000
+    # 提炼在途锁超时兑底（毫秒）：在途任务丢失后放行重发；须小于 seed-ttl-ms（决策 #20）
+    in-flight-timeout-ms: 30000
+    # 差量片段截断（字符，决策 #11）；溯源保留条数（§四）
+    snippet-max-chars: 2000
+    source-ids-keep: 20
+    # 画像触发：ΔCount 阈值（决策 #18）；输入治理 Top-M 与权重衰减（决策 #17）
+    profile-delta-threshold: 3
+    profile-top-m: 4
+    profile-weight-decay: 0.25
+    # 稀疏冷启动护栏（决策 #22）：active 条数低于此值时推断类特征强制空
+    profile-sparse-guard-min: 3
+    # 注入预算族（字符，§七）：每轮聊天恒定成本，总封顶 ≈ 6.1k
+    recall:
+      profile-budget: 800
+      pinned-budget: 1200
+      memory-budget: 2000
+      recent-budget: 2000
+      recent-days: 3
+      top-n: 20
+      pinned-max: 10
 
 app:
   auth:

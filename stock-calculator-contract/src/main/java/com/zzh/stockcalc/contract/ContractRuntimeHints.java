@@ -1,9 +1,9 @@
 package com.zzh.stockcalc.contract;
 
+import com.zzh.stockcalc.contract.message.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import com.zzh.stockcalc.contract.message.*;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
@@ -23,26 +23,32 @@ public class ContractRuntimeHints implements RuntimeHintsRegistrar {
 
     /** 信封 + 全部消息 DTO（com.zzh.stockcalc.contract.message 包），新 DTO 需登记于此 */
     private static final List<Class<?>> DTO_TYPES = List.of(
-            MessageEnvelope.class,
-            AnnouncementCollectedPayload.class,
-            AnnouncementDonePayload.class,
-            AnnouncementFailedPayload.class,
-            AnnouncementProcessTask.class,
-            ArticleIngestedPayload.class,
-            ClsArticleDto.class,
-            ClsArticlePayload.class,
-            ClsHistoryReport.class,
-            ClsStockDict.class,
-            ClsStockLink.class,
-            ClsSubjectDict.class,
-            ClsSubjectLink.class,
-            EmbeddingComputeResult.class,
-            EmbeddingComputeTask.class,
-            HistorySyncTask.class,
-            IngestArticleIds.class,
-            SliceSelection.class,
-            StructureNode.class,
-            SubscriptionSnapshotPayload.class);
+        MessageEnvelope.class,
+        AnnouncementCollectedPayload.class,
+        AnnouncementDonePayload.class,
+        AnnouncementFailedPayload.class,
+        AnnouncementProcessTask.class,
+        ArticleIngestedPayload.class,
+        ClsArticleDto.class,
+        ClsArticlePayload.class,
+        ClsHistoryReport.class,
+        ClsStockDict.class,
+        ClsStockLink.class,
+        ClsSubjectDict.class,
+        ClsSubjectLink.class,
+        EmbeddingComputeResult.class,
+        EmbeddingComputeTask.class,
+        HistorySyncTask.class,
+        IngestArticleIds.class,
+        MemoryExtractTask.class,
+        MemoryExtractTickPayload.class,
+        MemoryExtractedResult.class,
+        MemoryProfileResult.class,
+        MemoryProfileTask.class,
+        SliceSelection.class,
+        StructureNode.class,
+        SubscriptionSnapshotPayload.class
+    );
 
     @Override
     public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
@@ -52,7 +58,11 @@ public class ContractRuntimeHints implements RuntimeHintsRegistrar {
         }
     }
 
-    private void register(RuntimeHints hints, Class<?> type, Set<Class<?>> seen) {
+    private void register(
+        RuntimeHints hints,
+        Class<?> type,
+        Set<Class<?>> seen
+    ) {
         if (!seen.add(type)) {
             return;
         }

@@ -32,4 +32,19 @@ public class TaskDispatchApi {
         publisher.dispatchControl(type, payload);
         return true;
     }
+
+    /**
+     * 发布带 payload 的延迟任务（copilot 记忆种子：per-message TTL，到期 DLX 改写回消费端）。
+     * routingKey 与 envelopeType 语义见 TaskPublisher 同名方法（信封 type 写改写后目标类型）。
+     * @return true=已投递
+     */
+    public boolean dispatchDelayedTask(
+        String routingKey,
+        String envelopeType,
+        Object payload,
+        long ttlMs
+    ) {
+        publisher.dispatchDelayedTask(routingKey, envelopeType, payload, ttlMs);
+        return true;
+    }
 }

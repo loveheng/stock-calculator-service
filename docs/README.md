@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-15
+updated: 2026-09-17
 ---
 
 # 文档索引
@@ -15,6 +15,7 @@ updated: 2026-09-15
 - [design](copilot/design.md) · 设计方案
 - [implementation](copilot/implementation.md) · 开发实施记录
 - [api](copilot/api.md) · 接口文档 v1.0（前端对接）
+- [memory-profile](copilot/memory-profile.md) · 记忆固化与用户画像抽取设计（独立主题，评审稿）
 
 ## e2ee-auth/ — E2EE 用户服务
 

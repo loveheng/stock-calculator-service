@@ -72,10 +72,10 @@ public class MqTopologyConfig {
     @Bean
     public Queue taskHistorySyncQueue() {
         return QueueBuilder.durable(MqQueue.TASK_HISTORY_SYNC)
-                .quorum()
-                .deadLetterExchange(MqExchange.DLX)
-                .singleActiveConsumer()
-                .build();
+            .quorum()
+            .deadLetterExchange(MqExchange.DLX)
+            .singleActiveConsumer()
+            .build();
     }
 
     // ---- 自循环拉取队列（docs/architecture/pull-loop-unification.md §3） ----
@@ -102,7 +102,10 @@ public class MqTopologyConfig {
     /** 公告采集延迟队列（语义同 CLS 拉取延迟队列） */
     @Bean
     public Queue taskAnnouncementCollectDelayQueue() {
-        return pullDelayQueue(MqQueue.TASK_ANNOUNCEMENT_COLLECT_DELAY, MqKey.TASK_ANNOUNCEMENT_COLLECT);
+        return pullDelayQueue(
+            MqQueue.TASK_ANNOUNCEMENT_COLLECT_DELAY,
+            MqKey.TASK_ANNOUNCEMENT_COLLECT
+        );
     }
 
     /** 日历型定时任务工作队列（§8 一次性消费：quorum、无 DLX、无 delay 队列——
@@ -110,6 +113,33 @@ public class MqTopologyConfig {
     @Bean
     public Queue taskHelloWorldQueue() {
         return pullWorkQueue(MqQueue.TASK_HELLO_WORLD);
+    }
+
+    // ---- copilot 记忆链（docs/copilot/memory-profile.md §五） ----
+
+    /** copilot 记忆提炼任务队列（worker 竞争消费；失败无重试环——水位不动 +
+     *  在途锁超时由下个 tick 重发差量自愈，决策 #5） */
+    @Bean
+    public Queue taskMemoryExtractQueue() {
+        return businessQueue(MqQueue.TASK_MEMORY_EXTRACT);
+    }
+
+    /** copilot 画像重抽任务队列（worker 竞争消费；变化驱动触发，无变化零调用） */
+    @Bean
+    public Queue taskMemoryProfileQueue() {
+        return businessQueue(MqQueue.TASK_MEMORY_PROFILE);
+    }
+
+    /** copilot 记忆种子延迟队列：classic、无消费者、TTL 逐条消息自带（同款 per-message
+     *  expiration 已在拉取环 LavinMQ 实证）；到期经 RESULTS 交换机以 tick key 死信回 main——
+     *  与拉取环不同：改写目标是结果交换机而非 TASKS，定时到期必须回控制面（种子信封 type
+     *  也按 tick 写，保证消费端 type == 到期后的 routing key） */
+    @Bean
+    public Queue taskMemoryExtractDelayQueue() {
+        return QueueBuilder.durable(MqQueue.TASK_MEMORY_EXTRACT_DELAY)
+            .deadLetterExchange(MqExchange.RESULTS)
+            .deadLetterRoutingKey(MqKey.RESULT_MEMORY_EXTRACT_TICK)
+            .build();
     }
 
     @Bean
@@ -125,9 +155,9 @@ public class MqTopologyConfig {
 
     private static Queue businessQueue(String name) {
         return QueueBuilder.durable(name)
-                .quorum()
-                .deadLetterExchange(MqExchange.DLX)
-                .build();
+            .quorum()
+            .deadLetterExchange(MqExchange.DLX)
+            .build();
     }
 
     /** 自循环工作队列：quorum、无 DLX（消费恒 ack，失败语义 = 下一轮续种照常） */
@@ -139,9 +169,9 @@ public class MqTopologyConfig {
      *  动态调速（设计 L5）必须逐条携带 expiration */
     private static Queue pullDelayQueue(String name, String workKey) {
         return QueueBuilder.durable(name)
-                .deadLetterExchange(MqExchange.TASKS)
-                .deadLetterRoutingKey(workKey)
-                .build();
+            .deadLetterExchange(MqExchange.TASKS)
+            .deadLetterRoutingKey(workKey)
+            .build();
     }
 
     // ==================== retry 伴生队列（classic + TTL + DLX 回原交换机） ====================
@@ -153,12 +183,18 @@ public class MqTopologyConfig {
 
     @Bean
     public Queue taskAnnouncementProcessRetryQueue() {
-        return retryQueue(MqQueue.TASK_ANNOUNCEMENT_PROCESS_RETRY, MqExchange.TASKS);
+        return retryQueue(
+            MqQueue.TASK_ANNOUNCEMENT_PROCESS_RETRY,
+            MqExchange.TASKS
+        );
     }
 
     @Bean
     public Queue taskEmbeddingComputeRetryQueue() {
-        return retryQueue(MqQueue.TASK_EMBEDDING_COMPUTE_RETRY, MqExchange.TASKS);
+        return retryQueue(
+            MqQueue.TASK_EMBEDDING_COMPUTE_RETRY,
+            MqExchange.TASKS
+        );
     }
 
     @Bean
@@ -168,9 +204,9 @@ public class MqTopologyConfig {
 
     private static Queue retryQueue(String name, String originExchange) {
         return QueueBuilder.durable(name)
-                .ttl(MqPolicy.RETRY_TTL_MS)
-                .deadLetterExchange(originExchange)
-                .build();
+            .ttl(MqPolicy.RETRY_TTL_MS)
+            .deadLetterExchange(originExchange)
+            .build();
     }
 
     // ==================== 绑定 ====================
@@ -179,53 +215,118 @@ public class MqTopologyConfig {
 
     @Bean
     public Binding taskAnnouncementProcessBinding() {
-        return bind(MqQueue.TASK_ANNOUNCEMENT_PROCESS, tasksExchange(), MqKey.TASK_ANNOUNCEMENT_PROCESS);
+        return bind(
+            MqQueue.TASK_ANNOUNCEMENT_PROCESS,
+            tasksExchange(),
+            MqKey.TASK_ANNOUNCEMENT_PROCESS
+        );
     }
 
     @Bean
     public Binding taskEmbeddingComputeBinding() {
-        return bind(MqQueue.TASK_EMBEDDING_COMPUTE, tasksExchange(), MqKey.TASK_EMBEDDING_COMPUTE);
+        return bind(
+            MqQueue.TASK_EMBEDDING_COMPUTE,
+            tasksExchange(),
+            MqKey.TASK_EMBEDDING_COMPUTE
+        );
     }
 
     @Bean
     public Binding taskHistorySyncBinding() {
-        return bind(MqQueue.TASK_HISTORY_SYNC, tasksExchange(), MqKey.TASK_HISTORY_SYNC);
+        return bind(
+            MqQueue.TASK_HISTORY_SYNC,
+            tasksExchange(),
+            MqKey.TASK_HISTORY_SYNC
+        );
     }
 
     // ---- tasks：自循环拉取（种子发 delay key，TTL 到期 DLX 改写为 work key） ----
 
     @Bean
     public Binding taskClsPullBinding() {
-        return bind(MqQueue.TASK_CLS_PULL, tasksExchange(), MqKey.TASK_CLS_PULL);
+        return bind(
+            MqQueue.TASK_CLS_PULL,
+            tasksExchange(),
+            MqKey.TASK_CLS_PULL
+        );
     }
 
     @Bean
     public Binding taskClsPullDelayBinding() {
-        return bind(MqQueue.TASK_CLS_PULL_DELAY, tasksExchange(), MqKey.TASK_CLS_PULL_DELAY);
+        return bind(
+            MqQueue.TASK_CLS_PULL_DELAY,
+            tasksExchange(),
+            MqKey.TASK_CLS_PULL_DELAY
+        );
     }
 
     @Bean
     public Binding taskAnnouncementCollectBinding() {
-        return bind(MqQueue.TASK_ANNOUNCEMENT_COLLECT, tasksExchange(), MqKey.TASK_ANNOUNCEMENT_COLLECT);
+        return bind(
+            MqQueue.TASK_ANNOUNCEMENT_COLLECT,
+            tasksExchange(),
+            MqKey.TASK_ANNOUNCEMENT_COLLECT
+        );
     }
 
     @Bean
     public Binding taskAnnouncementCollectDelayBinding() {
-        return bind(MqQueue.TASK_ANNOUNCEMENT_COLLECT_DELAY, tasksExchange(), MqKey.TASK_ANNOUNCEMENT_COLLECT_DELAY);
+        return bind(
+            MqQueue.TASK_ANNOUNCEMENT_COLLECT_DELAY,
+            tasksExchange(),
+            MqKey.TASK_ANNOUNCEMENT_COLLECT_DELAY
+        );
     }
 
     // ---- tasks：日历型定时任务（§8 看门狗直发 work key，无 delay 环节） ----
 
     @Bean
     public Binding taskHelloWorldBinding() {
-        return bind(MqQueue.TASK_HELLO_WORLD, tasksExchange(), MqKey.TASK_HELLO_WORLD);
+        return bind(
+            MqQueue.TASK_HELLO_WORLD,
+            tasksExchange(),
+            MqKey.TASK_HELLO_WORLD
+        );
+    }
+
+    // ---- tasks：copilot 记忆链（种子发 delay key，TTL 到期 DLX 改写为 tick key 回 main） ----
+
+    @Bean
+    public Binding taskMemoryExtractBinding() {
+        return bind(
+            MqQueue.TASK_MEMORY_EXTRACT,
+            tasksExchange(),
+            MqKey.TASK_MEMORY_EXTRACT
+        );
+    }
+
+    @Bean
+    public Binding taskMemoryProfileBinding() {
+        return bind(
+            MqQueue.TASK_MEMORY_PROFILE,
+            tasksExchange(),
+            MqKey.TASK_MEMORY_PROFILE
+        );
+    }
+
+    @Bean
+    public Binding taskMemoryExtractDelayBinding() {
+        return bind(
+            MqQueue.TASK_MEMORY_EXTRACT_DELAY,
+            tasksExchange(),
+            MqKey.TASK_MEMORY_EXTRACT_DELAY
+        );
     }
 
     // ---- results：结果入库 ----
 
     @Bean
     public Binding resultIngestBinding() {
-        return bind(MqQueue.RESULT_INGEST, resultsExchange(), MqKey.BIND_RESULT_ALL);
+        return bind(
+            MqQueue.RESULT_INGEST,
+            resultsExchange(),
+            MqKey.BIND_RESULT_ALL
+        );
     }
 
     // ---- control：订阅快照（控制面队列/绑定由 SubscriptionSnapshotConsumer 的
@@ -235,22 +336,38 @@ public class MqTopologyConfig {
 
     @Bean
     public Binding dlxTaskAnnouncementRetryBinding() {
-        return bind(MqQueue.TASK_ANNOUNCEMENT_PROCESS_RETRY, dlxExchange(), MqKey.TASK_ANNOUNCEMENT_PROCESS);
+        return bind(
+            MqQueue.TASK_ANNOUNCEMENT_PROCESS_RETRY,
+            dlxExchange(),
+            MqKey.TASK_ANNOUNCEMENT_PROCESS
+        );
     }
 
     @Bean
     public Binding dlxTaskEmbeddingRetryBinding() {
-        return bind(MqQueue.TASK_EMBEDDING_COMPUTE_RETRY, dlxExchange(), MqKey.TASK_EMBEDDING_COMPUTE);
+        return bind(
+            MqQueue.TASK_EMBEDDING_COMPUTE_RETRY,
+            dlxExchange(),
+            MqKey.TASK_EMBEDDING_COMPUTE
+        );
     }
 
     @Bean
     public Binding dlxTaskHistoryRetryBinding() {
-        return bind(MqQueue.TASK_HISTORY_SYNC_RETRY, dlxExchange(), MqKey.TASK_HISTORY_SYNC);
+        return bind(
+            MqQueue.TASK_HISTORY_SYNC_RETRY,
+            dlxExchange(),
+            MqKey.TASK_HISTORY_SYNC
+        );
     }
 
     @Bean
     public Binding dlxResultRetryBinding() {
-        return bind(MqQueue.RESULT_INGEST_RETRY, dlxExchange(), MqKey.BIND_RESULT_ALL);
+        return bind(
+            MqQueue.RESULT_INGEST_RETRY,
+            dlxExchange(),
+            MqKey.BIND_RESULT_ALL
+        );
     }
 
     @Bean
@@ -258,7 +375,13 @@ public class MqTopologyConfig {
         return bind(MqQueue.DEAD, dlxExchange(), MqKey.BIND_DEAD_ALL);
     }
 
-    private static Binding bind(String queueName, TopicExchange exchange, String routingKey) {
-        return BindingBuilder.bind(new Queue(queueName)).to(exchange).with(routingKey);
+    private static Binding bind(
+        String queueName,
+        TopicExchange exchange,
+        String routingKey
+    ) {
+        return BindingBuilder.bind(new Queue(queueName))
+            .to(exchange)
+            .with(routingKey);
     }
 }

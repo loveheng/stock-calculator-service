@@ -3,22 +3,21 @@ package com.zzh.stock_calculator.data.llm;
 import com.zzh.stock_calculator.data.announcement.AnnouncementParseProperties;
 import com.zzh.stock_calculator.data.announcement.CninfoPdfClient;
 import com.zzh.stock_calculator.data.config.WorkerProperties;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.core.AcknowledgeMode;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
-import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
 
 /**
  * 公告处理 worker 装配（设计文档 §8 阶段 4 任务 4）：datasvc.worker.enabled=true 时
@@ -28,24 +27,41 @@ import java.util.Map;
  */
 @Slf4j
 @Configuration
-@ConditionalOnProperty(prefix = "datasvc.worker", name = "enabled", havingValue = "true")
-@EnableConfigurationProperties({LlmGatewayProperties.class, AnnouncementParseProperties.class})
+@ConditionalOnProperty(
+    prefix = "datasvc.worker",
+    name = "enabled",
+    havingValue = "true"
+)
+@EnableConfigurationProperties({
+    LlmGatewayProperties.class,
+    AnnouncementParseProperties.class,
+})
 public class AnnouncementWorkerConfig {
 
     /** OpenAI 兼容 chat-completions 网关：RestClient 单渠道（精简版 LlmChainRouter） */
     @Bean
     public LlmGateway llmGateway(LlmGatewayProperties props) {
-        if (!StringUtils.hasText(props.getBaseUrl()) || !StringUtils.hasText(props.getApiKey())
-                || !StringUtils.hasText(props.getModel())) {
+        if (
+            !StringUtils.hasText(props.getBaseUrl()) ||
+            !StringUtils.hasText(props.getApiKey()) ||
+            !StringUtils.hasText(props.getModel())
+        ) {
             throw new IllegalStateException(
-                    "datasvc.worker.enabled=true 但 datasvc.llm.base-url / api-key / model 未配置，"
-                            + "公告蒸馏无法执行，拒绝以半配置状态启动");
+                "datasvc.worker.enabled=true 但 datasvc.llm.base-url / api-key / model 未配置，" +
+                    "公告蒸馏无法执行，拒绝以半配置状态启动"
+            );
         }
         RestClient client = RestClient.builder()
-                .baseUrl(props.getBaseUrl())
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + props.getApiKey())
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .build();
+            .baseUrl(props.getBaseUrl())
+            .defaultHeader(
+                HttpHeaders.AUTHORIZATION,
+                "Bearer " + props.getApiKey()
+            )
+            .defaultHeader(
+                HttpHeaders.CONTENT_TYPE,
+                MediaType.APPLICATION_JSON_VALUE
+            )
+            .build();
         return new LlmGateway(client, props);
     }
 
@@ -53,7 +69,7 @@ public class AnnouncementWorkerConfig {
     @Bean
     public RestClient cninfoPdfRestClient() {
         org.springframework.http.client.SimpleClientHttpRequestFactory factory =
-                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+            new org.springframework.http.client.SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
         factory.setReadTimeout(Duration.ofSeconds(15));
         return RestClient.builder().requestFactory(factory).build();
@@ -61,19 +77,27 @@ public class AnnouncementWorkerConfig {
 
     /** CNINFO PDF 下载客户端（worker 处理链自持，2026-09-13 多副本改造自 CninfoClient 拆出） */
     @Bean
-    public CninfoPdfClient cninfoPdfClient(RestClient cninfoPdfRestClient, AnnouncementParseProperties props) {
+    public CninfoPdfClient cninfoPdfClient(
+        RestClient cninfoPdfRestClient,
+        AnnouncementParseProperties props
+    ) {
         return new CninfoPdfClient(cninfoPdfRestClient, props);
     }
 
     /** 公告任务监听器工厂：手动 ack + prefetch=2 + 并发消费者（独立工厂，非全局 yml） */
     @Bean
     public SimpleRabbitListenerContainerFactory announcementWorkerListenerFactory(
-            ConnectionFactory connectionFactory, WorkerProperties props) {
-        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        ConnectionFactory connectionFactory,
+        WorkerProperties props
+    ) {
+        SimpleRabbitListenerContainerFactory factory =
+            new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
         factory.setPrefetchCount(props.getPrefetch().getAnnouncement());
-        factory.setConcurrentConsumers(props.getPrefetch().getAnnouncementConcurrency());
+        factory.setConcurrentConsumers(
+            props.getPrefetch().getAnnouncementConcurrency()
+        );
         return factory;
     }
 
@@ -99,8 +123,16 @@ public class AnnouncementWorkerConfig {
                 try {
                     return callOnce(systemPrompt, userMessage);
                 } catch (Exception e) {
-                    last = e instanceof LlmGatewayException le ? le : new LlmGatewayException(e.getMessage(), e);
-                    log.warn("LLM 调用失败 attempt={}/{} err={}", attempt, maxAttempts, last.getMessage());
+                    last =
+                        e instanceof LlmGatewayException le
+                            ? le
+                            : new LlmGatewayException(e.getMessage(), e);
+                    log.warn(
+                        "LLM 调用失败 attempt={}/{} err={}",
+                        attempt,
+                        maxAttempts,
+                        last.getMessage()
+                    );
                     if (attempt < maxAttempts) {
                         try {
                             Thread.sleep(500L * attempt);
@@ -121,15 +153,22 @@ public class AnnouncementWorkerConfig {
 
         private String callOnce(String systemPrompt, String userMessage) {
             Map<String, Object> body = Map.of(
-                    "model", props.getModel(),
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt),
-                            Map.of("role", "user", "content", userMessage)));
-            Map<?, ?> resp = client.post()
-                    .uri("/chat/completions")
-                    .body(body)
-                    .retrieve()
-                    .body(Map.class);
+                "model",
+                props.getModel(),
+                "max_tokens",
+                props.getMaxTokens(),
+                "messages",
+                List.of(
+                    Map.of("role", "system", "content", systemPrompt),
+                    Map.of("role", "user", "content", userMessage)
+                )
+            );
+            Map<?, ?> resp = client
+                .post()
+                .uri("/chat/completions")
+                .body(body)
+                .retrieve()
+                .body(Map.class);
             if (resp == null) {
                 throw new LlmGatewayException("empty response body", null);
             }
@@ -139,19 +178,26 @@ public class AnnouncementWorkerConfig {
                 Map<?, ?> message = (Map<?, ?>) first.get("message");
                 String content = (String) message.get("content");
                 if (!StringUtils.hasText(content)) {
-                    throw new LlmGatewayException("empty message content", null);
+                    throw new LlmGatewayException(
+                        "empty message content",
+                        null
+                    );
                 }
                 return content;
             } catch (LlmGatewayException e) {
                 throw e;
             } catch (Exception e) {
-                throw new LlmGatewayException("unexpected response shape: " + e.getMessage(), e);
+                throw new LlmGatewayException(
+                    "unexpected response shape: " + e.getMessage(),
+                    e
+                );
             }
         }
     }
 
     /** LLM 网关异常（瞬时语义：交主服务 fail_count 计次，达限 FAILED） */
     public static class LlmGatewayException extends RuntimeException {
+
         public LlmGatewayException(String message, Throwable cause) {
             super(message, cause);
         }

@@ -31,3 +31,8 @@ native 模块注解属性禁止运行期 SpEL 引 bean 属性：@RabbitListener 
 grep 工具全仓引用核查时 include_pattern 写 'docs/**' 全部落空，断言「零断链」实为假阴性（docs 重组断链漏检）→ glob 以含项目根的全路径为锚（如 'stock-calculator-service/docs/**'）；全仓核查免 include_pattern、用精确文件名模式逐项验证（规范条目另见 stock-calculator-docs §五）。(Ref: misc)
 
 ## 追加区
+- [main/modulith] 跨域 MQ 回传端口放业务域基包导致 Modulith 环（copilot→crawler 发任务 + crawler→copilot 回结果）：ClsArticleMqConsumer 调 copilot.CopilotMemoryIngestApi 与 CopilotMemoryService 调 crawler.TaskDispatchApi 成双向依赖，ModulithVerifyTest 拦截 ➔ 回传端口宿主规则：消费中枢所在域定义端口接口（crawler 基包），业务域只做实现——依赖单向（AnnouncementIngestApi 先例），新回传链路照此落位 ➔ 遇「域 A 发布、域 B 回传」先画模块依赖方向再定接口宿主 (Ref: copilot-memory)
+- [main/config] YAML 配置里写 Java 风格注释 /** ... */：编译期零报错（yml 不参与编译），Spring 上下文加载时 SnakeYAML 把它当 key 解析报 could not find expected ':'，且错误行号指向上百行外，难定位 ➔ 配置文件注释一律 #；上下文加载失败先怀疑最近改过的 yml 而非 Java ➔ 同理编辑工具的模糊匹配会「顺手」延续错误格式，改配置后跑一次 yaml.safe_load 自检 (Ref: copilot-memory)
+- [data/mq] live LavinMQ 存量队列参数与代码声明不一致（如缺 x-single-active-consumer）：RabbitAdmin.initialize 全量重声明遇 406 PRECONDITION_FAILED 即 channel 关闭，后续所有队列声明全失败，集成测试整体挂且报错指向首个冲突队列 ➔ 队列参数以代码为 SSOT，测试环境直接删存量队列重建（业务消息是临时触发信号不丢数据）；生产环境需迁移方案 ➔ 拓扑改动后核对 mgmt API /api/queues 的 arguments 字段 (Ref: copilot-memory)
+- [data/llm] LLM 输出 JSON 被腰斩(UnexpectedEndOfInput expected close marker for Array)：OpenAI 兼容网关缺省 max_tokens 偏小，不显式传就吃网关隐式值，输出短时成功有迷惑性、输出长必截断 ➔ 聊天补全请求恒显式传 max_tokens（LlmGatewayProperties.maxTokens=4096，仅放宽不改 EOS 停止）➔ 解析失败日志带 rawTail 尾段，EOF 类异常看原文尾段才能定位 (Ref: copilot-memory)
+- [data/部署] IDE 起服务与容器/脚本起服务环境不一致踩坑三连：①worker 角色开关 DATASVC_WORKER_ENABLED 缺省 off，忘配则队列 0 消费者静默积压（任务被消费后失败 ack 也不再有痕迹）；②IDE 注入的 JVM 代理参数(proxyHost)会拦外部 API 调用，脚本/容器起服务无此问题；③IDE 控制台日志无法文件化，排障改走 MQ 管理 API(/api/queues 看 consumers/messages/unacked)+ docker exec psql ➔ 冒烟前先核对角色开关与出口网络 (Ref: copilot-memory)

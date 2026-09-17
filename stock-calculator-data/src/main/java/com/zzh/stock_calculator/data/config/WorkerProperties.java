@@ -1,9 +1,8 @@
 package com.zzh.stock_calculator.data.config;
 
+import java.time.Duration;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-
-import java.time.Duration;
 
 /**
  * worker 角色配置（datasvc.worker 前缀，设计文档 §4.5/§5）。
