@@ -6,33 +6,27 @@ import com.zzh.stock_calculator.monitor.repository.PullTaskConfigRepository;
 import com.zzh.stockcalc.contract.MessageType;
 import com.zzh.stockcalc.contract.MqKey;
 import com.zzh.stockcalc.contract.message.PullConfigPayload;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 常态拉取自循环看门狗（docs/architecture/pull-loop-unification.md §3.4）：main 控制面的
- * 两个周期性职责合一——① 配置快照周期性重推（覆盖式，改配置表后 ≤ 一周期生效）；
+ * 常态拉取自循环看门狗（docs/architecture/pull-loop-unification.md §3.4）：main 控制面
+ * LOOP 侧的两个周期性职责——① 配置快照周期性重推（覆盖式，改配置表后 ≤ 一周期生效）；
  * ② 心跳判活补种（last_renew + ttl + 宽限超期 → 补种子），enabled=false 不补种
  * （L6 停用语义执行者）。补种幂等由 data 侧深度守卫兜底（补多不炸）。
  * <p>种子的「钟」本体在 broker（TTL 到期死信），本类只兜底断绝场景——正常情况下
  * data 消费后续种，看门狗每轮零补种。进程内 lastReseedAt 节流防 data 长时间宕机时
  * 种子在不可消费的工作队列里堆积。</p>
  * <p>§8 拆双节奏：watch() 职责不变（LOOP 判活循环过滤 CALENDAR 行、配置快照仅含
- * LOOP 行，L10）；calendarClaim() 独立 60s 节奏承担日历任务认领——CALENDAR 行永不
- * 进入 LOOP 补种路径（设计不变量 7），broker 侧零在途状态。</p>
+ * LOOP 行，L10）；日历任务认领已独立为 {@link CalendarTaskClaimScheduler}（§8.3.2，
+ * 同一 DB 游标协议）——CALENDAR 行永不进入 LOOP 补种路径（设计不变量 7），broker 侧
+ * 零在途状态。</p>
  */
 @Slf4j
 @Component
@@ -112,82 +106,5 @@ public class PullLoopWatchdogTask {
                 .map(heartbeat -> heartbeat.getLastRenewTime().toInstant().toEpochMilli()
                         + config.getTtlMs() + RENEW_GRACE_MS < now)
                 .orElse(true);
-    }
-
-    // ==================== 日历任务认领（docs/architecture/pull-loop-unification.md §8.3.2，L8-L14） ====================
-
-    /** 启动校验（L13 fail-fast）：CALENDAR 行 cron 表达式必须可解析，坏行阻止 main 启动 */
-    @PostConstruct
-    void validateCalendarRows() {
-        for (PullTaskConfigEntity row : configRepository.findByScheduleMode(PullTaskConfigEntity.MODE_CALENDAR)) {
-            if (row.getCronExpression() == null || row.getCronExpression().isBlank()) {
-                throw new IllegalStateException("calendar task " + row.getTaskCode() + " cron_expression 为空");
-            }
-            CronExpression.parse(row.getCronExpression());
-        }
-    }
-
-    /**
-     * 日历任务认领（§8.3.2）：CAS 推进游标先于投递（affected=1 者独得资格，多副本安全，L12）；
-     * 投递失败回滚游标保持逾期（下轮重认领，槽位不丢）；游标 NULL = 待初始化——补齐为下一
-     * 日历点且不触发执行（crontab 语义）；补跑恒 skip-missed（下一槽位从 now 算，L9）。
-     */
-    @Scheduled(fixedDelayString = "${pipeline.pull-loop.calendar-claim-period-ms:60000}")
-    public void calendarClaim() {
-        List<PullTaskConfigEntity> rows = configRepository.findByScheduleMode(PullTaskConfigEntity.MODE_CALENDAR);
-        long now = System.currentTimeMillis();
-        int claimed = 0;
-        for (PullTaskConfigEntity row : rows) {
-            if (!row.isEnabled()) {
-                continue;
-            }
-            OffsetDateTime next = nextFire(row, now);
-            if (next == null) {
-                continue;
-            }
-            OffsetDateTime cursor = row.getNextExpectedTime();
-            if (cursor == null) {
-                configRepository.initCalendarCursor(row.getTaskCode(), next, utcNow());
-                log.info("calendar claim: {} 游标初始化 → {}（不触发执行，crontab 语义）", row.getTaskCode(), next);
-                continue;
-            }
-            if (cursor.toInstant().toEpochMilli() > now) {
-                continue;
-            }
-            if (configRepository.claimCalendarSlot(row.getTaskCode(), next, utcNow()) == 1) {
-                try {
-                    dispatchPort.dispatchCalendarTask(row.getTaskCode());
-                    claimed++;
-                    log.info("calendar claim: {} 已认领投递（消耗槽位 {}，下一槽位 {}）", row.getTaskCode(), cursor, next);
-                } catch (Exception e) {
-                    configRepository.rollbackCalendarCursor(row.getTaskCode(), cursor, utcNow());
-                    log.error("calendar claim: {} 投递失败，游标回滚至 {}（下轮重认领）: {}", row.getTaskCode(), cursor, e.toString());
-                }
-            }
-        }
-        if (claimed > 0) {
-            log.info("calendar claim 完成 rows={} claimed={}", rows.size(), claimed);
-        }
-    }
-
-    /** 下一触发点（行时区求值，L13）；解析失败 / 无下一触发点返回 null（均已落日志） */
-    private OffsetDateTime nextFire(PullTaskConfigEntity row, long nowMillis) {
-        try {
-            ZonedDateTime now = Instant.ofEpochMilli(nowMillis).atZone(ZoneId.of(row.getTimezone()));
-            ZonedDateTime next = CronExpression.parse(row.getCronExpression()).next(now);
-            if (next == null) {
-                log.error("calendar claim: {} cron 无下一触发点（表达式={}），跳过", row.getTaskCode(), row.getCronExpression());
-                return null;
-            }
-            return next.toInstant().atOffset(ZoneOffset.UTC);
-        } catch (Exception e) {
-            log.error("calendar claim: {} cron 解析失败（表达式={}）: {}", row.getTaskCode(), row.getCronExpression(), e.toString());
-            return null;
-        }
-    }
-
-    /** 游标统一以 UTC OffsetDateTime 落 timestamptz（绝对时刻与行时区求值结果等价） */
-    private OffsetDateTime utcNow() {
-        return Instant.ofEpochMilli(System.currentTimeMillis()).atOffset(ZoneOffset.UTC);
     }
 }

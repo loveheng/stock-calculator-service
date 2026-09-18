@@ -1,10 +1,9 @@
 package com.zzh.stock_calculator.data.config;
 
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import java.time.LocalDate;
 import java.util.List;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * collector 角色公告采集配置（datasvc.collector.announcement 前缀，设计文档 §5/§8 阶段 4）。
@@ -26,10 +25,7 @@ public class CollectorProperties {
         /** 公告采集开关（叠加在 datasvc.collector.enabled 之上） */
         private boolean enabled = false;
 
-        /** 采集周期（小时级，与主服务原 sync.cron 节奏对齐、错开整点分钟） */
-        private String cron = "0 5 * * * *";
-
-        /** 公告分类过滤（category_ndbg_szsh = 年报；空 = 全部，S3 实证） */
+        /** 公告分类过滤（空 = 全部类型全采；S3 实证仅显式传值才过滤，决策：不区分类型勿配置） */
         private String category = "";
 
         /** 首拉模式：FULL=historySince 起全量 / LOOKBACK=近 N 天 */
@@ -44,7 +40,12 @@ public class CollectorProperties {
         /** 首拉前历史仅标题命中 long-term-keywords 才发布（§7 长效白名单） */
         private boolean longTermEnabled = false;
 
-        private List<String> longTermKeywords = List.of("招股说明书", "公司章程", "重大资产重组", "控制权变更");
+        private List<String> longTermKeywords = List.of(
+            "招股说明书",
+            "公司章程",
+            "重大资产重组",
+            "控制权变更"
+        );
 
         /** CNINFO 全部请求最小间隔（毫秒） */
         private long throttleBatchIntervalMs = 300;
@@ -57,5 +58,8 @@ public class CollectorProperties {
         private int pdfMaxSizeMb = 50;
     }
 
-    public enum FirstPullMode { FULL, LOOKBACK }
+    public enum FirstPullMode {
+        FULL,
+        LOOKBACK,
+    }
 }

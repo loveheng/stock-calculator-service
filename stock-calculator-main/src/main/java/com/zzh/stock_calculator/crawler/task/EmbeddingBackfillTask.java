@@ -5,11 +5,11 @@ import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingGate;
 import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
 import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingTaskDispatcher;
+import com.zzh.stock_calculator.monitor.AppTaskHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -20,8 +20,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 向量计算由数据服务 worker 承担，DONE 由 result.embedding.done 消费端异步落账；
  * 本 Task 不写任何 embedding 状态。
  *
- * <p>触发源：ApplicationReadyEvent 延迟 15s + 每小时 cron（UTC）；
- * embedding.backfill.enabled=false 时整体停用（E2E 共享 broker 场景必关，防扫真实库发任务）。
+ * <p>触发源：ApplicationReadyEvent 延迟 15s + pull_task_config CALENDAR 行每小时认领
+ * （job.embedding.backfill，UTC）；embedding.backfill.enabled=false 时整体停用
+ * （E2E 共享 broker 场景必关，防扫真实库发任务；startup 与 DB 调度两条路径同门控）。
  * 门控仅查 isFeatureEnabled()（CF 凭据齐备性属计算端 worker 职责）。</p>
  *
  * <p>快照式扫缺：启动时一次取全量 pending ids 内存迭代。MQ 下发不改行状态，
@@ -34,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class EmbeddingBackfillTask {
+public class EmbeddingBackfillTask implements AppTaskHandler {
 
     /**
      * MQ 对账快照上限：一次取全量 pending（当前库 6 万级，10 万余量充足）。
@@ -48,7 +49,7 @@ public class EmbeddingBackfillTask {
     private final EmbeddingGate gate;
     private final EmbeddingTaskDispatcher dispatcher;
 
-    /** 启动触发与 cron 触发可能重叠，单飞守卫 */
+    /** 启动触发与定时触发可能重叠，单飞守卫 */
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     @EventListener(ApplicationReadyEvent.class)
@@ -65,14 +66,19 @@ public class EmbeddingBackfillTask {
         });
     }
 
-    @Scheduled(cron = "${embedding.backfill.cron:0 5 * * * *}", zone = "UTC")
-    public void cronRun() {
-        runSafely("cron");
+    @Override
+    public String taskCode() {
+        return AppTaskHandler.TASK_EMBEDDING_BACKFILL;
+    }
+
+    @Override
+    public void run() {
+        runSafely("app-task");
     }
 
     private void runSafely(String trigger) {
         if (!properties.getBackfill().isEnabled()) {
-            // 总开关停用：startup/cron 两条触发路径都跳过（E2E 共享 broker 防真实库任务污染）
+            // 总开关停用：startup/定时两条触发路径都跳过（E2E 共享 broker 防真实库任务污染）
             log.debug("embedding backfill disabled, run skipped, trigger={}", trigger);
             return;
         }

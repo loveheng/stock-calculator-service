@@ -57,14 +57,11 @@ public class EmbeddingProperties {
     @Data
     public static class Backfill {
 
-        /** 回填对账总开关（startup/cron 两条触发路径都停；E2E 共享 broker 场景防真实库任务污染测试队列） */
+        /** 回填对账总开关（startup/DB 调度两条触发路径都停；E2E 共享 broker 场景防真实库任务污染测试队列） */
         private boolean enabled = true;
 
         /** 启动后延迟触发首轮回填 */
         private Duration startupDelay = Duration.ofSeconds(15);
-
-        /** 回填 cron（UTC 时区由 @Scheduled zone 显式指定） */
-        private String cron = "0 5 * * * *";
     }
 
     @Data
@@ -73,11 +70,8 @@ public class EmbeddingProperties {
         /** 统计报告开关（实际发送还需 EMBEDDING_NOTIFY_EMAIL 配置收件人） */
         private boolean enabled = true;
 
-        /** 发送间隔天数（每日 cron 检查点比对上次发送，满间隔才发） */
+        /** 发送间隔天数（每日检查点比对上次发送，满间隔才发） */
         private int intervalDays = 3;
-
-        /** 每日检查 cron（UTC；默认 01:00 = 北京 09:00） */
-        private String cron = "0 0 1 * * *";
     }
 
     @Data

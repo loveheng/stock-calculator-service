@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: copilot-memory
-total-merged: 1
-last-merge: 2026-09-17
+total-merged: 2
+last-merge: 2026-09-18
 ---
 
 # copilot-memory：copilot 记忆固化与用户画像抽取
@@ -26,7 +26,9 @@ last-merge: 2026-09-17
 - **种子信封 type 陷阱（防复发）**：DLX 到期只改 routing key 不改 body——dispatchDelayedTask(routingKey, envelopeType, ...) 两参分离，信封 type 必须写改写后目标类型（result.memory.extract.tick），写 delay key 自身会被消费端 default 分支静默丢弃
 - **ingest 端口宿主（[SSOT 修正] 2026-09-17）**：CopilotMemoryIngestApi 在 **crawler 基包**（AnnouncementIngestApi 先例：消费方定义端口、业务域实现，依赖单向 copilot→crawler）；放 copilot 基包会成 Modulith 环（ModulithVerifyTest 实证拦截）
 - **环境注意（宿主机跑测试）**：.env 的 POSTGRES_URL/RABBIT_HOST 是 docker 内部主机名，宿主机须覆盖为 localhost；m2 里 contract 快照会过期，测试前 `./mvnw install -pl stock-calculator-contract` 刷新；沙箱内跑测试必挂（Mockito MockMaker agent attach 被拦 + 回环网络被拦），须非沙箱运行
-- **live broker 队列参数漂移**：存量队列与代码声明不一致会 406 挡住全部拓扑声明（RabbitAdmin 全量初始化）——实证 task.history.sync.q 缺 x-single-active-consumer，经用户确认删除后按新参数重建；新增队列靠 data 侧测试上下文声明落地
+- **live broker 队列参数漂移**：存量队列与代码声明不一致会 406 挡住全部拓扑声明（RabbitAdmin 全量初始化）——实证 task.history.sync.q 缺 x-single-active-consumer，经用户确认删除后按新参数重建；新增队列靠 data 侧测试上下文声明落地；已实测：3 个 memory 队列+绑定按新参数生效（delay.q classic + DLX→stockcalc.results + tick key），task.history.sync.q 重建带 single-active-consumer，data 套件复跑 79 绿
+- **LLM 输出截断护栏（冒烟修复）**：UnexpectedEndOfInput 腰斩根因＝LlmGateway 请求体未显式传 max_tokens、CF 网关隐式缺省偏小——修复＝LlmGatewayProperties.maxTokens 默认 4096（仅放宽上限不改自然停止）+ 两 worker 解析失败输出 rawTail(200 字符尾段) 定位；对账验证通过：水位 8→20、锁清、新条目「关注领域」落库、画像未触发属正确（ΔCount 未达阈值滚存）
+- **冒烟观察环境**：data 侧 memory worker 需 DATASVC_WORKER_ENABLED=true 才挂载（缺省 off、队列积压 0 消费者）；IDE JVM 代理参数（proxyHost）会致 LLM 调用失败、移除后直连正常；IDE 控制台日志不可文件化——观察走 MQ 管理 API + `docker exec psql`
 
 ## 断点
 

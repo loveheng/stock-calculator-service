@@ -51,7 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * result.announcement.failed(PERMANENT) → FAILED 终态。正常链路无死信。
  * <p>依赖本地 PostgreSQL + RabbitMQ（docker compose），RABBIT_E2E=true 显式开启；
  * embedding.enabled=true 仅为二段下发功能开关（CF 凭据属 worker，主服务不需要）；
- * embedding.backfill.enabled=false + announcement.process.cron=- 关闭全部定时器：
+ * embedding.backfill.enabled=false（功能总开关）+ app-task.enabled=false（进程内 job.* 认领压制）关闭全部进程内定时器：
  * 缓存上下文在类结束后仍存活，回填/调度扫真实库发布任务会污染共享 broker 测试队列；
  * 990003 段为测试锚点；收尾删除公告行/溯源行/向量行并清空任务队列。</p>
  */
@@ -60,8 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "datasvc.mq.enabled=true",
         "embedding.enabled=true",
         "crawler.enabled=false",
-        "announcement.process.enabled=true",
-        "announcement.process.cron=-",
+        "app-task.enabled=false",
         "embedding.backfill.enabled=false"
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)

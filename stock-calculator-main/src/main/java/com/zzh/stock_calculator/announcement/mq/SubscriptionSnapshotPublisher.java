@@ -5,13 +5,13 @@ import com.zzh.stock_calculator.announcement.event.SubscriptionChangedEvent;
 import com.zzh.stock_calculator.announcement.repository.AnnouncementRepository;
 import com.zzh.stock_calculator.announcement.repository.AnnouncementSubscriptionRepository;
 import com.zzh.stock_calculator.crawler.TaskDispatchApi;
+import com.zzh.stock_calculator.monitor.AppTaskHandler;
 import com.zzh.stockcalc.contract.MessageType;
 import com.zzh.stockcalc.contract.message.SubscriptionSnapshotPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -26,14 +26,14 @@ import java.util.Optional;
  * control.subscription.snapshot 下发。覆盖式全量语义——每次触发都重读 DB 构建
  * 完整快照（空订阅 = 空列表照发，collector 清缓存停采集），事件只当触发器。
  * <p>三触发点：①订阅变更 AFTER_COMMIT（事务内发布，提交后才读 DB 防未提交态）；
- * ②定时重推（兜底快照丢失，R6）；③启动首推（collector 晚启动也不丢全集）。
+ * ②定时重推（兜底快照丢失，R6；pull_task_config CALENDAR 行表驱动）；③启动首推（collector 晚启动也不丢全集）。
  * version = epoch millis 单调，collector 拒旧版本（R3 防缓存漂移）。</p>
- * <p>发布失败只记日志：快照丢失由 AFTER_COMMIT 重试与 30min 定时重推兜底（R6）。</p>
+ * <p>发布失败只记日志：快照丢失由 AFTER_COMMIT 重试与定时重推兜底（R6）。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SubscriptionSnapshotPublisher {
+public class SubscriptionSnapshotPublisher implements AppTaskHandler {
 
     /** 增量水位重叠天数（与 AnnouncementCollectService.OVERLAP_DAYS 同语义，D3） */
     private static final int OVERLAP_DAYS = 7;
@@ -55,10 +55,15 @@ public class SubscriptionSnapshotPublisher {
         publishSnapshot();
     }
 
-    /** 定时重推：兜底消息丢失/collector 重启（announcement.snapshot.cron，默认 30min） */
-    @Scheduled(cron = "${announcement.snapshot.cron:0 */30 * * * *}")
-    public void scheduledRepublish() {
+    /** 定时重推（CalendarTaskClaimScheduler 认领 job.announcement.snapshot，DB 配置周期）：兜底快照丢失 */
+    @Override
+    public void run() {
         publishSnapshot();
+    }
+
+    @Override
+    public String taskCode() {
+        return AppTaskHandler.TASK_ANNOUNCEMENT_SNAPSHOT;
     }
 
     /** 重读 DB 构建全量快照并下发（MQ 未启用时空转，返回 false） */

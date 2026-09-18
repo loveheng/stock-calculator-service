@@ -77,7 +77,7 @@ class EmbeddingStatsReportTaskTest {
     void intervalNotReachedSkips() {
         task.lastSentEpochDay.set(today());
 
-        task.cronCheck();
+        task.run();
 
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -88,7 +88,7 @@ class EmbeddingStatsReportTaskTest {
         properties.getReport().setEnabled(false);
         task.lastSentEpochDay.set(today() - 10);
 
-        task.cronCheck();
+        task.run();
 
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -99,7 +99,7 @@ class EmbeddingStatsReportTaskTest {
         properties.setEnabled(false);
         task.lastSentEpochDay.set(today() - 10);
 
-        task.cronCheck();
+        task.run();
 
         verify(embeddingRepository, never()).countArticles();
         verify(eventPublisher, never()).publishEvent(any());
@@ -110,7 +110,7 @@ class EmbeddingStatsReportTaskTest {
     void intervalReachedPublishesOnce() {
         task.lastSentEpochDay.set(today() - 3);
 
-        task.cronCheck();
+        task.run();
 
         ArgumentCaptor<EmbeddingStatsReportEvent> captor =
                 ArgumentCaptor.forClass(EmbeddingStatsReportEvent.class);
@@ -126,7 +126,7 @@ class EmbeddingStatsReportTaskTest {
         assertThat(event.isBackfillComplete()).isFalse();
 
         // lastSent 已推进 → 同日再触发不重发
-        task.cronCheck();
+        task.run();
         verify(eventPublisher, times(1)).publishEvent(any(EmbeddingStatsReportEvent.class));
     }
 
@@ -137,7 +137,7 @@ class EmbeddingStatsReportTaskTest {
         when(embeddingRepository.countDone()).thenReturn(995L);
         when(embeddingRepository.countByStatus(EmbeddingStatus.FAILED)).thenReturn(5L);
 
-        task.cronCheck();
+        task.run();
 
         ArgumentCaptor<EmbeddingStatsReportEvent> captor =
                 ArgumentCaptor.forClass(EmbeddingStatsReportEvent.class);
@@ -151,7 +151,7 @@ class EmbeddingStatsReportTaskTest {
         long lastDay = today() - 6;
         task.lastSentEpochDay.set(lastDay);
 
-        task.cronCheck();
+        task.run();
 
         ArgumentCaptor<OffsetDateTime> sinceCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
         verify(embeddingRepository).countByEmbeddedAtGreaterThanEqual(sinceCaptor.capture());

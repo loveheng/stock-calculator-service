@@ -27,7 +27,7 @@ import java.time.OffsetDateTime;
 @Table(name = "pull_task_config")
 public class PullTaskConfigEntity {
 
-    /** 调度模式（§8）：TTL 自循环 / 日历 cron（看门狗认领直发，无种子无 delay 队列） */
+    /** 调度模式（§8）：TTL 自循环 / 日历 cron（CalendarTaskClaimScheduler 统一认领，无种子无 delay 队列） */
     public static final String MODE_LOOP = "LOOP";
     public static final String MODE_CALENDAR = "CALENDAR";
 

@@ -25,15 +25,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * PullLoopWatchdogTask 单测（docs/architecture/pull-loop-unification.md §3.4 / L6）：
- * 配置快照周期性重推、心跳超期补种、进程内补种节流、enabled=false 不补种。
+ * 配置快照周期性重推、心跳超期补种、进程内补种节流、enabled=false 不补种、
+ * CALENDAR 行隔离（不补种/不进快照）；CALENDAR 认领场景见 CalendarTaskClaimSchedulerTest。
  */
 @ExtendWith(MockitoExtension.class)
 class PullLoopWatchdogTaskTest {
@@ -120,75 +119,7 @@ class PullLoopWatchdogTaskTest {
         verify(dispatchPort).pushConfig(any(PullConfigPayload.class));
     }
 
-    // ==================== 日历任务认领（docs/architecture/pull-loop-unification.md §8.3.2） ====================
-
-    @Test
-    @DisplayName("CALENDAR 游标 NULL：初始化为下一日历点，不触发执行（crontab 语义）")
-    void nullCursorInitializesWithoutDispatch() {
-        when(configRepository.findByScheduleMode(PullTaskConfigEntity.MODE_CALENDAR))
-                .thenReturn(List.of(calendarConfig(MqKey.TASK_HELLO_WORLD, true, null)));
-
-        watchdog.calendarClaim();
-
-        ArgumentCaptor<OffsetDateTime> next = ArgumentCaptor.forClass(OffsetDateTime.class);
-        verify(configRepository).initCalendarCursor(eq(MqKey.TASK_HELLO_WORLD), next.capture(), any(OffsetDateTime.class));
-        assertTrue(next.getValue().toInstant().toEpochMilli() > System.currentTimeMillis());
-        verify(dispatchPort, never()).dispatchCalendarTask(anyString());
-    }
-
-    @Test
-    @DisplayName("CALENDAR 逾期游标：CAS 认领成功 → 直发一次性任务")
-    void overdueCursorClaimsAndDispatches() {
-        when(configRepository.findByScheduleMode(PullTaskConfigEntity.MODE_CALENDAR))
-                .thenReturn(List.of(calendarConfig(MqKey.TASK_HELLO_WORLD, true, OffsetDateTime.now().minusHours(1))));
-        when(configRepository.claimCalendarSlot(eq(MqKey.TASK_HELLO_WORLD), any(OffsetDateTime.class), any(OffsetDateTime.class)))
-                .thenReturn(1);
-
-        watchdog.calendarClaim();
-
-        verify(dispatchPort).dispatchCalendarTask(MqKey.TASK_HELLO_WORLD);
-    }
-
-    @Test
-    @DisplayName("CALENDAR 认领后投递失败：游标回滚保持逾期，下轮重认领（L12）")
-    void dispatchFailureRollsBackCursor() {
-        when(configRepository.findByScheduleMode(PullTaskConfigEntity.MODE_CALENDAR))
-                .thenReturn(List.of(calendarConfig(MqKey.TASK_HELLO_WORLD, true, OffsetDateTime.now().minusHours(1))));
-        when(configRepository.claimCalendarSlot(eq(MqKey.TASK_HELLO_WORLD), any(OffsetDateTime.class), any(OffsetDateTime.class)))
-                .thenReturn(1);
-        doThrow(new RuntimeException("mq down")).when(dispatchPort).dispatchCalendarTask(anyString());
-
-        watchdog.calendarClaim();
-
-        verify(configRepository).rollbackCalendarCursor(eq(MqKey.TASK_HELLO_WORLD), any(OffsetDateTime.class), any(OffsetDateTime.class));
-    }
-
-    @Test
-    @DisplayName("CALENDAR 认领竞争失败（affected=0）：不投递")
-    void lostClaimRaceSkipsDispatch() {
-        when(configRepository.findByScheduleMode(PullTaskConfigEntity.MODE_CALENDAR))
-                .thenReturn(List.of(calendarConfig(MqKey.TASK_HELLO_WORLD, true, OffsetDateTime.now().minusHours(1))));
-        when(configRepository.claimCalendarSlot(eq(MqKey.TASK_HELLO_WORLD), any(OffsetDateTime.class), any(OffsetDateTime.class)))
-                .thenReturn(0);
-
-        watchdog.calendarClaim();
-
-        verify(dispatchPort, never()).dispatchCalendarTask(anyString());
-    }
-
-    @Test
-    @DisplayName("CALENDAR 未到期游标 / 停用行：跳过")
-    void futureCursorAndDisabledRowSkip() {
-        when(configRepository.findByScheduleMode(PullTaskConfigEntity.MODE_CALENDAR))
-                .thenReturn(List.of(
-                        calendarConfig(MqKey.TASK_HELLO_WORLD, true, OffsetDateTime.now().plusHours(1)),
-                        calendarConfig("task.other", false, OffsetDateTime.now().minusHours(1))));
-
-        watchdog.calendarClaim();
-
-        verify(dispatchPort, never()).dispatchCalendarTask(anyString());
-        verify(configRepository, never()).initCalendarCursor(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class));
-    }
+    // CALENDAR 认领协议场景已随 CalendarTaskClaimScheduler 拆分迁至 CalendarTaskClaimSchedulerTest
 
     @Test
     @DisplayName("watch() 对 CALENDAR 行不补种、快照剔除（不变量 7 / L10）")

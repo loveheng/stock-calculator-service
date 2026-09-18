@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -25,11 +24,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * ④ 管理 API 不可达 → broker 本身异常（BROKER_UNREACHABLE，fail-loud）；
  * ⑤ DB 滞后指标：announcement / cls_article_embedding PENDING 最老年龄超阈值（PENDING_AGE）。
  * 每项独立冷却（内存态，重启清零最多多发一封），触发即发布 {@link PipelineAlertEvent}。</p>
+ *
+ * <p>调度由 pull_task_config CALENDAR 行表驱动（CalendarTaskClaimScheduler 认领 job.pipeline.watch）。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class PipelineWatchTask {
+public class PipelineWatchTask implements AppTaskHandler {
 
     static final String KIND_DATA_DOWN = "DATA_DOWN";
     static final String KIND_BACKLOG = "BACKLOG";
@@ -49,11 +50,13 @@ public class PipelineWatchTask {
     /** 同类告警冷却表：key = kind[:queue] */
     private final Map<String, Instant> lastAlertAt = new ConcurrentHashMap<>();
 
-    @Scheduled(cron = "${pipeline.watch.cron:0 */5 * * * *}")
-    public void watch() {
-        if (!properties.isEnabled()) {
-            return;
-        }
+    @Override
+    public String taskCode() {
+        return AppTaskHandler.TASK_PIPELINE_WATCH;
+    }
+
+    @Override
+    public void run() {
         List<RabbitManagementClient.QueueStat> stats;
         try {
             stats = managementClient.fetchQueueStats();

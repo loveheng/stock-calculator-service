@@ -66,7 +66,7 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 ## 验证
 
 ```
-./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-DfailIfNoTests=false'
+./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-Dsurefire.failIfNoSpecifiedTests=false' '-DfailIfNoTests=false'
 ```
 
 两个 @SpringBootTest（contextLoads / SyncBackupL1）需本地 PG，无 DB 环境排除。口令与容器信息见 stock-calculator-workflow。

@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-12
+updated: 2026-09-18
 ---
 
 # 公告提取与蒸馏管道（announcement 域）· 后端设计文档
@@ -272,6 +272,10 @@ CREATE INDEX idx_ann_sub_stock ON announcement_subscription (stock_id);
 | grounding.enabled | true | 接地校验开关 |
 | throttle.batch-interval-ms | 300 | 出站节流（对齐 embedding） |
 
+> 2026-09-18：main 侧定时调度已迁 pull_task_config 表 CALENDAR 行（docs/architecture/pull-loop-unification.md
+> §9/§10，任务管理统一合表）——announcement.process.cron / announcement.snapshot.cron 配置键删除，
+> 调度行 job.announcement.process（每分钟）与 job.announcement.snapshot（每 30 分钟）改库即生效；
+> 上表 sync.* 等键为历史基线（解析配置现落 data 侧）。
 ## 8. 实证清单（实现前/中验证）
 
 | # | 待实证 | 风险 |

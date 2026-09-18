@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 /**
  * AnnouncementProcessPublisher 单测（Mockito）：PENDING 扫描→发布两级分发
  * （待蒸馏→process 任务 / 已蒸馏→二段向量化补发）、发布端熔断窗口（RATE_LIMITED
- * 冷却）、process.enabled 总开关、发布失败不计数（D6 对账兜底）。
+ * 冷却）、发布失败不计数（D6 对账兜底）。
  */
 @ExtendWith(MockitoExtension.class)
 class AnnouncementProcessPublisherTest {
@@ -53,7 +53,6 @@ class AnnouncementProcessPublisherTest {
     @BeforeEach
     void setUp() {
         properties = new AnnouncementProperties();
-        properties.getProcess().setEnabled(true);
         publisher = new AnnouncementProcessPublisher(
                 announcementRepository, taskDispatchApi, properties, embeddingApiProvider);
     }
@@ -133,14 +132,5 @@ class AnnouncementProcessPublisherTest {
         publisher.markRateLimited();
         assertThat(publisher.publishPendingBatch()).isZero();
         verifyNoInteractions(taskDispatchApi);
-    }
-
-    @Test
-    @DisplayName("process.enabled=false → 总开关关闭空转")
-    void disabledByProcessSwitch() {
-        properties.getProcess().setEnabled(false);
-
-        assertThat(publisher.publishPendingBatch()).isZero();
-        verifyNoInteractions(announcementRepository, taskDispatchApi);
     }
 }

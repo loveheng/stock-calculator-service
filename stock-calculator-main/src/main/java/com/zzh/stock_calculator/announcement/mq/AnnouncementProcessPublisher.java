@@ -46,9 +46,6 @@ public class AnnouncementProcessPublisher {
      * @return 已发布任务数（process + embedding 合计，供调度日志）
      */
     public int publishPendingBatch() {
-        if (!properties.getProcess().isEnabled()) {
-            return 0;
-        }
         Instant until = rateLimitedUntil;
         if (Instant.now().isBefore(until)) {
             log.info("CNINFO 限流冷却中（至 {}），本轮公告任务发布跳过", until);

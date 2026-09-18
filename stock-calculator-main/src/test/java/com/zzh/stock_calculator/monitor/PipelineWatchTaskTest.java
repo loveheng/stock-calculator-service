@@ -76,7 +76,7 @@ class PipelineWatchTaskTest {
                 stat(MqQueue.DEAD, 0, 0)));
         mockDbPendingIdle();
 
-        task.watch();
+        task.run();
 
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -91,7 +91,7 @@ class PipelineWatchTaskTest {
                 stat(MqQueue.DEAD, 0, 0)));
         mockDbPendingIdle();
 
-        task.watch();
+        task.run();
 
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(captor.capture());
@@ -110,8 +110,8 @@ class PipelineWatchTaskTest {
                 stat(MqQueue.DEAD, 0, 0)));
         mockDbPendingIdle();
 
-        task.watch();
-        task.watch();
+        task.run();
+        task.run();
 
         verify(eventPublisher, times(1)).publishEvent(any(PipelineAlertEvent.class));
     }
@@ -125,7 +125,7 @@ class PipelineWatchTaskTest {
                 stat(MqQueue.DEAD, 2, 0)));
         mockDbPendingIdle();
 
-        task.watch();
+        task.run();
 
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, times(2)).publishEvent(captor.capture());
@@ -141,7 +141,7 @@ class PipelineWatchTaskTest {
     void brokerUnreachableAlerts() {
         when(managementClient.fetchQueueStats()).thenThrow(new IllegalStateException("connection refused"));
 
-        task.watch();
+        task.run();
 
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(captor.capture());

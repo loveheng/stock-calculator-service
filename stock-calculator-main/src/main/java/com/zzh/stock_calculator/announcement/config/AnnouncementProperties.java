@@ -5,15 +5,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * announcement.* 配置（MQ 单路径终态）：
- * 主服务只保留 状态机/发布/订阅/快照 相关键；采集与解析配置随管道移交数据服务
- * （data 侧 CollectorProperties / AnnouncementParseProperties）。
+ * 主服务只保留 状态机/发布/订阅 相关键；采集与解析配置随管道移交数据服务
+ * （data 侧 CollectorProperties / AnnouncementParseProperties）；
+ * 定时调度已迁 pull_task_config 表 CALENDAR 行（CalendarTaskClaimScheduler 认领，job.* 行）。
  */
 @Data
 @ConfigurationProperties(prefix = "announcement")
 public class AnnouncementProperties {
 
     private final Process process = new Process();
-    private final Snapshot snapshot = new Snapshot();
     private final Pdf pdf = new Pdf();
 
     /** 订阅护栏：stockId 格式与每用户数量上限（防对 CNINFO 打无效解析） */
@@ -27,21 +27,10 @@ public class AnnouncementProperties {
 
     @Data
     public static class Process {
-        private boolean enabled = false;
-        private String cron = "0 1 * * * *";
         /** 瞬时失败计次上限，达限落 FAILED 终态（result.announcement.failed 消费端落账） */
         private int maxFailAttempts = 3;
         /** RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，§4.5 发布端熔断） */
         private long rateLimitCooldownMinutes = 30;
-    }
-
-    /**
-     * 订阅快照下发（设计文档 §8 阶段 4/R3）：
-     * 定时重推周期兜底快照丢失（R6 恢复窗口）；注：@Scheduled 占位符默认值须与此处一致。
-     */
-    @Data
-    public static class Snapshot {
-        private String cron = "0 */30 * * * *";
     }
 
     @Data

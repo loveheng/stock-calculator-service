@@ -440,3 +440,25 @@ CREATE TABLE IF NOT EXISTS public.pull_heartbeat (
 
 -- 回滚：DROP TABLE IF EXISTS public.pull_heartbeat;
 --       DROP TABLE IF EXISTS public.pull_task_config;
+
+-- =====================================================================
+-- app_task_config 合表迁移段（任务管理统一 2026-09-18，docs/architecture/pull-loop-unification.md §10）：
+-- 存量库将原 main 本地定时任务行并入 pull_task_config（schedule_mode='CALENDAR'、ttl_ms=0 哨兵），
+-- 游标（next_expected_time）与 enabled/cron/timezone 随迁，认领语义不变（CalendarTaskClaimScheduler）。
+-- 幂等可重跑：原表已 DROP 时本段整体 no-op（新库由 pull_task_config CREATE + data.sql 直接就位）。
+CREATE TABLE IF NOT EXISTS public.app_task_config (
+	task_code varchar(64) NOT NULL,
+	enabled boolean DEFAULT true NOT NULL,
+	cron_expression varchar(64),
+	timezone varchar(64) DEFAULT 'Asia/Shanghai' NOT NULL,
+	next_expected_time timestamptz,
+	updated_at timestamptz DEFAULT now() NOT NULL,
+	CONSTRAINT app_task_config_pkey PRIMARY KEY (task_code)
+);
+
+INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone, next_expected_time, updated_at)
+SELECT task_code, enabled, 0, 'CALENDAR', cron_expression, timezone, next_expected_time, updated_at
+FROM public.app_task_config
+ON CONFLICT (task_code) DO NOTHING;
+
+DROP TABLE IF EXISTS public.app_task_config;

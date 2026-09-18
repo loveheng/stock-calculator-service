@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-12
+updated: 2026-09-18
 ---
 
 # 主/数据模块拆分 · 测试计划
@@ -52,7 +52,7 @@ updated: 2026-09-12
 | datasvc.collector.enabled | data collector 角色总开关 | 测试上下文置 false 防真实打 CLS/CNINFO（CollectorGateTest 教训） |
 | datasvc.worker.enabled | data worker 角色总开关 | 置 true 会连带激活 CF 凭据 fail-fast，须同配 dummy embedding 凭据 |
 | embedding.backfill.enabled | main 回填任务总开关（默认 true） | 共享 broker 的 E2E 须显式关闭，防污染队列 |
-| announcement.process.cron | 公告任务扫描 cron | E2E 配 `-` 禁调度器（缓存上下文在类结束后仍存活，会扫真实库发布任务） |
+| app-task.enabled | 进程内 job.* 认领压制开关（默认 true） | E2E 配 false 压制进程内定时器，MQ 型 CALENDAR 行不受影响（缓存上下文在类结束后仍存活，会扫真实库发布任务） |
 | PIPELINE_ALERT_EMAIL | monitor 告警邮件收件人 | P3 巡检告警验证用 |
 
 ### 2.3 已知坑（执行前必读）

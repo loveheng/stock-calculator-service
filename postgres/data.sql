@@ -105,12 +105,21 @@ INSERT INTO copilot_prompt_template (tag, content, ctime, mtime) VALUES
 ON CONFLICT (tag) DO NOTHING;
 
 -- =====================================================================
--- 常态拉取自循环配置播种（docs/architecture/pull-loop-unification.md §3/§8）：
--- task_code = data 侧 work routing key；LOOP 行 ttl_ms = 原生节奏（CLS 8min / 公告 1h）；
--- CALENDAR 行按 §8 接入：cron_expression 为 Spring CronExpression 六域方言（无 ?），
--- timezone 显式钉死（不依赖服务器默认值），ttl_ms 不参与日历调度（哨兵 0）
+-- 常态拉取配置播种（docs/architecture/pull-loop-unification.md §3/§8/§10，任务管理统一合表）：
+-- LOOP 行 = data 侧拉取源（task_code = work routing key，ttl_ms = 原生节奏 CLS 8min / 公告 1h）；
+-- CALENDAR 行 = 日历型定时任务（task.* MQ 投递型 + job.* 进程内执行型，§10 合表），
+-- CalendarTaskClaimScheduler 按 60s 周期统一认领（注册表命中 handler 进程内执行、未命中 MQ 直发）；
+-- cron_expression 为 Spring CronExpression 六域方言（无 ?），timezone 显式钉死，
+-- ttl_ms 不参与日历调度（哨兵 0）；enabled=false = 迁移前停用态（job.search.backfill 原默认关），
+-- UTC 行对应原 @Scheduled zone="UTC"
 INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone) VALUES
     ('task.cls.pull', true, 480000, 'LOOP', NULL, 'Asia/Shanghai'),
     ('task.announcement.collect', true, 3600000, 'LOOP', NULL, 'Asia/Shanghai'),
-    ('task.hello.world', true, 0, 'CALENDAR', '0 0 7 * * *', 'Asia/Shanghai')
+    ('task.hello.world', true, 0, 'CALENDAR', '0 0 7 * * *', 'Asia/Shanghai'),
+    ('job.announcement.process', true, 0, 'CALENDAR', '0 1 * * * *', 'Asia/Shanghai'),
+    ('job.announcement.snapshot', true, 0, 'CALENDAR', '0 */30 * * * *', 'Asia/Shanghai'),
+    ('job.search.backfill', false, 0, 'CALENDAR', '0 40 2 * * *', 'Asia/Shanghai'),
+    ('job.embedding.backfill', true, 0, 'CALENDAR', '0 5 * * * *', 'UTC'),
+    ('job.embedding.report', true, 0, 'CALENDAR', '0 0 1 * * *', 'UTC'),
+    ('job.pipeline.watch', true, 0, 'CALENDAR', '0 */5 * * * *', 'Asia/Shanghai')
 ON CONFLICT (task_code) DO NOTHING;

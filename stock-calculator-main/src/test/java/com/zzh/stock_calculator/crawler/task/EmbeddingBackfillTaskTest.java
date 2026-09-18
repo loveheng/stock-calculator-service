@@ -69,7 +69,7 @@ class EmbeddingBackfillTaskTest {
     void gateClosedSkipsRun() {
         properties.setEnabled(false);
 
-        task.cronRun();
+        task.run();
 
         verify(embeddingRepository, never()).findPendingArticleIds(anyInt(), anyLong());
         verify(dispatcher, never()).dispatchForArticle(anyLong());
@@ -80,7 +80,7 @@ class EmbeddingBackfillTaskTest {
     void backfillDisabledSkipsRun() {
         properties.getBackfill().setEnabled(false);
 
-        task.cronRun();
+        task.run();
 
         verify(embeddingRepository, never()).findPendingArticleIds(anyInt(), anyLong());
         verify(dispatcher, never()).dispatchForArticle(anyLong());
@@ -92,7 +92,7 @@ class EmbeddingBackfillTaskTest {
         when(embeddingRepository.findPendingArticleIds(anyInt(), anyLong()))
                 .thenReturn(List.of(101L, 202L));
 
-        task.cronRun();
+        task.run();
 
         ArgumentCaptor<Long> boundary = ArgumentCaptor.forClass(Long.class);
         verify(embeddingRepository).findPendingArticleIds(
@@ -110,7 +110,7 @@ class EmbeddingBackfillTaskTest {
         when(embeddingRepository.findPendingArticleIds(anyInt(), anyLong()))
                 .thenReturn(List.of(1L, 2L, 3L));
 
-        task.cronRun();
+        task.run();
 
         verify(dispatcher, never()).dispatchForArticle(anyLong());
     }
@@ -120,7 +120,7 @@ class EmbeddingBackfillTaskTest {
     void fatalStopsRun() {
         when(quotaGuard.isFatal()).thenReturn(true);
 
-        task.cronRun();
+        task.run();
 
         verify(embeddingRepository, never()).findPendingArticleIds(anyInt(), anyLong());
         verify(dispatcher, never()).dispatchForArticle(anyLong());

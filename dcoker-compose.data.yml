@@ -1,0 +1,44 @@
+# 应用层：app / data（data 单镜像可跨机任意加副本）。
+# 依赖中间件层（docker-compose.middleware.yml 提供 postgres / redis / lavinmq），
+# 启动顺序：先中间件，后应用；应用均 restart: unless-stopped，中间件晚起可自愈重连，
+# 故跨文件不再写 depends_on（compose 跨项目无法引用另一文件的服务）。
+# 互通：加入中间件层创建的固定名网络 scs-net（external，仅加入不创建），
+# 经服务名 postgres / redis / lavinmq 做 DNS 访问。
+# 若本机不跑中间件（如 data 副本机），先执行：docker network create scs-net
+# 注意：两个文件名都不是 compose 默认名，所有命令需 -f 显式指定。
+# 应用层：app / data（支持单机多实例，各自配置独立的 .env 文件）
+# Start only 1 default instance
+# podman-compose -f docker-compose.data.yml up
+# Start a specific number of instances (e.g., run all 2 instances):
+# podman-compose -f docker-compose.data.yml --profile scale up -d
+# Start specific instances selectively (e.g., instances 1 and 2 only):
+# podman-compose -f docker-compose.data.yml --profile scale up -d --no-recreate data-1 data-2
+services:
+  # 实例 1 (默认启动)
+  data-1:
+    image: ghcr.io/loveheng/stock-calculator-service-data:${DATA_IMAGE_TAG:-8ac8b1f}
+    container_name: scs-data-1
+    ports:
+      - "${DATA_PORT_1:-18081}:8080"
+    env_file:
+      - .env.data1
+    restart: unless-stopped
+    networks:
+      - scs-net
+
+  # 实例 2 (仅在指定 profile 或需要时启动)
+  data-2:
+    profiles: ["scale", "data-2"]
+    image: ghcr.io/loveheng/stock-calculator-service-data:${DATA_IMAGE_TAG:-8ac8b1f}
+    container_name: scs-data-2
+    ports:
+      - "${DATA_PORT_2:-18082}:8080"
+    env_file:
+      - .env.data2
+    restart: unless-stopped
+    networks:
+      - scs-net
+
+networks:
+  scs-net:
+    external: true

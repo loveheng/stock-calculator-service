@@ -116,9 +116,9 @@ class SubscriptionSnapshotPublisherTest {
     }
 
     @Test
-    @DisplayName("定时重推触发快照下发")
+    @DisplayName("DB 调度入口 run() 触发快照下发")
     void scheduledRepublishTriggersPublish() {
-        publisher.scheduledRepublish();
+        publisher.run();
 
         verify(taskDispatchApi).dispatchControl(eq(MessageType.CONTROL_SUBSCRIPTION_SNAPSHOT), any());
     }

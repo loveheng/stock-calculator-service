@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-15
+updated: 2026-09-18
 ---
 
 # 资讯搜索（News Search）· 后端技术实现（Spring Boot :18080）
@@ -158,7 +158,7 @@ search:
 > **回填任务落点**：`announcement/task/AnnouncementEmbeddingBackfillTask`（不在 search 域——
 > 复用 announcement 内部的 `processAnnouncement` 蒸馏管道，entity/内部类型不可跨域）。
 > 差集核对按 `vector_store.metadata->>'kind'='announcement'` 对全量 DONE 公告求补集。
-> 正式库向量化完成后：开 `search.backfill.enabled=true` 跑一轮补齐 kind/annDate →
+> 正式库向量化完成后：将 pull_task_config CALENDAR 行 `job.search.backfill` 置 enabled=true（改库即生效，docs/architecture/pull-loop-unification.md §10）跑一轮补齐 kind/annDate →
 > 核对无差集后关回，并将 `search.retrieval.kind-filter-enabled` 切 `true` 启用 SQL 下推。
 > （2026-09-10：上述配置块已同步落入 `application.yml` 末尾。）
 

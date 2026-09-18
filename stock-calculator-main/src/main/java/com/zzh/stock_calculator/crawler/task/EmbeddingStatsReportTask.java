@@ -6,10 +6,10 @@ import com.zzh.stock_calculator.crawler.embedding.config.EmbeddingProperties;
 import com.zzh.stock_calculator.crawler.embedding.entity.EmbeddingStatus;
 import com.zzh.stock_calculator.crawler.embedding.repository.ClsArticleEmbeddingRepository;
 import com.zzh.stock_calculator.crawler.repository.ClsArticleRepository;
+import com.zzh.stock_calculator.monitor.AppTaskHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -20,24 +20,25 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * 向量化统计报告 Task（每 N 天一份：新增数据量 + 存量处理量；存量完成后仅报增量）。
  *
- * <p>触发：每日 cron 检查点（UTC，默认 01:00 = 北京 09:00）比对上次发送 epoch day，
- * 满 interval-days 才发——间隔严格按上次实际发送计算，不受月份长度影响；lastSent 为
- * 内存态且初始为启动当天，重启顺延、绝不轰炸。统计窗口 = 上次发送时刻 ~ 当前。
+ * <p>触发：pull_task_config CALENDAR 行每日检查点（job.embedding.report，UTC 01:00 = 北京 09:00）
+ * 比对上次发送 epoch day，满 interval-days 才发——间隔严格按上次实际发送计算，
+ * 不受月份长度影响；lastSent 为内存态且初始为启动当天，重启顺延、绝不轰炸。
+ * 统计窗口 = 上次发送时刻 ~ 当前。</p>
  *
  * <p>统计口径：新增电报按 ctime（cls_article 无独立入库时间戳，created_at 为
  * to_timestamp(ctime) 生成列；爬虫近实时入库，ctime ≈ 入库时间）；处理量按
- * embedded_at（回填与增量共用）；存量完成判定与回填 Task 同式（DONE + FAILED >= 总数）。
+ * embedded_at（回填与增量共用）；存量完成判定与回填 Task 同式（DONE + FAILED >= 总数）。</p>
  *
  * <p>Modulith：统计在 crawler 域完成后发布 EmbeddingStatsReportEvent（基包 API），
- * auth 侧监听渲染并发送邮件；无监听方/邮箱未配置静默，不影响统计任务。
+ * auth 侧监听渲染并发送邮件；无监听方/邮箱未配置静默，不影响统计任务。</p>
  *
- * <p>R1：Bean 一律注册（@Scheduled 强制急切），未过 EmbeddingGate 门控前不触碰
- * 仓储统计与事件发布（embedding 关闭时统计报告无意义）。
+ * <p>R1：Bean 一律注册（DB 调度认领强制急切），未过 EmbeddingGate 门控前不触碰
+ * 仓储统计与事件发布（embedding 关闭时统计报告无意义）。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class EmbeddingStatsReportTask {
+public class EmbeddingStatsReportTask implements AppTaskHandler {
 
     private final ClsArticleEmbeddingRepository embeddingRepository;
     private final ClsArticleRepository articleRepository;
@@ -48,8 +49,13 @@ public class EmbeddingStatsReportTask {
     /** 上次发送所在 UTC epoch day；package-private 供同包测试推进。初始 = 启动当天 → 首封在满间隔后 */
     final AtomicLong lastSentEpochDay = new AtomicLong(Instant.now().getEpochSecond() / 86400L);
 
-    @Scheduled(cron = "${embedding.report.cron:0 0 1 * * *}", zone = "UTC")
-    public void cronCheck() {
+    @Override
+    public String taskCode() {
+        return AppTaskHandler.TASK_EMBEDDING_REPORT;
+    }
+
+    @Override
+    public void run() {
         if (!gate.isAvailable()) {
             log.debug("embedding unavailable, stats report skipped");
             return;
@@ -63,7 +69,7 @@ public class EmbeddingStatsReportTask {
         if (today - last < properties.getReport().getIntervalDays()) {
             return;
         }
-        // CAS 推进防重复发送（cron 默认单线程，防御性）
+        // CAS 推进防重复发送（认领默认单线程，防御性）
         if (!lastSentEpochDay.compareAndSet(last, today)) {
             return;
         }

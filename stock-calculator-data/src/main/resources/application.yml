@@ -17,13 +17,17 @@ spring:
     publisher-returns: true
 
 datasvc:
-  # collector 副本恒=1（D4/D11）；worker 角色自阶段 3 引入
+  # collector 拉取面总开关（阶段 3 引入）：v2.5 单镜像多副本后生产恒 true，多副本
+  # 拉取靠种子+深度守卫自愈收敛（原「副本恒=1」打包约束随 worker 变体一并退役）
   collector:
-    enabled: true
+    enabled: ${COLLECT_ENABLE:false}
     announcement:
       # 公告采集（§8 阶段 4 任务 2）：叠加在 collector.enabled 之上的域开关；
       # 标的源 = 订阅快照（control.subscription.snapshot，首帧到达前空转）
       enabled: true
+      # 公告类型不区分（决策 2026-09-18）：空 = 全部类型全采（clsreflush.json 共 26 类；
+      # S3 实证：仅显式传 category 才过滤，勿在此配置具体类型）
+      category: ''
       first-pull-mode: FULL
       history-since: 2023-01-01
       lookback-days: 90
@@ -33,10 +37,11 @@ datasvc:
       max-pages: 200
       page-size: 30
       pdf-max-size-mb: 50
-  # worker 竞争消费角色（阶段 3）：缺省关闭；JVM 部署经 DATASVC_WORKER_ENABLED=true
-  # 开启，native 构建须在构建期钉死该值（AOT 固化条件装配，R1 教训，collector 同）
+  # worker 计算面总开关（阶段 3 引入）：v2.5 单镜像多副本后生产恒 true，「恰一个」
+  # 单消费者语义由 MQ 协议仲裁（task.history.sync SAC + 种子自愈）；仅测试装配隔离
+  # 时置 false；AOT 固化条件装配（R1 教训，collector 同），native 变更需重建
   worker:
-    enabled: true
+    enabled: ${WORKER_ENABLE:false}
     prefetch:
       # 公告监听器并发消费者数（默认 1=原行为；运行期 env 可覆盖，值非 AOT 条件）
       announcement-concurrency: 1
@@ -54,7 +59,7 @@ datasvc:
     enabled: false
     secret: ${INGEST_SECRET:}
     skew-seconds: 300
-  # MQ 心跳 watchdog（多副本改造）：连接假死检测 + 心跳文件（worker 变体 HEALTHCHECK
+  # MQ 心跳 watchdog（多副本改造）：连接假死检测 + 心跳文件（Dockerfile.native HEALTHCHECK
   # 读 mtime）；连续失败达阈值主动退出，交由容器 restart 策略自愈。见 MqHeartbeatWatchdog
   heartbeat:
     enabled: true

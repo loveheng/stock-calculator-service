@@ -212,33 +212,26 @@ embedding:
   # 永久性失败连续次数上限：达上限落 FAILED 终态退出游标（仅 PERMANENT 计次，成功清零）
   max-fail-attempts: 5
   backfill:
-    # 回填对账总开关（startup/cron 都停；E2E 共享 broker 场景必关，防扫真实库发任务污染测试队列）
+    # 回填对账总开关（startup/DB 调度都停；E2E 共享 broker 场景必关，防扫真实库发任务污染测试队列）
     enabled: true
     startup-delay: 15s
-    cron: '0 5 * * * *'
   # 统计报告邮件（新增数据量 + 存量处理量；存量完成后仅报增量，§9.3）
   # 每日 UTC 01:00（北京 09:00）检查点比对上次发送，满 interval-days 才发；
   # 收件人复用 EMBEDDING_NOTIFY_EMAIL，未配置时静默跳过
   report:
     enabled: true
     interval-days: 3
-    cron: '0 0 1 * * *'
   search:
     default-top-k: 10
     default-threshold: 0.5
 
 # ======================= announcement 域（docs/ai-pipeline/announcement-rag.md §7） =======================
-# 骨架期 sync/process 均默认关闭，联调时手动开启
+# 定时调度已迁 pull_task_config 表 CALENDAR 行（job.announcement.process / job.announcement.snapshot，改库即生效）
 announcement:
   process:
-    enabled: false
-    cron: '0 1 * * * *'
     max-fail-attempts: 3
     # RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，§4.5 发布端熔断）
     rate-limit-cooldown-minutes: 30
-  snapshot:
-    # 订阅快照定时重推周期（§8 阶段 4/R3）
-    cron: '0 */30 * * * *'
   subscription:
     # 每用户订阅标的数上限（防滥用：订阅即触发 CNINFO 全量首拉）
     max-per-user: 100
@@ -262,18 +255,14 @@ search:
   composite:
     llm-timeout-seconds: 30
     retrieval-top-k: 8
-  backfill:
-    # 公告向量 metadata 回填任务（默认关闭；开启后按 cron 补 kind/annDate）
-    enabled: false
-    cron: '0 40 2 * * *'
+  # backfill 回填任务调度已迁 pull_task_config CALENDAR 行（job.search.backfill，默认停用）
 
 # ======================= pipeline 管线巡检告警（docs/architecture/data-service-split.md R4） =======================
 # MQ 单路径终态后无回退开关：数据服务停机/队列积压/毒消息/PENDING 停滞经本任务定期巡检，
 # 触发即发邮件（PIPELINE_ALERT_EMAIL 未配置时静默）；同类告警带冷却窗口，防风暴。
 pipeline:
   watch:
-    enabled: true
-    cron: '0 */5 * * * *'
+    # 巡检调度已迁 pull_task_config 表 CALENDAR 行（job.pipeline.watch，改库即生效）
     # LavinMQ/RabbitMQ 管理 API（队列深度与 consumer 数查询；凭据复用 AMQP 账号）
     mgmt-base-url: ${RABBIT_MGMT_URL:http://localhost:15672}
     mgmt-username: ${RABBIT_USER:guest}

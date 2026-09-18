@@ -5,17 +5,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * pipeline.watch.* 配置（docs/architecture/data-service-split.md R4：队列堆积/数据服务停机告警）。
- * 数据管线无回退开关（MQ 单路径终态），可靠性由「源头窗口自愈 + 对账器 + 本巡检告警」承担。
+ * 数据管线无回退开关（MQ 单路径终态），可靠性由「源头窗口自愈 + 对账器 + 本巡检告警」承担；
+ * 巡检调度已迁 pull_task_config 表 CALENDAR 行（job.pipeline.watch），本类仅保留巡检参数。
  */
 @Data
 @ConfigurationProperties(prefix = "pipeline.watch")
 public class PipelineWatchProperties {
-
-    /** 巡检总开关 */
-    private boolean enabled = true;
-
-    /** 巡检周期（默认 5 分钟一次） */
-    private String cron = "0 */5 * * * *";
 
     /** LavinMQ/RabbitMQ 管理 API 基址（队列深度/consumer 数经此查询） */
     private String mgmtBaseUrl = "http://localhost:15672";

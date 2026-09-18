@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: misc
-total-merged: 3
-last-merge: 2026-09-16
+total-merged: 4
+last-merge: 2026-09-17
 ---
 
 # misc：散修与小改动挂靠（常驻杂项 epic）
@@ -19,6 +19,7 @@ last-merge: 2026-09-16
 
 - 日历型定时任务定案：拒绝 cron→per-message TTL 种子衰变（复活已否方案、违反设计不变量 3、长 TTL 种子不可撤销）；终态 = main 看门狗 CAS 认领 + work 队列一次性直发（data 侧无续种无 delay）；pull_task_config 增 schedule_mode/cron_expression/timezone/next_expected_time 四列，LOOP 行不落 next_expected_time（健康口径 = last_renew_time 新鲜度，所有者确认）。（2026-09-13）
 - 首个日历任务 task.hello.world 落地（每日 07:00 Asia/Shanghai）；watchdog 拆双节奏（watch 30min + calendarClaim 60s CAS）；main 383 / data 79 用例绿。（2026-09-13）
+- data application.yml 注释对齐 v2.5：worker/collector 开关注释改「生产恒 true + MQ 协议仲裁单消费者（task.history.sync SAC + 种子自愈）」、heartbeat 注释改 Dockerfile.native HEALTHCHECK；datasvc.worker.enabled 现仅测试装配隔离时置 false，DATASVC_WORKER_ENABLED 表述废弃。（2026-09-17）
 
 ## 转正索引
 
@@ -33,6 +34,12 @@ last-merge: 2026-09-16
 - skill 治理：dev-guide 项目数据解耦达成「换项目零编辑」（项目命令路由至 service-index 新增「命令速查」节，前端项目索引同补）；dev-loop audit 第 10 项扩为 skill 卫生抽查（事实指针化 + description 预算 ≤~250 目标/550 硬顶）；环境事实归一至 workflow「环境与工具链」（native-build/runtime-metadata 改单行指针）；dev-loop 增护栏总纲「求助人类优先」、§4 归并事故回滚纪律（严禁 AI 自修，git checkout 回滚）、§9 /help 指令。（2026-09-15）
 - stock-common 归档核实：其未竟事项已失效——main 侧 8 处迁移过渡副本与门控开关（datasvc.mq.enabled 等）已由 ed73cad 代码精简删除，任务无对象，archive memory 已补核实注；native-build §一 模块清单过期点已点名上报（未擅动）。（2026-09-15）
 - 新增全局 skill memo-collector：AI 回复/用户口述中的待办/风险/完成自动收集去重落盘——context/todos.md 按域分节（活跃 epic + misc 兜底，与 devlog 挂靠同规则）+ context/done.md 完成流转（记来源域）；指令 /todo /todos /tdone /todo-clean；与 dev-loop 互补（断点=唯一下一步，本表=全部积压）。（2026-09-16）
+- memo-collector 迭代至 v2.1（2026-09-16）：/next 候选优先级与「断点唯一执行台」原则（todos 保持 [ ] 至完成流转）、done.md 300 行软阈值 /done 顺手归档、自动收集触发点收敛（子任务收尾/显式搁置/显式指令，严禁逐轮碎写）；v2.1 补丁——许愿池准入拦截+语义判重+脏读校验（人工 [x] 自动回收 done.md）、(block) 阻塞最高优先、/todo-groom 语义洗盘、分支结算与行级并集冲突口径；隐性资产漏斗——七类型（新增测试）/未验证假设点名/咒语→SKILL.md 进化建议（经确认执行）；agent-skill-system 同步 §1.7 信息漏斗与 2.1/2.2/3.2/3.3/4.1/4.5，backend-dev §2.6 与 frontend-dev §4 补边界推演防腐注释。
+- agent-toolbox 落地（2026-09-16）：agent-skill-system 新增 §3.4 设计原则与使用说明（分层图/七原则/命令面九命令/典型流程，原环境硬约束顺延 §3.5）；v1 埋点——元工具 run-hooks 逐工具追加 usage-ledger.jsonl（ts/name/scope/exit/ms/src，append-only fail-open），list 派生 last_run 列，探针三路径验证；v1.2 check 门禁 secret 形状扫描（7 类正则逐行、命中拒收不搬家、自检金丝雀好坏样本；修复 \b 对下划线复合词 DB_PASSWORD 漏抓）；僵尸消费端待池子扩大后再做。
+
+## copilot 记忆画像（memory-profile）
+
+- copilot 记忆固化与画像抽取定稿（2026-09-17，决策 #11-#14）：MQ 触发 / data worker LLM 归并 / 水位 CAS 幂等；docs/copilot/memory-profile.md 评审落地——对话片段成对下发（代词消解）、topic 枚举池 + main 入库校验双保险、pinned 置顶混合召回（v2 留 pgvector 演进）、注入固定预算分段（画像/置顶/普通记忆/近3天历史，总封顶约 6.1k 字符）、近期历史排除当前会话、冷启动空注入懒积累、画像四字段（+responsePreferences）、六类记录类型表（选择/权衡/禁忌/回复偏好/习惯偏好/目标阶段）+「结论+权衡」条目约定（prompt 级口径不加列），§一分层口径修正为窗口逐段固化。
 
 ## 断点
 

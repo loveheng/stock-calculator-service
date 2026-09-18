@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-13
+updated: 2026-09-18
 ---
 
 # 数据拉取常态任务自循环化设计（已实施，2026-09-13）
@@ -10,6 +10,7 @@ updated: 2026-09-13
 > 前置依赖：v4 多副本改造（v2.5 起收敛为单镜像，部署见 docs/deploy/data-worker-replica.md）。
 > 决策编号 L1…（Loop 语义），并入 docs/architecture/data-service-split.md 时可重新编号。
 > 2026-09-13 增补 §8：日历型定时任务扩展设计（CALENDAR 模式，已实施，实施记录见 §8.8）——Phase 3 之外的第二类触发形态，决策记 L8…。
+> 2026-09-18 增补 §9：main 本地定时任务 DB 化（app_task_config，已实施）——进程内直调变体，认领语义复用 §8.3.2。
 
 ## 0. 一句话结论
 
@@ -231,6 +232,10 @@ ALTER TABLE public.pull_task_config
 
 #### 8.3.2 main 看门狗：拆双节奏（在产路径零回归）
 
+> 2026-09-18 晚间增补（任务管理统一，§10）：`calendarClaim()` 已自看门狗提炼为独立组件
+> `CalendarTaskClaimScheduler`，并合并 §9 本地任务循环——认领成功后按注册表分发
+> （taskCode 命中 handler → 进程内执行；未命中 → MQ 直发），现行事实见 §10。
+
 `PullLoopWatchdogTask` 拆为两个独立 @Scheduled 方法：
 
 - `watch()`（30min，**现有职责不变**，仅两处增量）：① LOOP 判活循环过滤掉 CALENDAR 行（防误入 DELAY_KEYS / dispatchSeed 路径）；② 配置快照仅含 LOOP 行（CALENDAR 不下发，L10）；
@@ -344,3 +349,112 @@ onTask(message, channel, deliveryTag) {
 - **验证**：main 383 绿（含 ModulithVerifyTest）/ data 79 绿（TaskServiceTest 例行排除）；单测新增 PullLoopWatchdogTaskTest 6 场景（§8.6 认领协议全覆盖）+ HelloWorldConsumerTest 3 场景；本地开发库以仓库 schema.sql + data.sql 幂等升级（LOOP×2 回填默认值，hello.world 就绪）；
 - **环境注意（宿主机跑测试）**：.env 的 POSTGRES_URL / RABBIT_HOST 写的是 docker 网络内部主机名，宿主机测试须覆盖为 localhost；`ResultPublisherTopologyTest` 断言 result.ingest.q 队列深度，live main 容器消费会吃掉测试消息——跑 data 集成套件前先停 app 容器；
 - **首个触发点**：新 main 启动后看门狗 ≤60s 初始化游标为次日 07:00（crontab 语义不立即执行），此后每日 07:00 Asia/Shanghai data 侧打印 Hello World；容器需以新镜像重建后生效。
+
+## 9. main 本地定时任务 DB 化（app_task_config，已实施 2026-09-18）
+
+> 2026-09-18 增补：main 进程内 cron 型 `@Scheduled` 任务统一迁 `app_task_config` 表驱动，
+> 认领语义完整复用 §8.3.2（NULL 游标初始化 / CAS 认领 / 失败回滚 / skip-missed）。
+> 与 §8 的差异：任务不落 MQ——认领成功后进程内直调 handler（AppTaskHandler.run()），
+> 无拓扑/契约/消费端改动。
+> 2026-09-18 晚间增补（任务管理统一，§10）：本节 `app_task_config` 表与 `AppTaskScheduler`
+> 已合入 `pull_task_config`（CALENDAR 行）/ `CalendarTaskClaimScheduler`，本节降为迁移过程存档。
+
+### 9.1 一句话结论
+
+把 main 侧 6 个 cron 型任务的 cron/enabled/时区从 yml 与注解搬进 `app_task_config` 表：
+AppTaskScheduler（30s fixedDelay 认领循环）对逾期游标行 CAS 认领后进程内执行对应
+AppTaskHandler——改库即生效、免改配置免重部署；CAS 语义不因 main 单副本部署弱化
+（与 §8.3.2 同源，多副本安全）。
+
+### 9.2 设计要点
+
+- **表**：`app_task_config`（task_code PK / enabled / cron_expression / timezone /
+  next_expected_time 游标 / updated_at）。不复用 `pull_task_config`：该表 LOOP 行经看门狗
+  快照下发 data（D2），混入 main 本地行会污染配置快照，且 TTL 续期语义不适用于进程内任务。
+- **接口**：`monitor/AppTaskHandler`（taskCode() + run()，基包开放 API；announcement/crawler
+  实现依赖单向合法——同 §7 PullLoopDispatchPort 端口宿主先例）。taskCode 恒用 `job.` 前缀：
+  `task.` 前缀已被 MQ work routing key 占用（MqKey），本地任务码必须与之区分。
+- **调度器**：`AppTaskScheduler`（monitor 域）——@PostConstruct fail-fast（cron 可解析、
+  taskCode 不重复；配置行无 handler / handler 无配置行各打 warn 不阻断）；认领循环逐行执行
+  §8.3.2 同款三语句（initCursor / claimSlot / rollbackCursor，各自独立短事务）；执行异常
+  回滚游标下轮重认领（槽位不丢）；`app-task.claim-period-ms` 调认领节奏（默认 30s）。
+- **基础设施开关**：`app-task.enabled`（默认 true，非业务配置）——E2E 测试整体压制定时器的
+  唯一出口（原 per-cron 配 `-` 压制手法随 yml cron 键删除而失效）。
+- **启动行为**：游标 NULL → 初始化为下一日历点且不执行（crontab 语义）；存量库需手工应用
+  schema.sql / data.sql 增量（两段均幂等）。
+
+### 9.3 迁移对照（2026-09-18）
+
+| task_code | 任务类（域） | 迁移前调度源 | 新行（cron / timezone / enabled） |
+|---|---|---|---|
+| job.announcement.process | announcement/task/AnnouncementProcessTask | announcement.process.cron | 0 1 * * * * / Asia/Shanghai / true |
+| job.announcement.snapshot | announcement/mq/SubscriptionSnapshotPublisher | announcement.snapshot.cron | 0 */30 * * * * / Asia/Shanghai / true |
+| job.search.backfill | announcement/task/AnnouncementEmbeddingBackfillTask | search.backfill.cron + @Value enabled | 0 40 2 * * * / Asia/Shanghai / false（原默认关） |
+| job.embedding.backfill | crawler/task/EmbeddingBackfillTask | embedding.backfill.cron（zone=UTC） | 0 5 * * * * / UTC / true |
+| job.embedding.report | crawler/task/EmbeddingStatsReportTask | embedding.report.cron（zone=UTC） | 0 0 1 * * * / UTC / true |
+| job.pipeline.watch | monitor/PipelineWatchTask | pipeline.watch.cron | 0 */5 * * * * / Asia/Shanghai / true |
+
+随迁删除：上述 yml cron/enabled 键、AnnouncementProperties.Process.enabled 与 Snapshot 类、
+PipelineWatchProperties.enabled/cron、EmbeddingProperties.Backfill/Report.cron、
+AnnouncementProcessPublisher 发布端 enabled 门控（停启语义并入行 enabled）。
+EmbeddingProperties.Backfill.enabled 保留：护 startup 触发路径与 E2E 防污染（功能门控，语义≠调度开关）；
+EmbeddingStatsReportTask 的 gate.isAvailable() / report.enabled 同理保留（功能门控）。
+
+### 9.4 新增本地任务接入清单（runbook）
+
+1. 任务类实现 AppTaskHandler（taskCode 用 `job.<域>.<名>`）注册为 Bean；
+2. postgres/data.sql 播种行（cron 六域 Spring 方言、timezone 显式钉死、enabled 初值）；
+3. 存量库手工执行幂等 INSERT；
+4. 回归：AppTaskSchedulerTest + ModulithVerifyTest。
+
+### 9.5 实施记录（2026-09-18）
+
+- **表**：schema.sql 增 `app_task_config`（CREATE IF NOT EXISTS + 回滚注释）；data.sql 播种 6 行（ON CONFLICT DO NOTHING）；
+- **main**：新增 AppTaskHandler / AppTaskScheduler / AppTaskConfigEntity / AppTaskConfigRepository；
+  6 任务类改 implements AppTaskHandler（@Scheduled 删除、旧方法体并入 run()，重命名见表）；
+- **测试**：新增 AppTaskSchedulerTest 7 场景（NULL 游标 / 认领成功 / 竞争失败 / 失败回滚 /
+  停用与未知行跳过 / cron fail-fast / taskCode 重复 fail-fast）；SubscriptionSnapshotPublisherTest、
+  EmbeddingBackfillTaskTest、EmbeddingStatsReportTaskTest、PipelineWatchTaskTest 同步方法重命名；
+  AnnouncementProcessPublisherTest 删 enabled 开关用例；AnnouncementProcessMqE2ETest 压制手法
+  切 `app-task.enabled=false`；
+- **验证**：main 381 通过 / 0 失败 / 9 skipped（RABBIT_E2E 门控例行），含 ModulithVerifyTest。
+
+## 10. 任务管理统一（合表 + executor 策略化，已实施 2026-09-18）
+
+> 2026-09-18 增补：§9 的 app_task_config + AppTaskScheduler 双表双循环并入 §8 的
+> pull_task_config CALENDAR 行 + CalendarTaskClaimScheduler 单表单循环（任务管理统一 epic 第二步）。
+> §9 保留为迁移过程存档；本节为现行事实。
+
+### 10.1 一句话结论
+
+`app_task_config` 列集是 `pull_task_config` CALENDAR 列的严格子集——6 行 job.* 合入
+CALENDAR 行（ttl_ms=0 哨兵），AppTaskScheduler 认领循环并入 CalendarTaskClaimScheduler，
+分发按注册表路由：taskCode 命中 `AppTaskHandler` 注册 → 进程内 `run()`；未命中 → MQ 直发
+（§8.3.2 原语义）。两认领循环本就同构（§9 即按 §8.3.2 对齐实现），本次是结构收敛不是语义重写。
+
+### 10.2 设计要点
+
+- **合表零语义发明**：存量库走 schema 三步幂等迁移（建源表 → `INSERT SELECT` 随迁游标 →
+  `DROP`）；data.sql 播种合一为单一 INSERT 9 行（2 LOOP + 7 CALENDAR）；ttl_ms=0 哨兵
+  （不参与日历调度），enabled/cron/timezone/next_expected_time 原值随迁。
+- **executor 策略化**：`validate()`（@PostConstruct）构建 taskCode → handler 注册表
+  （taskCode 重复 fail-fast；job.* 行无 handler / handler 无行各 warn 不阻断）；
+  `calendarClaim()` 逐行：job.* 未注册静默跳过（绝不改道 MQ，防 unroutable 投递）→
+  NULL 游标初始化不执行 → CAS 认领 → 命中 handler 进程内 run() / 未命中 MQ dispatchCalendarTask
+  → 失败回滚游标（§8.3.2 同款三语句，认领周期同为 60s）。
+- **「复表污染配置快照」老顾虑失效**：快照本就只发 LOOP 行（watch()/pushConfigSnapshot 按
+  schedule_mode=LOOP 过滤），job.* 行进 pull_task_config 天然不进快照，data 零 DB 不变量保持。
+- **开关语义收窄**：`app-task.enabled`（默认 true）只压制进程内半区（对齐原 AppTaskScheduler
+  bean 缺位语义）；MQ 型 CALENDAR 行不受影响——AnnouncementProcessMqE2ETest 压制契约不变。
+- **不动 MQ 拓扑**：task.hello.world 专用队列保留；泛化共享队列属提前优化，不做。
+
+### 10.3 变更清单与验证
+
+- **删**：AppTaskScheduler / AppTaskConfigEntity / AppTaskConfigRepository / AppTaskSchedulerTest；
+- **改**：CalendarTaskClaimScheduler（显式 4 参构造注入 app-task.enabled；validate() 合并注册表
+  构建与行校验）；11 个 Java 文件 javadoc + application.yml 3 处注释（app_task_config/AppTaskScheduler
+  字样 → pull_task_config CALENDAR 行 / CalendarTaskClaimScheduler）；
+- **测试**：CalendarTaskClaimSchedulerTest 重写 15 用例（5 MQ 投递 + 5 进程内 + 5 启动校验），
+  对账 384 = 384 − 7（删 AppTaskSchedulerTest）− 8（旧 CALENDAR 场景）+ 15；全套通过 0 失败
+  9 skipped（RABBIT_E2E 门控例行），含 ModulithVerifyTest；
+- **存量库**：手工执行 schema.sql 迁移段（幂等可重跑、游标随迁）；DROP 属破坏性动作须人工执行。

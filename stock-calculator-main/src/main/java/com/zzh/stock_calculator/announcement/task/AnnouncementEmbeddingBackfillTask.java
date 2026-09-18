@@ -3,11 +3,10 @@ package com.zzh.stock_calculator.announcement.task;
 import com.zzh.stock_calculator.announcement.AnnouncementQueryApi;
 import com.zzh.stock_calculator.announcement.AnnouncementView;
 import com.zzh.stock_calculator.crawler.AnnouncementEmbeddingApi;
+import com.zzh.stock_calculator.monitor.AppTaskHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -21,13 +20,13 @@ import java.util.Set;
  * 经 AnnouncementEmbeddingApi.dispatchEmbeddingTask(force=true) 下发二段任务
  * （对账器语义：force 绕过 DONE 判重，差集行正是缺向量/metadata 的存量），
  * 向量计算由数据服务 worker 承担。</p>
- * <p>触发：低频 cron 增量（默认每日 02:40）+ 开关门控（默认关，联调/回填期手动开启）；
- * 待补集合为空时当轮直接退出（终态自息，不重复重嵌）。</p>
+ * <p>触发：pull_task_config CALENDAR 行表驱动（job.search.backfill，默认每日 02:40、默认停用，
+ * 启用改库）；待补集合为空时当轮直接退出（终态自息，不重复重嵌）。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class AnnouncementEmbeddingBackfillTask {
+public class AnnouncementEmbeddingBackfillTask implements AppTaskHandler {
 
     private static final String SELECT_ENHANCED_IDS_SQL =
             "SELECT metadata->>'announcementId' FROM vector_store WHERE metadata->>'kind' = 'announcement'";
@@ -36,15 +35,13 @@ public class AnnouncementEmbeddingBackfillTask {
     private final AnnouncementEmbeddingApi embeddingApi;
     private final JdbcTemplate jdbcTemplate;
 
-    /** 开关门控（默认 false）：仅在向量化启用环境、需要存量回填/metadata 增强时开启 */
-    @Value("${search.backfill.enabled:false}")
-    private boolean backfillEnabled;
+    @Override
+    public String taskCode() {
+        return AppTaskHandler.TASK_SEARCH_BACKFILL;
+    }
 
-    @Scheduled(cron = "${search.backfill.cron:0 40 2 * * *}")
-    public void backfill() {
-        if (!backfillEnabled) {
-            return;
-        }
+    @Override
+    public void run() {
         List<AnnouncementView> doneWithSummary = announcementQueryApi.findAllDoneWithSummary();
         if (doneWithSummary.isEmpty()) {
             log.info("公告向量对账：无 DONE+summary 候选，退出");
