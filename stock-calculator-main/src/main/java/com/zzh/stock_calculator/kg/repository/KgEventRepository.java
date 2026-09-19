@@ -79,7 +79,7 @@ public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
 
     /**
      * 取本页各日的命中事件（SELECT e.* 整行映射回实体；组内排序由 Service 按
-     * 「event_time 升序空值沉底、id 升序」重排——时间同为日期零点时 id 序 ≈ 汇编原文序）。
+     * 「event_time 降序空值沉底、id 降序」最新在前重排——时间同为日期零点时后融合者在前）。
      */
     @Query(value = """
             SELECT e.* FROM kg_event e

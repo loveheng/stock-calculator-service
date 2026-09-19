@@ -5,7 +5,7 @@ updated: 2026-09-19
 
 # 财联社《新闻联播》要闻时序知识图谱（kg 域）· 后端设计文档
 
-> 版本：v1.0（2026-09-19，评审定稿）
+> 版本：v1.1（2026-09-19，v1.0 评审定稿；v1.1 增补二期查询 API 契约 §13）
 > 范围：新顶层域 kg——从 cls_article 中《新闻联播》要闻汇编构建 PostgreSQL 时序知识图谱；main 发布任务 → data 无状态 LLM 抽取 → main 证据落库 + 融合
 > 关联：docs/ai-pipeline/announcement-rag.md（任务管道先例：PENDING 扫描发布 / 结果上行 / 幂等摄取 / 对账）、docs/ai-pipeline/cls-article-vector.md（embedding 基座）、docs/architecture/pull-loop-unification.md（CALENDAR 认领协议）
 > 状态：设计定稿，按断点实施
@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS public.kg_evidence (
     payload      jsonb NOT NULL,          -- worker 原始抽取 JSON
     model        varchar(100) NULL,
     extracted_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    created_at   timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT kg_evidence_pkey PRIMARY KEY (id),
     CONSTRAINT uq_kg_evidence_article UNIQUE (article_id)
 );
@@ -260,7 +261,7 @@ Prompt 规则（system 骨架，实现随断点迭代）：
 | 期 | 范围 |
 |---|---|
 | 一期（本 epic） | 全链路（调度→发布→抽取→摄取→融合）、字典锚点、事件时间线、证据表、队列巡检接入 |
-| 二期 | 历史回填 backfill ✅ 已落地（2026-09-19：job.kg.backfill 每 30 分钟最旧优先分批补发，存量 1105 条 ≈ 1.2 天追平，见 §7）；别名归并（MERGED 流转人工/规则触发）、kg_relation 有效期与 as-of 查询、查询 API 与前端可视化 |
+| 二期 | 历史回填 backfill ✅ 已落地（2026-09-19：job.kg.backfill 每 30 分钟最旧优先分批补发，存量 1105 条 ≈ 1.2 天追平，见 §7）；查询 API ✅ 已落地（2026-09-19：/api/kg 四端点，见 §13；前端对接文档 docs/ai-pipeline/kg-api.md）；别名归并（MERGED 流转人工/规则触发）、kg_relation 有效期与 as-of 查询、前端时间轴页面（后端契约已就绪，见 §13） |
 
 ## 12. 改动面清单
 
@@ -274,3 +275,24 @@ Prompt 规则（system 骨架，实现随断点迭代）：
 | 配置 | main application.yml：kg.digest.*、kg.process.*、kg.backfill.*（enabled/batch-size/scan-multiplier/startup-delay） |
 | 监控 | monitor/PipelineWatchTask 队列清单 + PENDING_AGE 纳入 |
 | 文档/索引 | docs/README.md ai-pipeline 域增条目；stock-calculator-service-index 归属表增 kg 行（实施首轮同步） |
+| main kg/ 查询侧（二期） | controller/KgQueryController（/api/kg 四端点）、dto/KgQueryDtos（含原生查询投影接口）、service/KgQueryService；repository 增日聚合/过滤事件/实体建议/热榜/共现实体原生查询；auth WebConfig 鉴权路径增 /api/kg/**；crawler 基包 ClsArticleQueryApi 增 articleHeadsByIds（日头跨域取数）；前端对接文档 docs/ai-pipeline/kg-api.md |
+
+## 13. 查询 API（二期，前端可视化读侧）
+
+展示形态定案（2026-09-19）：**搜索驱动 + 竖向时间轴合体**——时间轴卡片流为唯一渲染形态，搜索（关键词/实体）为入口；空态 = 最近时间轴 + 实体热榜 chips（明确不展示补录进度）。日节点 = 一篇汇编稿（每天 1 条），事件卡展示归一化日期/原文时间表述/实体 chips/溯源外链。
+
+| 端点 | 说明 |
+|---|---|
+| `GET /api/kg/timeline` | 时间轴卡片流，搜索与默认浏览共用：无过滤参数 = 最近时间轴（默认态）；`keyword` / `entityId` / `eventType` / `from`+`to`（yyyy-MM-dd）/ `page`（0 起）/ `pageSize`（按日分页，默认 5、上限 30） |
+| `GET /api/kg/entities/suggest` | 实体检索建议（搜索框补全）：`keyword` / `limit`（默认 10、上限 30）；空白 keyword 返回空数组 |
+| `GET /api/kg/entities/hot` | 实体热榜（时间轴空态「实体热榜 chips」取数）：无关键词全局 mention_count 倒序，与检索建议同载体 |
+| `GET /api/kg/entities/{id}` | 实体摘要卡：基础字段 + 别名 + 提及/参与事件数 + 高频共现实体 top8（同事件共现计数倒序） |
+
+关键语义（实现见 KgQueryService，原生 SQL 在 KgEventRepository / KgEntityRepository）：
+
+- **keyword 三路命中**：事件文本（title/detail ILIKE）OR 关联实体名 OR 实体别名（jsonb::text ILIKE）——实体消解让「简称查询带出全称事件」，是 KG 相对普通文章搜索的增值点；带 keyword 时响应附 `matchedEntities`（top3）供前端置顶实体摘要卡
+- **日分页**：响应按日分组（`days[]`，日 = 一篇汇编稿），`totalDays` 为命中日总数，`hasMore` 判续拉；组序 = 组内最新事件时间倒序（回填乱序插入不影响时序），组内事件按 event_time 降序最新在前（空值沉底、并列按 id 降序；2026-09-19 定案）
+- **from/to 半开区间**：约束归一化 event_time（from 含当日零点、to 含次日零点）；时间解析失败的事件（仅 timeText 兜底）不参与日期过滤
+- **event_time 落库**（KgFuseService.parseTime）：ISO 容错解析链 OffsetDateTime → Instant → 纯日期兜底（worker 事实主流输出为 yyyy-MM-dd，按 systemDefault 当日零点落锚）；2026-09-19 修复前的存量已从证据回填
+- **时区约定**：event_time 落库与展示/过滤取日期均用 `ZoneId.systemDefault()`，同 JVM 往返自洽；跨时区部署需两处同步调整
+- **鉴权**：AuthInterceptor 拦 `/api/kg/**`（登录即可用，无用户维度数据）；日头（标题/ctime）跨域取数走 crawler 基包 `ClsArticleQueryApi.articleHeadsByIds`（Modulith 红线内）

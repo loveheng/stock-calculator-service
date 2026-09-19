@@ -20,3 +20,4 @@ last-merge: none
 - [2026-09-19] [变更]: cls-news-kg.md 增补 §13 查询 API 契约（三端点/日分页/三路命中/时区约定）+ §11 分期与 §12 改动面同步，文档版本 v1.1（用户确认文档联动）；自检 lint 通过，另发现 copilot 域 memory-summary.md frontmatter 存量异常已报告
 - [2026-09-19] [变更]: 前端对接文档 docs/ai-pipeline/kg-api.md 落地（draft，含信封/鉴权/逐端点字段表/真实样例/交互落点/6 项待确认清单）；补第四端点 /api/kg/entities/hot 实体热榜（空态取数缺口），423 测试全绿；README 索引、index 落点列、cls-news-kg.md §11/§13/§12 同步
 - [2026-09-19] [变更]: 修 timeline 原生查询运行期 42P18——temporal null 参数 IS NULL 位显式 CAST(:x AS timestamptz)（findDayAggregates/countDistinctArticle/findFilteredByArticleIds 三段同修）；/entities/hot 报 id 类型转换错为用户运行实例缺 hot 映射（旧编译产物，重启即愈）；423 测试全绿
+- [2026-09-19] [变更]: 组内事件排序改逆序（用户定案最新在前）——event_time 降序、空值沉底、并列按 id 降序（原为原文阅读序）；KgQueryService.sortWithinDay 与 DTO/仓库 javadoc、cls-news-kg.md §13、kg-api.md 同步；423 测试全绿

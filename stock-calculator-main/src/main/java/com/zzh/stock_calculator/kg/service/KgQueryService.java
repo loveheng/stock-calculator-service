@@ -45,6 +45,8 @@ public class KgQueryService {
     private static final int RELATED_ENTITY_LIMIT = 8;
     private static final int SUGGEST_DEFAULT_LIMIT = 10;
     private static final int SUGGEST_MAX_LIMIT = 30;
+    private static final int HOT_DEFAULT_LIMIT = 20;
+    private static final int HOT_MAX_LIMIT = 50;
 
     private final KgEventRepository eventRepository;
     private final KgEventLinkRepository eventLinkRepository;
@@ -95,6 +97,14 @@ public class KgQueryService {
         }
         int capped = limit == null || limit < 1 ? SUGGEST_DEFAULT_LIMIT : Math.min(limit, SUGGEST_MAX_LIMIT);
         return entityRepository.searchSuggest("%" + kw + "%", capped).stream()
+                .map(KgQueryService::toSuggest)
+                .toList();
+    }
+
+    /** 实体热榜（时间轴空态 chips 取数）：全局提及次数倒序，与检索建议同载体 */
+    public List<KgQueryDtos.EntitySuggest> hotEntities(Integer limit) {
+        int capped = limit == null || limit < 1 ? HOT_DEFAULT_LIMIT : Math.min(limit, HOT_MAX_LIMIT);
+        return entityRepository.findHotEntities(capped).stream()
                 .map(KgQueryService::toSuggest)
                 .toList();
     }
@@ -174,12 +184,12 @@ public class KgQueryService {
         return days;
     }
 
-    /** 组内事件序 = 事件时间升序（空值沉底）、并列按 id 升序（时间同为日期零点时 ≈ 汇编原文阅读序） */
+    /** 组内事件序（2026-09-19 定案：最新在前）= 事件时间降序（空值仍沉底）、并列按 id 降序（同日同时刻时后融合者在前） */
     private List<KgEvent> sortWithinDay(List<KgEvent> dayEvents) {
         return dayEvents.stream()
                 .sorted(Comparator.comparing(KgEvent::getEventTime,
-                                Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(KgEvent::getId))
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(KgEvent::getId, Comparator.reverseOrder()))
                 .toList();
     }
 

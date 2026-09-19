@@ -80,7 +80,7 @@ public class KgQueryDtos {
         /** 汇编稿原标题（自带「x月x日」但无年份，作副标题展示） */
         private String articleTitle;
         private long eventCount;
-        /** 组内事件（按事件时间升序、时间空者沉底、再按 id 升序 ≈ 汇编原文阅读序） */
+        /** 组内事件（2026-09-19 定案最新在前：按事件时间降序、时间空者沉底、再按 id 降序） */
         private List<EventCard> events;
     }
 
