@@ -145,6 +145,29 @@ class SearchParamsValidatorTest {
     // ==================== stockId（stock-profile） ====================
 
     @Test
+    void pageDefaultsAndAcceptsZero() {
+        assertEquals(0, SearchParamsValidator.validatePage(null));
+        assertEquals(0, SearchParamsValidator.validatePage(0));
+        assertEquals(7, SearchParamsValidator.validatePage(7));
+    }
+
+    @Test
+    void pageNegativeRejected() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> SearchParamsValidator.validatePage(-1));
+        assertEquals(400, ex.getCode());
+        assertEquals("页码无效", ex.getMessage());
+    }
+
+    @Test
+    void pageOverMaxRejected() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> SearchParamsValidator.validatePage(101));
+        assertEquals(400, ex.getCode());
+        assertEquals("页码超出范围", ex.getMessage());
+    }
+
+    @Test
     void stockIdTrimsAndAcceptsSixDigits() {
         assertEquals("600745", SearchParamsValidator.validateStockId(" 600745 "));
     }

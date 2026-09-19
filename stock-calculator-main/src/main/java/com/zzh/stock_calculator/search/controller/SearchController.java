@@ -69,13 +69,17 @@ public class SearchController {
         DateRange dateRange = request.getDateRange() == null ? null
                 : SearchParamsValidator.validateDateRange(
                         request.getDateRange().getStart(), request.getDateRange().getEnd());
-        int topK = SearchParamsValidator.validateTopK(request.getTopK(),
+        // pageSize 主字段，topK 为一期兼容别名（未传 pageSize 时顶上）
+        Integer pageSizeRaw = request.getPageSize() != null ? request.getPageSize() : request.getTopK();
+        int pageSize = SearchParamsValidator.validateTopK(pageSizeRaw,
                 properties.getRetrieval().getDefaultTopK(), properties.getRetrieval().getMaxTopK());
+        int page = SearchParamsValidator.validatePage(request.getPage());
         rateLimiter.checkSearch(userId);
         long start = System.currentTimeMillis();
-        AnnouncementSearchResponse response = announcementSearchService.search(query, stockCodes, dateRange, topK);
-        log.info("POST /api/search/announcements: topK={}, cost={}ms",
-                topK, System.currentTimeMillis() - start);
+        AnnouncementSearchResponse response = announcementSearchService.search(query, stockCodes, dateRange,
+                pageSize, page);
+        log.info("POST /api/search/announcements: pageSize={}, page={}, cost={}ms",
+                pageSize, page, System.currentTimeMillis() - start);
         return ApiResponse.success(response);
     }
 
@@ -101,13 +105,16 @@ public class SearchController {
         DateRange dateRange = request.getDateRange() == null ? null
                 : SearchParamsValidator.validateDateRange(
                         request.getDateRange().getStart(), request.getDateRange().getEnd());
-        int topK = SearchParamsValidator.validateTopK(request.getTopK(),
+        // pageSize 主字段，topK 为一期兼容别名（未传 pageSize 时顶上）
+        Integer pageSizeRaw = request.getPageSize() != null ? request.getPageSize() : request.getTopK();
+        int pageSize = SearchParamsValidator.validateTopK(pageSizeRaw,
                 properties.getRetrieval().getDefaultTopK(), properties.getRetrieval().getMaxTopK());
+        int page = SearchParamsValidator.validatePage(request.getPage());
         rateLimiter.checkSearch(userId);
         long start = System.currentTimeMillis();
-        ClsSearchResponse response = clsSearchService.search(query, dateRange, topK);
-        log.info("POST /api/search/cls: topK={}, cost={}ms",
-                topK, System.currentTimeMillis() - start);
+        ClsSearchResponse response = clsSearchService.search(query, dateRange, pageSize, page);
+        log.info("POST /api/search/cls: pageSize={}, page={}, cost={}ms",
+                pageSize, page, System.currentTimeMillis() - start);
         return ApiResponse.success(response);
     }
 

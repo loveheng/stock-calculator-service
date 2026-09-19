@@ -25,7 +25,11 @@ public class SearchDtos {
         /** 6 位数字码集合；提供时为硬过滤，缺省 = 不限股票 */
         private List<String> stockCodes;
         private DateRangeParam dateRange;
-        /** 缺省 10，上限 50 */
+        /** 页大小（无限滑动续拉）；null → topK 兼容别名 → defaultTopK */
+        private Integer pageSize;
+        /** 页码，0 起（无限滑动每页 +1）；null → 0 */
+        private Integer page;
+        /** 兼容别名（=pageSize，一期字段）；pageSize 存在时忽略 */
         private Integer topK;
     }
 
@@ -34,9 +38,11 @@ public class SearchDtos {
     @AllArgsConstructor
     @Builder
     public static class AnnouncementSearchResponse {
-        /** 一期口径 = items.size()（topK 截断后返回条数） */
+        /** 一期口径 = items.size()（本页返回条数；向量路径无全量总数语义） */
         private int total;
         private List<AnnouncementItem> items;
+        /** 是否还有下一页（无限滑动续拉依据；多取 1 条精确判定） */
+        private boolean hasMore;
     }
 
     @Data
@@ -64,6 +70,11 @@ public class SearchDtos {
     public static class ClsSearchRequest {
         private String query;
         private DateRangeParam dateRange;
+        /** 页大小（无限滑动续拉）；null → topK 兼容别名 → defaultTopK */
+        private Integer pageSize;
+        /** 页码，0 起（无限滑动每页 +1）；null → 0 */
+        private Integer page;
+        /** 兼容别名（=pageSize，一期字段）；pageSize 存在时忽略 */
         private Integer topK;
     }
 
@@ -72,8 +83,11 @@ public class SearchDtos {
     @AllArgsConstructor
     @Builder
     public static class ClsSearchResponse {
+        /** 一期口径 = items.size()（本页返回条数；向量路径无全量总数语义） */
         private int total;
         private List<ClsItem> items;
+        /** 是否还有下一页（无限滑动续拉依据；多取 1 条精确判定） */
+        private boolean hasMore;
     }
 
     @Data

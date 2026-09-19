@@ -135,14 +135,14 @@ llm:
     enabled: ${LLM_GEMINI_ENABLED:true}
     base-url: https://generativelanguage.googleapis.com/v1beta/openai
     api-key: ${GEMINI_API_KEY:}
-    model: gemini-3.6-flash
+    model: ${GEMINI_MODEL:gemini-3.6-flash}
     read-timeout: 20s
   groq:
     # 备用渠道（Groq OpenAI 兼容端点，Llama 开源模型极速推理）；Key 未配置时健康检查自动跳过
     enabled: ${LLM_GROQ_ENABLED:true}
     base-url: https://api.groq.com/openai/v1
     api-key: ${GROQ_API_KEY:}
-    model: openai/gpt-oss-120b
+    model: ${GROQ_MODEL:openai/gpt-oss-120b}
     read-timeout: 20s
   fallback:
     # 兜底哑响应：不调用任何模型，明确告知降级；enabled=false 时全链失败抛 503
@@ -250,8 +250,18 @@ search:
     default-top-k: 10
     max-top-k: 50
     default-threshold: 0.3
-    # 过渡期 false：公告向量 metadata 回填（kind/annDate，B8）完成后切 true 下推 SQL
+    # 公告向量 metadata 下推门控：false = 过渡期（B8 前存量行缺 annDate）——secCode 恒下推
+    # （metadata 首版即有），annDate/近窗不下推，走回查内存过滤 + 召回深度 ×4 补偿；
+    # true = 回填完成后 annDate 区间下推 + 无 dateRange 时近窗两段式（与 cls 同款）
     kind-filter-enabled: false
+    # cls 检索近窗优先（ctime 下推 SQL）：无 dateRange 时第一段召回窗口（天），
+    # 不足 topK 且回落开启时全量向量检索补齐；dateRange 恒为硬下推闭区间
+    recent-window-days: 30
+    full-corpus-fallback: true
+    # 短查询路由兜底线：无空格且 ≤ 此长度走关键词精确路径（电报 content LIKE / 公告
+    # title·summary·secName·secCode LIKE，pg_trgm GIN）；主判据是代码/股票/题材字典命中
+    # （ClsArticleQueryApi.isEntityLikeQuery，电报/公告共用），0 命中回落向量
+    short-query-max-chars: 4
   composite:
     llm-timeout-seconds: 30
     retrieval-top-k: 8

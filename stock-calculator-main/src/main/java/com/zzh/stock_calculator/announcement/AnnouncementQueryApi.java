@@ -110,6 +110,44 @@ public class AnnouncementQueryApi {
             .toList();
     }
 
+    /**
+     * 关键词精确检索（search 短查询路由路径，ClsArticleQueryApi.keywordSearch 公告同款）：
+     * title/summary/secName/secCode 子串匹配（LIKE，title/summary 走 pg_trgm GIN 索引；
+     * secName/secCode 覆盖「实体认领」语义——股票代码/公司名查询命中该股票全部公告），
+     * DONE 且摘要非空（D5），secCodes 可选硬过滤（空 = 不限），seDate 闭区间可选
+     * （成对传入；单边 null 按无条件处理），公告日倒序取前 limit 条。无相关性阈值；
+     * 调用方 0 命中时自行回落向量路径。
+     * <p>日期条件按有无分流到带/不带 SeDateBetween 的仓库方法：日期参数禁止以可空形态
+     * 进 {@code (:param IS NULL OR ...)} 谓词（非 null LocalDate 无类型绑定触发 PG 42P18，
+     * 见 {@link AnnouncementRepository#searchDoneByKeyword} 注释）。</p>
+     */
+    public List<AnnouncementView> keywordSearch(String keyword,
+                                                Collection<String> secCodes,
+                                                LocalDate startDate,
+                                                LocalDate endDate,
+                                                int limit) {
+        if (keyword == null || keyword.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        Pageable page = PageRequest.of(0, limit);
+        boolean noStocks = secCodes == null || secCodes.isEmpty();
+        boolean dated = startDate != null && endDate != null;
+        List<Announcement> entities;
+        if (noStocks) {
+            entities = dated
+                ? announcementRepository.searchDoneByKeywordAndSeDateBetween(
+                    DONE, keyword.trim(), startDate, endDate, page)
+                : announcementRepository.searchDoneByKeyword(DONE, keyword.trim(), page);
+        } else {
+            entities = dated
+                ? announcementRepository.searchDoneByKeywordAndSecCodeInAndSeDateBetween(
+                    DONE, keyword.trim(), secCodes, startDate, endDate, page)
+                : announcementRepository.searchDoneByKeywordAndSecCodeIn(
+                    DONE, keyword.trim(), secCodes, page);
+        }
+        return entities.stream().map(AnnouncementQueryApi::toView).toList();
+    }
+
     private static AnnouncementView toView(Announcement entity) {
         String adjunctUrl = entity.getAdjunctUrl();
         String sourceUrl =

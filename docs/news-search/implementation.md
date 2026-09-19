@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-18
+updated: 2026-09-19
 ---
 
 # 资讯搜索（News Search）· 后端技术实现（Spring Boot :18080）
@@ -59,7 +59,20 @@ com.zzh.stock_calculator.search
 
 ## 2. 公告检索实现（P1，对应 api 文档 §2）
 
-**检索路径**（与 ArticleEmbeddingSearchService 同款基座）：
+> **v1.6（2026-09-19）已重构为与 §3 电报同款双路径 + 无限滑动分页**（AnnouncementSearchService）：
+> 实体型/短查询（ClsArticleQueryApi.isEntityLikeQuery + short-query-max-chars 兜底）路由
+> `AnnouncementQueryApi.keywordSearch`（title/summary/secName/secCode LIKE，DONE+摘要非空在
+> SQL 内，公告 trgm GIN 索引 idx_announcement_title/summary_trgm，schema.sql 幂等段），
+> 0 命中回落向量；其余走 `AnnouncementSearchService` 向量路径——手写下推 SQL
+> （AnnouncementEmbeddingSearchService，ArticleEmbeddingSearchService 公告侧对偶：
+> announcementId 键判别共表来源、secCode IN 恒下推、annDate ISO 文本区间门控下推
+> `search.retrieval.kind-filter-enabled`、SET LOCAL hnsw.iterative_scan 同款兜底），
+> 命中后 AnnouncementQueryApi 批量回查组装（DONE/摘要/股票/日期过滤=主表口径脏数据防御）。
+> 分页=「前缀加深+切片」depth=(page+1)*pageSize、fetchDepth 多取 1 条精确判 hasMore，
+> 过渡期召回深度 ×4（LEGACY_EXPAND_FACTOR）；输出公告日倒序（相关度只决定入选）。
+> 以下为 v1.6 前的历史口径，过渡期开关语义仍由其承载：
+
+**检索路径**（历史口径，已被双路径改造取代）：
 1. 入参校验（§7）→ `vectorStore.similaritySearch(SearchRequest.builder().query(query).topK(k).similarityThreshold(threshold).build())`；
 2. **来源过滤是红线**：vector_store 与 cls 文章共表，现有 metadata 无 kind 标记（两域 model 同为 bge-m3，无法靠 model 区分）。方案：
    - **推荐（配合回填）**：metadata 增加 kind="announcement"（§8 回填重嵌时写入），filterExpression 加 `kind == 'announcement'`；

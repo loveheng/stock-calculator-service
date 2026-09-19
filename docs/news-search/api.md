@@ -1,11 +1,11 @@
 ---
 status: active
-updated: 2026-09-12
+updated: 2026-09-19
 ---
 
 # 资讯搜索（News Search）· 接口文档（后端开发对接）
 
-> 版本：v1.5（2026-09-10；v1.5 = 修正 Q3 终版定案：没有早报/晚报，edition 恒 'telegraph'，无条目映射回填；v1.4 = 关闭 Q3：早/晚报 = 财联社电报流内条目，无新增获取与合规评估；v1.3 = 关闭 Q4：C1 隐私红线定案；v1.2 = 关闭 Q2：composite 拍板 SSE（方案 A）；v1.1 = 采纳后端评审：修正 §0.2 订阅接口返回结构、§1 HTTP 状态口径、§6 改写为复用既有管线，关闭 Q1/Q5/Q6）
+> 版本：v1.6（2026-09-19；v1.6 = §2/§3 检索改双路径路由（关键词精确 + 向量）与无限滑动分页（page/pageSize/hasMore，topK 转兼容别名），公告输出序改公告日倒序；v1.5 = 修正 Q3 终版定案：没有早报/晚报，edition 恒 'telegraph'，无条目映射回填；v1.4 = 关闭 Q3：早/晚报 = 财联社电报流内条目，无新增获取与合规评估；v1.3 = 关闭 Q4：C1 隐私红线定案；v1.2 = 关闭 Q2：composite 拍板 SSE（方案 A）；v1.1 = 采纳后端评审：修正 §0.2 订阅接口返回结构、§1 HTTP 状态口径、§6 改写为复用既有管线，关闭 Q1/Q5/Q6）
 > 读者：后端开发（Spring Boot :18080，与 /api/auth 同应用）。本文给出检索类四个新接口的完整契约、通用约定、数据依赖与联调说明；前端按此契约开发并在就绪前使用 mock。
 > 关联：前端仓 `docs/news-search-spec.md`（需求 D1-D10）、前端仓 `docs/news-search-implementation.md`（前端实现）、`docs/news-search/implementation.md`（后端技术实现，本仓库）；已上线接口 `POST/DELETE/GET /api/announcement/subscriptions`（订阅闭环，本文件 §0.2 摘要）
 > 状态：已实现（2026-09-10，commit 5444b31；search 域四端点含 SSE 变体均在 SearchController，本文件由 API 契约转为现状文档）；P1 依赖 §2/§5，P2 依赖 §3/§4
@@ -57,7 +57,7 @@ updated: 2026-09-12
 | 业务错误 | 400 BusinessException，`message` 必须是用户可读中文（前端直接展示，如「检索关键词过长」） |
 | 限流 | 429 + `data.retryAfterSeconds`（建议：检索类单用户 10s 窗口 ≤ 10 次；综合摘要 ≤ 3 次）；message 如「请求过于频繁，请稍后重试」。**v1.1 注：`data.retryAfterSeconds` 属新增管道**——现有限流器（auth/copilot）抛 429 时 data 恒 null，需 RateLimitedException + 专用 handler + ApiResponse.fail 带 data 重载，实现见 backend-implementation §5 |
 | 编码/超时 | UTF-8 JSON；后端检索类建议 P95 ≤ 800ms；综合摘要同步 ≤ 30s 或走 SSE |
-| 分页 | 一期不分页：`topK` 控制条数（默认 10，上限 50，超出返回 400「检索范围过大」） |
+| 分页 | **无限滑动分页（v1.6，§2/§3）**：请求 `pageSize`（页大小，默认 10，上限 50，超出 400「检索范围过大」）+ `page`（0 起，每页 +1，负数 400「页码无效」、>100 400「页码超出范围」）；一期字段 `topK` 转兼容别名（= pageSize，`pageSize` 缺省时顶上）；响应 `hasMore`（多取 1 条精确判定，末页不空拉） |
 
 ---
 
@@ -72,7 +72,8 @@ updated: 2026-09-12
   "query": "对赌协议",
   "stockCodes": ["600745", "601318"],
   "dateRange": { "start": "2026-08-11", "end": "2026-09-10" },
-  "topK": 10
+  "pageSize": 10,
+  "page": 0
 }
 ```
 
@@ -81,7 +82,9 @@ updated: 2026-09-12
 | query | string | 是 | 关键词/自然语言短句，1~64 字符 |
 | stockCodes | string[] | 否 | 6 位数字码集合；**提供时为硬过滤**（仅返回这些股票）；缺省 = 不限股票 |
 | dateRange | object | 否 | 公告发布日期闭区间，YYYY-MM-DD |
-| topK | number | 否 | 缺省 10，上限 50 |
+| pageSize | number | 否 | 页大小（无限滑动续拉）；缺省 10，上限 50 |
+| page | number | 否 | 页码，0 起；缺省 0 |
+| topK | number | 否 | 兼容别名（= pageSize，一期字段）；`pageSize` 存在时忽略 |
 
 **成功 data：**
 
@@ -98,16 +101,19 @@ updated: 2026-09-12
       "summary": "控股股东与战投方签署补充对赌协议，触发条件为 2026 年度半导体业务营收不低于 180 亿元……协议第二阶段将对赌期限延长一年。",
       "sourceUrl": "http://www.cninfo.com.cn/new/disclosure/detail?annId=AN20260901XXXX"
     }
-  ]
+  ],
+  "hasMore": false
 }
 ```
 
 **要求**：
-- `total` 一期口径 = `items.length`（topK 截断后返回条数）；前端列表头建议「匹配到 N 条（展示前 topK 条）」，精确命中总数 P2 再评估。
+- **检索口径（v1.6 双路径路由，与 §3 电报同款）**：实体型/短查询（纯数字代码、股票/题材字典命中、无空格 ≤4 字）走关键词精确路径（title/summary/secName/secCode LIKE，0 命中回落向量）；其余走向量路径（metadata 下推 SQL：announcementId 键判别来源 + secCode IN；`search.retrieval.kind-filter-enabled` 门控 annDate 区间下推与近窗两段式，过渡期单段全量召回深度 ×4 + 回查内存过滤）。两条路径 `stockCodes` 均为硬过滤。
+- `total` 一期口径 = `items.length`（本页返回条数）；向量路径无全量总数语义，精确命中总数 P2 再评估。
+- **排序（v1.6 变更）**：输出按公告日倒序（同日按主表 id 倒序）；相关度只决定入选，不影响输出序。
+- **翻页**：`hasMore=true` 时前端以 `page+1` 续拉；翻过数据末尾返回空 `items` + `hasMore=false`（空页收尾）；新公告入库可能导致页间轻微漂移（向量路径已知共性）。
 - 入参校验（超限 400）：`stockCodes` 逐项 6 位数字码、去重后 ≤ 50；`dateRange` 跨度 ≤ 3 年（语料下界 2023-01-01）。
 - `sourceUrl` 直接返回 `adjunctUrl`（存量相对路径时补 static.cninfo.com.cn 前缀，与下载逻辑同规则；Q6 就此关闭）。
-- 排序：相关度倒序；前端「持仓公告」范围会按 `stockName + annDate` 二次排序展示（后端无需关心）。
-- `summary`：入库时由 LLM/抽取生成的 2~3 句摘要；若存量数据摘要缺失，返回截断的首段正文（≤ 200 字）并在 §6 回填后自动改善。
+- `summary`：入库时由 LLM/抽取生成的 2~3 句摘要；摘要缺失/空白的公告不返回（D5 不存正文，无降级来源）。
 - `stockName` 必须返回（前端不查行情接口补名称）。
 
 ---
@@ -122,7 +128,8 @@ updated: 2026-09-12
 {
   "query": "半导体 板块",
   "dateRange": { "start": "2026-09-04", "end": "2026-09-10" },
-  "topK": 10
+  "pageSize": 10,
+  "page": 0
 }
 ```
 
@@ -130,7 +137,9 @@ updated: 2026-09-12
 |------|------|------|------|
 | query | string | 是 | 同 §2 |
 | dateRange | object | 否 | 发布时间闭区间（按日期） |
-| topK | number | 否 | 同 §2 |
+| pageSize | number | 否 | 页大小（无限滑动续拉）；缺省 10，上限 50 |
+| page | number | 否 | 页码，0 起；缺省 0 |
+| topK | number | 否 | 兼容别名（= pageSize，一期字段）；`pageSize` 存在时忽略 |
 
 **成功 data：**
 
@@ -148,12 +157,15 @@ updated: 2026-09-12
         { "stockId": "600745", "stockName": "闻泰科技" }
       ]
     }
-  ]
+  ],
+  "hasMore": false
 }
 ```
 
 - `edition`：恒 `telegraph`（Q3 终版定案：无早报/晚报，语料即财联社电报；字段保留仅为契约稳定，前端无需按枚举分支）。
 - `mentions`：该条快讯提及的 A 股公司（从正文实体识别抽取）；可为空数组。前端点击 chip 会以该股票发起档案卡查询。
+- **检索口径（v1.6 双路径路由）**：实体型/短查询走 content LIKE 精确路径（0 命中回落向量）；其余走向量路径（ctime 区间下推 SQL + 近窗优先两段式）。无 dateRange 时近窗（recent-window-days）优先、不足额全量补齐（`full-corpus-fallback` 门控）。
+- **翻页**：语义同 §2（无限滑动 + `hasMore` 精确判定 + 空页收尾）。
 
 ## 4. AI 综合摘要（P2）
 

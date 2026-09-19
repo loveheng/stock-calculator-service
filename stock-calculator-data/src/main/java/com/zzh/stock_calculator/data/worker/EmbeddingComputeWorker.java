@@ -88,12 +88,14 @@ public class EmbeddingComputeWorker {
     }
 
     /**
-     * 计算主流程：kind 门控（阶段 3 仅 cls_article，announcement 随阶段 4 接入）→
+     * 计算主流程：kind 门控（cls_article + announcement 两类，D7 两段式计算端——
+     * announcement 的待嵌文本=摘要已随任务下发，计算流程与 cls 同款无分支差异）→
      * 空文本丢弃 → 限流 → CF 计算 → 空结果按 PERMANENT 抛弃 → 组装结果上行。
      * 业务性跳过（未知 kind/空文本）返回即 ack；其余异常抛出交失败分流。
      */
     private void process(MessageEnvelope envelope, EmbeddingComputeTask task) throws InterruptedException {
-        if (task == null || !EmbeddingComputeTask.KIND_CLS_ARTICLE.equals(task.getKind())) {
+        if (task == null || (!EmbeddingComputeTask.KIND_CLS_ARTICLE.equals(task.getKind())
+                && !EmbeddingComputeTask.KIND_ANNOUNCEMENT.equals(task.getKind()))) {
             log.warn("skip embedding task with unsupported kind={}, messageId={}",
                     task == null ? null : task.getKind(), envelope.getMessageId());
             return;

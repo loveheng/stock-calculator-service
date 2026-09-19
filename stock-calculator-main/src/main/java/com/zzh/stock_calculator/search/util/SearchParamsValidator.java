@@ -21,6 +21,8 @@ public final class SearchParamsValidator {
     private static final int QUERY_MAX = 64;
     private static final int STOCK_CODES_MAX = 50;
     private static final long DATE_SPAN_MAX_YEARS = 3;
+    /** 翻页页码上限：depth=(page+1)*pageSize 召回深度约束（page=100、pageSize=50 → 5050 行上限） */
+    private static final int PAGE_MAX = 100;
 
     private SearchParamsValidator() {
     }
@@ -34,11 +36,23 @@ public final class SearchParamsValidator {
         return trimmed;
     }
 
-    /** topK：null/≤0 → 缺省 defaultTopK；上限 maxTopK（超出 400「检索范围过大」） */
+    /** topK/pageSize：null/≤0 → 缺省 defaultTopK；上限 maxTopK（超出 400「检索范围过大」） */
     public static int validateTopK(Integer topK, int defaultTopK, int maxTopK) {
         int effective = (topK == null || topK <= 0) ? defaultTopK : topK;
         if (effective > maxTopK) {
             throw new BusinessException(400, "检索范围过大");
+        }
+        return effective;
+    }
+
+    /** page：null → 0（首页）；负数 400「页码无效」；> 上限 400「页码超出范围」（无限滑动防深翻页滥用） */
+    public static int validatePage(Integer page) {
+        int effective = page == null ? 0 : page;
+        if (effective < 0) {
+            throw new BusinessException(400, "页码无效");
+        }
+        if (effective > PAGE_MAX) {
+            throw new BusinessException(400, "页码超出范围");
         }
         return effective;
     }

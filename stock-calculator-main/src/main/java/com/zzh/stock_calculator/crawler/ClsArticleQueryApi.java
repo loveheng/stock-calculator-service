@@ -1,9 +1,13 @@
 package com.zzh.stock_calculator.crawler;
 
+import com.zzh.stock_calculator.crawler.entity.ClsArticle;
 import com.zzh.stock_calculator.crawler.entity.ClsArticleStock;
+import com.zzh.stock_calculator.crawler.repository.ClsArticleRepository;
 import com.zzh.stock_calculator.crawler.repository.ClsArticleStockRepository;
+import com.zzh.stock_calculator.crawler.repository.ClsSubjectRepository;
 import com.zzh.stock_calculator.crawler.repository.StockRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,8 +21,9 @@ import java.util.Set;
 
 /**
  * crawler 基包电报查询 API（backend-implementation §1；拍板 C12）：
- * cls_article_stock 关联口径查询，供 search 域组装 mention 与 P2 clsMention 预留。
- * entity 是内部类型，返回值一律用基包 record 载体（Modulith 红线）。
+ * cls_article_stock 关联口径查询 + 短查询实体判定/关键词精确检索，
+ * 供 search 域组装 mention 与路由短查询路径。entity 是内部类型，
+ * 返回值一律用基包 record 载体（Modulith 红线）。
  */
 @Service
 @RequiredArgsConstructor
@@ -26,6 +31,8 @@ public class ClsArticleQueryApi {
 
     private final ClsArticleStockRepository stockLinkRepository;
     private final StockRepository stockRepository;
+    private final ClsSubjectRepository clsSubjectRepository;
+    private final ClsArticleRepository articleRepository;
 
     /** articleId → 提及股票列表（按关联写入序；无提及 = 空列表；字典未收录时 name 兜底空串） */
     public Map<Long, List<Mention>> mentionsByArticleIds(Collection<Long> articleIds) {
@@ -60,7 +67,51 @@ public class ClsArticleQueryApi {
         return stockLinkRepository.countDistinctArticleIdByStockIdSince(stockCode, sinceCtime);
     }
 
+    /**
+     * 实体型查询判定（search 短查询路由主判据，命中即应走关键词精确路径而非向量）：
+     * ① 纯数字——股票/ETF 代码，数字嵌入无语义，向量必失准；
+     * ② query 被股票 name/old_name 或题材名包含（「闻泰」⊂「闻泰科技」）——用户在精确认领实体。
+     * 反向不判（query 含字典名但更长，如「闻泰科技爆雷」）：长上下文嵌入区分度足够，仍走向量。
+     */
+    public boolean isEntityLikeQuery(String query) {
+        if (query == null || query.isBlank()) {
+            return false;
+        }
+        String trimmed = query.trim();
+        if (trimmed.chars().allMatch(Character::isDigit)) {
+            return true;
+        }
+        return !stockRepository.findByNameContaining(trimmed).isEmpty()
+                || !stockRepository.findByOldNameContaining(trimmed).isEmpty()
+                || !clsSubjectRepository.findBySubjectNameContaining(trimmed).isEmpty();
+    }
+
+    /**
+     * 关键词精确检索（短查询路径）：content 子串匹配（LIKE，走 pg_trgm GIN 索引），
+     * ctime 区间可选（dateRange 存在时成对传入，否则双 null 全时段），ctime 倒序取前 limit 条。
+     * 语义=「精确匹配用户所输」，无相关性阈值；调用方 0 命中时自行回落向量路径。
+     */
+    public List<ArticleHit> keywordSearch(String keyword, Long fromCtime, Long toCtime, int limit) {
+        if (keyword == null || keyword.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        return articleRepository.searchByContentKeyword(keyword.trim(), fromCtime, toCtime,
+                        Limit.of(limit)).stream()
+                .map(ClsArticleQueryApi::toArticleHit)
+                .toList();
+    }
+
+    private static ArticleHit toArticleHit(ClsArticle article) {
+        return new ArticleHit(article.getId(), article.getTitle(), article.getBrief(),
+                article.getContent(), article.getLevel(), article.getCtime());
+    }
+
     /** 电报提及股票（基包公开载体；stockName 为字典快照名，未收录 = 空串） */
     public record Mention(String stockId, String stockName) {
+    }
+
+    /** 关键词精确检索命中项（基包公开载体，字段对齐 EmbeddingSearchApi.Hit，无相关性分数） */
+    public record ArticleHit(Long articleId, String title, String brief, String content,
+                             String level, Long ctime) {
     }
 }

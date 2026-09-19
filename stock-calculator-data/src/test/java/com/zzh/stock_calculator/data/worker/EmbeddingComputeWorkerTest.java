@@ -102,6 +102,27 @@ class EmbeddingComputeWorkerTest {
     }
 
     @Test
+    @DisplayName("announcement kind：同款计算流程 → result 上行 kind 原样透传 → ack（D7 两段式计算端）")
+    void announcementKindComputed() throws Exception {
+        String text = "控股股东与战投方签署补充对赌协议，延长对赌期限一年。";
+        String body = envelopeJson(taskPayload(EmbeddingComputeTask.KIND_ANNOUNCEMENT, text));
+        when(embeddingModel.embedForResponse(List.of(text))).thenReturn(response(1024, 37));
+
+        worker.onMessage(taskMessage(body), channel, 1L);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(resultPublisher).publish(eq(MessageType.RESULT_EMBEDDING_DONE), payloadCaptor.capture(),
+                eq(MqPolicy.PRODUCER_WORKER), eq(TRACE_ID));
+        EmbeddingComputeResult published = (EmbeddingComputeResult) payloadCaptor.getValue();
+        assertThat(published.getKind()).isEqualTo(EmbeddingComputeTask.KIND_ANNOUNCEMENT);
+        assertThat(published.getRefId()).isEqualTo(TEST_ARTICLE_ID);
+        assertThat(published.getDims()).isEqualTo(1024);
+        assertThat(published.getVector()).hasSize(1024);
+        verify(channel).basicAck(1L, false);
+        verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
+    }
+
+    @Test
     @DisplayName("未知 kind → ack 丢弃不回报")
     void unknownKindDropped() throws Exception {
         String body = envelopeJson(taskPayload("unknown_kind", "text"));

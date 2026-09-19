@@ -37,6 +37,18 @@ public class SearchProperties {
          * true  = 回填完成后：filterExpression 下推 kind=='announcement' + annDate 区间。
          */
         private boolean kindFilterEnabled = false;
+        /**
+         * 近窗优先：cls 检索无 dateRange 时第一段召回窗口（天，按 ctime 下推 SQL）；
+         * 相关性仍是入选门槛（阈值过滤在 SQL 内），窗口只决定召回范围不决定入选。
+         */
+        private int recentWindowDays = 30;
+        /** 近窗召回不足 topK 时，是否回落全量向量检索补齐剩余名额（关闭则近窗不足即返回不足额） */
+        private boolean fullCorpusFallback = true;
+        /**
+         * 短查询路由兜底线：无空格且长度 ≤ 此值的 query 走关键词精确路径（代码/字典命中
+         * 之外的兜底，覆盖字典未收录的新实体）；主判据见 ClsArticleQueryApi.isEntityLikeQuery。
+         */
+        private int shortQueryMaxChars = 4;
     }
 
     @Data

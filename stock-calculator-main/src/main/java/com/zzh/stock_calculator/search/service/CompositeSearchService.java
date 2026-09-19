@@ -155,8 +155,8 @@ public class CompositeSearchService {
     private RetrievalResult retrieve(String query, List<String> stockCodes, DateRange dateRange) {
         int topK = properties.getComposite().getRetrievalTopK();
         AnnouncementSearchResponse announcements =
-                announcementSearchService.search(query, stockCodes, dateRange, topK);
-        ClsSearchResponse cls = clsSearchService.search(query, dateRange, topK);
+                announcementSearchService.search(query, stockCodes, dateRange, topK, 0);
+        ClsSearchResponse cls = clsSearchService.search(query, dateRange, topK, 0);
         List<Citation> citations = new ArrayList<>();
         List<String> materials = new ArrayList<>();
         int index = 1;

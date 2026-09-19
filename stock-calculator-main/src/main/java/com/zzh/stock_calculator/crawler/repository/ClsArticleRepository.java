@@ -2,9 +2,11 @@ package com.zzh.stock_calculator.crawler.repository;
 import com.zzh.stock_calculator.crawler.entity.ClsArticle;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -18,4 +20,21 @@ public interface ClsArticleRepository extends JpaRepository<ClsArticle, Long> {
 
     /** 窗口内新增电报数（按发布时间 ctime，秒；统计报告用，爬虫近实时入库 ctime ≈ 入库时间） */
     long countByCtimeGreaterThanEqual(Long ctime);
+
+    /**
+     * 关键词精确检索（短查询路由路径）：content 子串匹配（LIKE '%kw%'，走 pg_trgm GIN 索引），
+     * ctime 区间可选（dateRange 存在时成对传入，否则双 null 全时段），按发布时间倒序取前 limit 条。
+     * 语义=「精确认领实体/关键词」，无相关性阈值；实体判定与路由见 ClsArticleQueryApi.isEntityLikeQuery。
+     */
+    @Query("""
+            SELECT a FROM ClsArticle a
+            WHERE a.content LIKE concat('%', :keyword, '%')
+              AND (:fromCtime IS NULL OR a.ctime >= :fromCtime)
+              AND (:toCtime IS NULL OR a.ctime <= :toCtime)
+            ORDER BY a.ctime DESC
+            """)
+    List<ClsArticle> searchByContentKeyword(@Param("keyword") String keyword,
+                                            @Param("fromCtime") Long fromCtime,
+                                            @Param("toCtime") Long toCtime,
+                                            Limit limit);
 }

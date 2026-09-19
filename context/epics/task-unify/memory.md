@@ -27,4 +27,4 @@ last-merge: none
 
 ## 断点
 
-- [断点] 下一步：第二步已实施完结（384 全绿）待用户验收；用户本地存量库需手工跑 postgres/schema.sql 迁移段（幂等，含 DROP 旧表）
+- [断点] 下一步：第二步待用户验收（本地存量库手工跑 postgres/schema.sql 迁移段）；native data PullConfigPayload 缺口已修复验证，main native 需同批重建（心跳反序列化/pull config 序列化同缺口）

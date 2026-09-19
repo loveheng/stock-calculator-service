@@ -178,7 +178,8 @@ class AnnouncementEmbeddingMqServiceTest {
         assertThat(args[1]).isEqualTo("蒸馏摘要");
         assertThat(String.valueOf(args[2]))
                 .contains("\"kind\":\"announcement\"")
-                .contains("\"announcementId\":" + ANNOUNCEMENT_ID)
+                // metadata.announcementId = CNINFO 公告标识（回查/检索键口径），非内部自增主键
+                .contains("\"announcementId\":\"ann-1\"")
                 .contains("\"annDate\":\"2026-09-10\"");
         verify(announcementRepository).save(row);
         assertThat(row.getStatus()).isEqualTo(AnnouncementStatus.DONE);

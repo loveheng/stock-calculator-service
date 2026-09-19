@@ -4,6 +4,8 @@ import com.zzh.stock_calculator.announcement.entity.Announcement;
 import com.zzh.stock_calculator.announcement.entity.AnnouncementStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.Collection;
@@ -60,4 +62,87 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
 
     /** 回填任务：DONE 且 summary 非空全集（差集核对候选） */
     List<Announcement> findByStatusAndSummaryNotNull(AnnouncementStatus status);
+
+    // ==================== 关键词精确检索（search 短查询路由路径） ====================
+
+    /**
+     * 关键词精确检索（不限股票）：title/summary/secName/secCode 子串匹配（LIKE '%kw%'，
+     * title/summary 走 pg_trgm GIN 索引），DONE 且 summary 非空（D5：无摘要不返回），
+     * 公告日倒序取前 limit 条（Pageable 截断）。语义=「精确认领实体/关键词」，无相关性阈值。
+     * <p>日期条件拆分为独立方法（SeDateBetween 后缀变体）而非传可空参数：JPQL 的
+     * {@code (:param IS NULL OR ...)} 谓词在非 null LocalDate 经 setObject 无类型下发时
+     * PostgreSQL 报 42P18（could not determine data type of parameter），null 绑定反而
+     * 正常——该形态对日期参数不可用，一律由调用方按条件成立与否分流。</p>
+     */
+    @Query("""
+            SELECT a FROM Announcement a
+            WHERE a.status = :status
+              AND a.summary IS NOT NULL
+              AND (a.title LIKE concat('%', :keyword, '%')
+                   OR a.summary LIKE concat('%', :keyword, '%')
+                   OR a.secName LIKE concat('%', :keyword, '%')
+                   OR a.secCode LIKE concat('%', :keyword, '%'))
+            ORDER BY a.seDate DESC, a.id DESC
+            """)
+    List<Announcement> searchDoneByKeyword(@Param("status") AnnouncementStatus status,
+                                           @Param("keyword") String keyword,
+                                           Pageable pageable);
+
+    /** 关键词精确检索 + 公告日闭区间（startDate/endDate 校验层保证成对非 null，硬下推比较谓词） */
+    @Query("""
+            SELECT a FROM Announcement a
+            WHERE a.status = :status
+              AND a.summary IS NOT NULL
+              AND (a.title LIKE concat('%', :keyword, '%')
+                   OR a.summary LIKE concat('%', :keyword, '%')
+                   OR a.secName LIKE concat('%', :keyword, '%')
+                   OR a.secCode LIKE concat('%', :keyword, '%'))
+              AND a.seDate >= :startDate
+              AND a.seDate <= :endDate
+            ORDER BY a.seDate DESC, a.id DESC
+            """)
+    List<Announcement> searchDoneByKeywordAndSeDateBetween(@Param("status") AnnouncementStatus status,
+                                                           @Param("keyword") String keyword,
+                                                           @Param("startDate") LocalDate startDate,
+                                                           @Param("endDate") LocalDate endDate,
+                                                           Pageable pageable);
+
+    /** 关键词精确检索 + secCode 硬过滤（与 {@link #searchDoneByKeyword} 同谓词，多 IN 过滤，不限时间） */
+    @Query("""
+            SELECT a FROM Announcement a
+            WHERE a.status = :status
+              AND a.summary IS NOT NULL
+              AND (a.title LIKE concat('%', :keyword, '%')
+                   OR a.summary LIKE concat('%', :keyword, '%')
+                   OR a.secName LIKE concat('%', :keyword, '%')
+                   OR a.secCode LIKE concat('%', :keyword, '%'))
+              AND a.secCode IN :secCodes
+            ORDER BY a.seDate DESC, a.id DESC
+            """)
+    List<Announcement> searchDoneByKeywordAndSecCodeIn(@Param("status") AnnouncementStatus status,
+                                                       @Param("keyword") String keyword,
+                                                       @Param("secCodes") Collection<String> secCodes,
+                                                       Pageable pageable);
+
+    /** 关键词精确检索 + secCode 硬过滤 + 公告日闭区间（同 {@link #searchDoneByKeywordAndSeDateBetween} 口径） */
+    @Query("""
+            SELECT a FROM Announcement a
+            WHERE a.status = :status
+              AND a.summary IS NOT NULL
+              AND (a.title LIKE concat('%', :keyword, '%')
+                   OR a.summary LIKE concat('%', :keyword, '%')
+                   OR a.secName LIKE concat('%', :keyword, '%')
+                   OR a.secCode LIKE concat('%', :keyword, '%'))
+              AND a.secCode IN :secCodes
+              AND a.seDate >= :startDate
+              AND a.seDate <= :endDate
+            ORDER BY a.seDate DESC, a.id DESC
+            """)
+    List<Announcement> searchDoneByKeywordAndSecCodeInAndSeDateBetween(
+            @Param("status") AnnouncementStatus status,
+            @Param("keyword") String keyword,
+            @Param("secCodes") Collection<String> secCodes,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            Pageable pageable);
 }

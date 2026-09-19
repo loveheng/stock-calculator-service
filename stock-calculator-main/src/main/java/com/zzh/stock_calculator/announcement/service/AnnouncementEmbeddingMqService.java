@@ -141,7 +141,7 @@ public class AnnouncementEmbeddingMqService implements AnnouncementEmbeddingApi 
         transactionTemplate.executeWithoutResult(tx -> {
             String model = resolveModel(result);
             String metadataJson = objectMapper.writeValueAsString(Map.of(
-                    "announcementId", announcement.getId(),
+                    "announcementId", announcement.getAnnouncementId(),
                     "adjunctUrl", announcement.getAdjunctUrl() == null ? "" : announcement.getAdjunctUrl(),
                     "secCode", announcement.getSecCode() == null ? "" : announcement.getSecCode(),
                     "model", model,

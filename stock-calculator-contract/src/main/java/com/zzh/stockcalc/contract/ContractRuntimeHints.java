@@ -45,6 +45,8 @@ public class ContractRuntimeHints implements RuntimeHintsRegistrar {
         MemoryExtractedResult.class,
         MemoryProfileResult.class,
         MemoryProfileTask.class,
+        PullConfigPayload.class,
+        PullHeartbeatPayload.class,
         SliceSelection.class,
         StructureNode.class,
         SubscriptionSnapshotPayload.class

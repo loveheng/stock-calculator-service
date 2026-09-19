@@ -462,3 +462,22 @@ FROM public.app_task_config
 ON CONFLICT (task_code) DO NOTHING;
 
 DROP TABLE IF EXISTS public.app_task_config;
+
+-- =====================================================================
+-- cls_article 关键词检索 trgm 索引（短查询路由 2026-09-19，docs/news-search）：
+-- 短查询（实体名/代码/题材词）路由 content LIKE 精确路径，48万行长文本 seq scan 不可行
+-- → pg_trgm GIN（LIKE '%kw%' 可走索引）。幂等：扩展/索引已存在时 no-op；
+-- 首次对存量建索引需数十秒（启动期一次性，spring.sql.init 同步执行）。
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_cls_article_content_trgm
+	ON public.cls_article USING gin (content gin_trgm_ops);
+
+-- =====================================================================
+-- announcement 关键词检索 trgm 索引（公告双路径路由 2026-09-19，docs/news-search）：
+-- 关键词精确路径对 title/summary LIKE '%kw%'（sec_code/sec_name 短列走序扫描即可），
+-- 与 cls_article 同款 pg_trgm GIN。幂等：索引已存在时 no-op；存量摘要列建索引
+-- 耗时与行数线性（启动期一次性，spring.sql.init 同步执行）。
+CREATE INDEX IF NOT EXISTS idx_announcement_title_trgm
+	ON public.announcement USING gin (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_announcement_summary_trgm
+	ON public.announcement USING gin (summary gin_trgm_ops);

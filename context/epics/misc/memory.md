@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: misc
-total-merged: 4
-last-merge: 2026-09-17
+total-merged: 5
+last-merge: 2026-09-19
 ---
 
 # misc：散修与小改动挂靠（常驻杂项 epic）
@@ -20,6 +20,7 @@ last-merge: 2026-09-17
 - 日历型定时任务定案：拒绝 cron→per-message TTL 种子衰变（复活已否方案、违反设计不变量 3、长 TTL 种子不可撤销）；终态 = main 看门狗 CAS 认领 + work 队列一次性直发（data 侧无续种无 delay）；pull_task_config 增 schedule_mode/cron_expression/timezone/next_expected_time 四列，LOOP 行不落 next_expected_time（健康口径 = last_renew_time 新鲜度，所有者确认）。（2026-09-13）
 - 首个日历任务 task.hello.world 落地（每日 07:00 Asia/Shanghai）；watchdog 拆双节奏（watch 30min + calendarClaim 60s CAS）；main 383 / data 79 用例绿。（2026-09-13）
 - data application.yml 注释对齐 v2.5：worker/collector 开关注释改「生产恒 true + MQ 协议仲裁单消费者（task.history.sync SAC + 种子自愈）」、heartbeat 注释改 Dockerfile.native HEALTHCHECK；datasvc.worker.enabled 现仅测试装配隔离时置 false，DATASVC_WORKER_ENABLED 表述废弃。（2026-09-17）
+- main 侧 cron 任务调度 DB 化早期迭代（app_task_config 表 + AppTaskHandler/AppTaskScheduler，2026-09-18）已被 task-unify 合表迁移收编（AppTaskScheduler 删除、任务行并入 pull_task_config CALENDAR 行），终态详见 task-unify memory。
 
 ## 转正索引
 
@@ -40,6 +41,12 @@ last-merge: 2026-09-17
 ## copilot 记忆画像（memory-profile）
 
 - copilot 记忆固化与画像抽取定稿（2026-09-17，决策 #11-#14）：MQ 触发 / data worker LLM 归并 / 水位 CAS 幂等；docs/copilot/memory-profile.md 评审落地——对话片段成对下发（代词消解）、topic 枚举池 + main 入库校验双保险、pinned 置顶混合召回（v2 留 pgvector 演进）、注入固定预算分段（画像/置顶/普通记忆/近3天历史，总封顶约 6.1k 字符）、近期历史排除当前会话、冷启动空注入懒积累、画像四字段（+responsePreferences）、六类记录类型表（选择/权衡/禁忌/回复偏好/习惯偏好/目标阶段）+「结论+权衡」条目约定（prompt 级口径不加列），§一分层口径修正为窗口逐段固化。
+
+## search 域（cls 检索演进 2026-09-19）
+
+- /api/search/cls 检索口径重构（下推 + 近窗优先）：废弃「topK×4 召回后内存过滤」过渡口径（48万语料下新数据挤不进 topK、窄时段过滤后空集）；ctime 区间/共表排除下推 SQL（(metadata->>'ctime')::bigint），EmbeddingSearchApi 门面扩 6 参（ctimeFrom/To/excludeIds），ArticleEmbeddingSearchService 手写 SQL（同 EmbeddingResultService 口径）+ 事务域 SET LOCAL hnsw.iterative_scan=relaxed_order（pgvector<0.8 一次性降级）；无 dateRange 近窗(30天, recent-window-days)优先两段式 + 全量回落(full-corpus-fallback)，dateRange 单段硬下推不回落；输出恒 ctime 倒序（相关度只决定入选）。
+- 双路径路由修短查询相关性：「闻泰」类 2 字实体查询嵌入区分度差（token 重叠噪声如「纳指ETF国泰」混入近窗）→ 实体型/短查询路由 content LIKE 关键词精确路径（无阈值、ctime 倒序）；主判据 isEntityLikeQuery（纯数字代码 | 股票 name/old_name/题材 subjectName 字典包含命中），兜底无空格 ≤ short-query-max-chars(4)；pg_trgm GIN 索引（schema.sql 幂等段，planner 与 ctime 序扫描择优）；关键词 0 命中回落向量；embedding 门控收窄进向量路径（短查询不受 CF 可用性影响）。
+- 分页（无限滑动）：请求 page(0起)/pageSize（topK 兼容别名），响应 hasMore（fetchDepth=depth+1 精确判定，末页不空拉）；两路径统一「前缀加深+切片」depth=(page+1)*pageSize，向量两段式同步加深保持跨页前缀性质，翻超界空页收尾；validatePage（负/超 100 → 400）；CompositeSearchService 固定 page=0。
 
 ## 断点
 
