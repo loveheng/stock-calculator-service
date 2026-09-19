@@ -2,7 +2,7 @@
 dev-loop: lessons
 format: v1
 epic: global
-total-merged: 5
+total-merged: 6
 last-merge: 2026-09-19
 ---
 
@@ -62,6 +62,8 @@ live LavinMQ 存量队列参数与代码声明不一致（如缺 x-single-active
 
 LLM 输出 JSON 被腰斩（UnexpectedEndOfInput expected close marker for Array）：OpenAI 兼容网关缺省 max_tokens 偏小，不显式传就吃网关隐式值，输出短时成功有迷惑性、输出长必截断 → 聊天补全请求恒显式传 max_tokens（LlmGatewayProperties.maxTokens=4096，仅放宽不改 EOS 停止）；解析失败日志带 rawTail 尾段，EOF 类异常看原文尾段才能定位。(Ref: copilot-memory)
 
+LLM 结构化抽取的时间字段实测 100% 纯日期串（yyyy-MM-dd），ISO 容错解析只认 OffsetDateTime/Instant 致 kg_event.event_time 全量 null、时序时间轴空转 → 解析链缺 LocalDate 兜底分支（纯日期按 systemDefault 当日零点落锚）→ LLM 结构化输出的时间/数值字段解析按「最宽格式优先」编写，且动笔前先查证据实测格式，不能只认标准 ISO 全形。(Ref: news-kg)
+
 ## 部署/冒烟
 
 IDE 起服务与容器/脚本起服务环境不一致：角色开关忘配则队列 0 消费者静默积压（历史坑 DATASVC_WORKER_ENABLED 缺省 off；v2.5 后 yml 与 native 构建期均钉死生产恒 true，教训收敛为「冒烟前核对配置差异」）；IDE 注入的 JVM 代理参数(proxyHost)会拦外部 API 调用；IDE 控制台日志无法文件化，排障改走 MQ 管理 API(/api/queues 看 consumers/messages/unacked) + docker exec psql → 冒烟前先核对角色开关与出口网络。(Ref: copilot-memory)
@@ -72,11 +74,17 @@ main 由 IDE 托管时 AI 出口代理不稳定，且 JVM 全局代理会劫持 
 
 ## JPA/持久层
 
-公告关键词检索带日期 500（could not determine data type of parameter $7），不传日期正常 → JPQL (:param IS NULL OR col>=:param) 谓词：null 绑定经 setNull 带类型 OK，非 null LocalDate 经 setObject 无类型下发，PG 对「参数 IS NULL」裸位置推断不出类型（42P18）；「列 IS NULL OR 列比较参数」形态安全（参数处于比较上下文可推断）→ 日期条件禁止写 :param IS NULL 谓词，Service 按条件成立与否分流到带/不带谓词的方法（AnnouncementRepository 四变体先例）；全仓同类排查仅 ClsArticleRepository 同形但 Long typed 绑定实测安全。(Ref: misc)
+公告关键词检索带日期 500（could not determine data type of parameter $7），不传日期正常 → JPQL (:param IS NULL OR col>=:param) 谓词：null 绑定经 setNull 带类型 OK，非 null LocalDate 经 setObject 无类型下发，PG 对「参数 IS NULL」裸位置推断不出类型（42P18）→ 日期条件禁止写 :param IS NULL 谓词，Service 按条件成立与否分流到带/不带谓词的方法（AnnouncementRepository 四变体先例）。(Ref: misc)
+
+原生查询可空参数绑定行为随执行路径漂移（42P18 变体）：JVM 动态代理仅 temporal null untyped，native AOT（*__AotRepository）下 temporal/String null 均 untyped，只修实测炸点会在另一条路径换位置复发（kg 三段查询 JVM 修好 native 复发实证）→ 原生 SQL 的 IS NULL 位可空参数一律显式 CAST 定型（不按类型侥幸，temporal CAST AS timestamptz / keyword CAST AS text / id CAST AS bigint）；新原生查询落地当天用全 null 参数打一遍默认态接口，native 部署前在镜像里冒烟；全仓同类形态 ClsArticleRepository.searchByContentKeyword（Long）JVM 实测安全、native 未验待查。(Ref: news-kg)
+
+新表 DDL 与实体字段漂移（kg_evidence 漏 created_at）只在运行期暴露：ddl-auto=none 下 Hibernate 不补列，断点一 DDL 试跑（BEGIN-ROLLBACK）只验 SQL 可执行不验实体逐列对齐，常规验证命令又排除 @SpringBootTest，集成层零覆盖 → 新表落 schema.sql 时以实体字段清单为基准逐列核对；用 -Dspring.jpa.hibernate.ddl-auto=validate 跑 contextLoads 做全库对齐审计（零改动复用现有测试），或正式启用 validate 让漂移启动期 fail-fast；已建表存量库用 ALTER TABLE ADD COLUMN IF NOT EXISTS 补列（CREATE TABLE IF NOT EXISTS 对存量表不生效）。(Ref: news-kg)
+
+## MCP
+
+MCP 探活把 tools/list 当会话首条消息：POST 返回 200/202 但 SSE 流零响应（服务端对未初始化会话按协议静默丢弃），而非法会话 404 / 非法报文 400 秒回，极易误判成服务端挂起；实测根因是 MCP 协议时序硬性要求 initialize → notifications/initialized → 之后才能发 tools/list 等请求，协议序错误的表现就是静默无响应 → 手工 curl 探活严格按三步协议走；请求合法却零响应先核对消息顺序再怀疑服务端；SSE 流探活用前台 curl + --max-time 兜底（后台任务延迟执行会污染时序判断）。(Ref: mcp-service)
 
 ## 追加区
-
-- [kg] main 重启验收首条 result.kg.done 摄取即崩：column kg_evidence.created_at does not exist（ingestDone→upsertEvidence→findByArticleId） ➔ 断点二实体 KgEvidence 带 @CreationTimestamp created_at 字段，断点一 schema.sql DDL 漏了该列；ddl-auto=none 下 Hibernate 不补列，而断点一的 DDL 试跑只验「SQL 本身可执行」（BEGIN-ROLLBACK）不验「实体↔表逐列对齐」，常规验证命令又排除两个 @SpringBootTest → 集成层对齐零覆盖，漏到运行期才炸 ➔ 新表落 schema.sql 时以实体字段清单为基准逐列核对（漂移只在运行期暴露）；可用 -Dspring.jpa.hibernate.ddl-auto=validate 跑 contextLoads 做全库对齐审计（零改动、复用现有测试），或正式启用 validate 让漂移启动期 fail-fast；已建表的线上库用 ALTER TABLE ADD COLUMN IF NOT EXISTS 补列（CREATE TABLE IF NOT EXISTS 对存量表不生效）。(Ref: news-kg)
-- [kg] LLM 抽取时间字段实测 100% 为纯日期串（yyyy-MM-dd），ISO 容错解析仅认 OffsetDateTime/Instant 致 kg_event.event_time 全量 null、时序图谱时间轴空转 ➔ 解析链缺 LocalDate 兜底分支（纯日期按 systemDefault 当日零点落锚，展示/过滤必须同时区提取日期） ➔ LLM 结构化输出的时间/数值字段解析按「最宽格式优先」编写前先查证据实测格式，不能只认标准 ISO 全形 (Ref: news-kg)
-- [kg] 原生查询 nullable 时间参数写「:fromTime IS NULL OR ...」编译期无感，运行期 PG 42P18 could not determine data type of parameter $10 ➔ Hibernate 7 对时间型 null 按未声明类型绑定，PG 无法从「? IS NULL」推断参数类型；String/Long null 自带类型绑定故只炸 temporal 参数 ➔ 原生 SQL 中 temporal 参数出现在 IS NULL 位必须显式 CAST(:x AS timestamptz) 定型；新原生查询落地当天就用全 null 参数打一遍默认态接口验证 (Ref: news-kg)
-- [kg] 42P18 修复在 JVM 验证通过后部署 native 服务器仍报 could not determine data type of parameter $1（换成了 String 参数）➔ 原生查询可空参数的绑定行为随执行路径漂移：JVM 动态代理仅 temporal null untyped，native AOT（*__AotRepository）下 temporal/String null 均 untyped——只修实测炸点会在另一条路径上换位置复发 ➔ 原生 SQL 的 IS NULL 位可空参数一律显式 CAST 定型（不按类型侥幸），部署前至少在 native 镜像里冒烟一遍默认态查询；服务器日志本身就是最好的验证器（炸点位置 = 未定型参数） (Ref: news-kg)
+- [mcp] 字典镜像 JSON 键 isStib 与 Lombok 布尔字段 stib 错位：@Data 的 isStib() 在 Jackson 里属性名是 stib，且 Jackson 3 裸 new ObjectMapper() 默认 FAIL_ON_UNKNOWN_PROPERTIES=true，读侧逐行抛错被 fail-open 吞成「0 条载入」，写读双方单测各自自洽测不出跨端键义错位 ➔ Jackson 3 注解包仍是 com.fasterxml.jackson.annotation（@JsonProperty 钉键名）；属性名错位+未知键失败叠加时表现为「静默空结果」，跨端 JSON 契约要有一侧用真实镜像样本做端到端断言 (Ref: mcp-service)
+- [mcp] 新依赖编译期报「无法访问 org.ta4j.core.Bar / 错误的类文件版本 69.0, 应为 65.0」→ 依赖 jar 字节码基线高于工具链 JDK（ta4j 0.22.8+ 实测 class v69=Java 25，0.17=v55=Java 11）→ 引第三方依赖前用 unzip -p jar 类路径 | od -An -j6 -N2 -d 查 major version 选兼容的最高版本（小端读数 17664=0x4500 即 v69），钉版并注释原因；报错形态只有「无法访问」一句时先怀疑字节码版本而非 API 变更 (Ref: mcp-service)
+- [kg/native] data 模块 --no-pkg 增量构建出的二进制缺新加的 kg worker：启动正常、其余 worker 消费者都在、kg 监听器零痕迹（日志无报错、队列未声明）➔ 本地 target/spring-aot 产物早于 kg worker 源码，--no-pkg 复用陈旧 AOT，条件装配的新 bean 根本没进二进制 ➔ data 新增 worker/角色代码后必须全量构建重生 AOT；验证法：find target/spring-aot/main/sources -name "*<Worker>*" 确认 bean 定义存在（对照 native-r1-smoke 只验启动不验功能，worker 缺失属静默失效） (Ref: news-kg)

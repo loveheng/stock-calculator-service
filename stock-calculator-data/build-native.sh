@@ -105,6 +105,14 @@ if [ -z "$CP" ] || [ "$CP" = ":target/classes:target/spring-aot/main/classes:tar
 fi
 echo "        classpath jar 数量: $(printf '%s' "$CP" | tr ':' '\n' | grep -c '\.jar$')"
 
+echo "█████ 步骤 2.5/4: 生成 openai SDK 反射元数据（gen-openai-metadata.py，轮 17/18 移植）..."
+python3 gen-openai-metadata.py
+OPENAI_META="target/classes/META-INF/native-image/com.zzh/ni-openai-config/reachability-metadata.json"
+if [ ! -f "$OPENAI_META" ]; then
+  echo "❌ openai 反射元数据未生成（$OPENAI_META）" >&2
+  exit 1
+fi
+
 echo "█████ 步骤 3/4: native-image（约 8~15 分钟，日志 /tmp/ni-data-build.log）..."
 if ! native-image \
   -cp "$CP" \

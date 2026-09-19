@@ -33,4 +33,4 @@ last-merge: 2026-09-19
 
 ## 断点
 
-- [断点] 下一步：重建重启主服务（同时拿到 hot 端点映射与 42P18 CAST 修复）→ 前端四端点联调；回填进行中（事件已至 2023-10）；遗留：FAILED PERMANENT 抽查、窗口期 null event_time 回填 SQL 可重跑、searchByContentKeyword 同患排查
+- [断点] 下一步：重新部署 data native 二进制（openai 反射注册已内置、E2E 已验证，服务器 kg 抽取崩溃即愈）→ 回填观察继续；遗留：main 侧 FAILED PERMANENT 抽查
