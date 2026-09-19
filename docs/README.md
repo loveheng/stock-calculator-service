@@ -44,6 +44,7 @@ updated: 2026-09-17
 - [announcement-rag](ai-pipeline/announcement-rag.md) · 公告提取与蒸馏管道（announcement 域）设计
 - [cls-article-vector](ai-pipeline/cls-article-vector.md) · cls_article 向量化（语义检索基座）设计
 - [cls-news-kg](ai-pipeline/cls-news-kg.md) · 《新闻联播》要闻时序知识图谱（kg 域）设计
+- [kg-api](ai-pipeline/kg-api.md) · kg 时间轴查询 API 前端对接文档（信封/字段表/样例/待确认清单）
 - [ocr-llm](ai-pipeline/ocr-llm.md) · 多渠道 OCR + 免费 LLM 全链路管道
 
 ## architecture/ — 架构与模块拆分

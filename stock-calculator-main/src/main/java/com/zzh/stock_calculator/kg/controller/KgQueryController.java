@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * kg 查询控制层（时序知识图谱前端可视化读侧，3 端点）：
- * 时间轴卡片流（搜索与默认浏览共用）/ 实体检索建议 / 实体详情摘要卡。
+ * kg 查询控制层（时序知识图谱前端可视化读侧，4 端点）：
+ * 时间轴卡片流（搜索与默认浏览共用）/ 实体检索建议 / 实体热榜 / 实体详情摘要卡。
  * 鉴权由 AuthInterceptor 拦 /api/kg/**（WebConfig，与 /api/search/** 同法），
  * 无用户维度数据故不读 authUserId；异常经 GlobalExceptionHandler 统一转信封，
  * Controller 保持薄。
@@ -53,6 +53,13 @@ public class KgQueryController {
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "limit", required = false) Integer limit) {
         return ApiResponse.success(kgQueryService.suggest(keyword, limit));
+    }
+
+    /** 实体热榜（时间轴空态「实体热榜 chips」取数）：全局提及次数倒序，与检索建议同载体 */
+    @GetMapping("/entities/hot")
+    public ApiResponse<List<EntitySuggest>> hot(
+            @RequestParam(value = "limit", required = false) Integer limit) {
+        return ApiResponse.success(kgQueryService.hotEntities(limit));
     }
 
     /** 实体详情（摘要卡：别名/锚点/提及与参与事件数/高频共现实体 chips）；不存在 → 404 信封 */

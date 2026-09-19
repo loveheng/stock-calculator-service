@@ -37,6 +37,20 @@ public interface KgEntityRepository extends JpaRepository<KgEntity, Long> {
                                           @Param("limit") int limit);
 
     /**
+     * 实体热榜（时间轴空态「实体热榜 chips」取数）：无关键词，全局提及次数倒序、
+     * 最近提及兜底排序；与 searchSuggest 同投影载体。
+     */
+    @Query(value = """
+            SELECT id AS "id", name AS "name", entity_type AS "entityType",
+                   anchor_type AS "anchorType", mention_count AS "mentionCount"
+            FROM kg_entity
+            WHERE status = 'ACTIVE'
+            ORDER BY mention_count DESC, last_seen_at DESC NULLS LAST
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<EntitySuggestView> findHotEntities(@Param("limit") int limit);
+
+    /**
      * 高频共现实体：同事件共现计数倒序（时间轴实体摘要卡的「关联实体」chips）；
      * 计数并列时按实体自身热度兜底排序。
      */

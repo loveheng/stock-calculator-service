@@ -512,6 +512,7 @@ CREATE TABLE IF NOT EXISTS public.kg_evidence (
 	payload jsonb NOT NULL,
 	model varchar(100) NULL,
 	extracted_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	CONSTRAINT kg_evidence_pkey PRIMARY KEY (id),
 	CONSTRAINT uq_kg_evidence_article UNIQUE (article_id)
 );
