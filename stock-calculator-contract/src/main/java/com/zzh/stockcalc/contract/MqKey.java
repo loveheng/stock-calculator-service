@@ -40,6 +40,11 @@ public final class MqKey {
     /** copilot 画像重抽任务（变化驱动触发，data MemoryProfileWorker） */
     public static final String TASK_MEMORY_PROFILE = "task.memory.profile";
 
+    // ========== task.* kg（docs/ai-pipeline/cls-news-kg.md §4） ==========
+
+    /** 《新闻联播》要闻知识图谱抽取任务（CALENDAR 认领后 main 发布，data KgExtractWorker） */
+    public static final String TASK_KG_EXTRACT = "task.kg.extract";
+
     /** 常态拉取配置快照（main → collector，覆盖式缓存）与续期心跳回报（data → main） */
     public static final String CONTROL_PULL_CONFIG = "control.pull.config";
     public static final String RESULT_PULL_HEARTBEAT = "result.pull.heartbeat";
@@ -65,6 +70,10 @@ public final class MqKey {
         "result.article.ingested";
     /** 向量化计算结果 */
     public static final String RESULT_EMBEDDING_DONE = "result.embedding.done";
+    /** 知识图谱抽取成功（证据 payload 上行，main 落库融合） */
+    public static final String RESULT_KG_DONE = "result.kg.done";
+    /** 知识图谱抽取失败（错误三分类回报，状态机在主服务计次） */
+    public static final String RESULT_KG_FAILED = "result.kg.failed";
 
     // ========== result.* copilot 记忆链 ==========
 

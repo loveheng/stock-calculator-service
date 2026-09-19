@@ -123,3 +123,9 @@ INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, 
     ('job.embedding.report', true, 0, 'CALENDAR', '0 0 1 * * *', 'UTC'),
     ('job.pipeline.watch', true, 0, 'CALENDAR', '0 */5 * * * *', 'Asia/Shanghai')
 ON CONFLICT (task_code) DO NOTHING;
+
+-- news-kg：《新闻联播》要闻时序知识图谱抽取（docs/ai-pipeline/cls-news-kg.md §7）。
+-- job 行暂无 handler 时认领器仅 warn 静默跳过，KgExtractTask 接线前不产生任何投递。
+INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone) VALUES
+    ('job.kg.extract', true, 0, 'CALENDAR', '0 30 2 * * *', 'Asia/Shanghai')
+ON CONFLICT (task_code) DO NOTHING;

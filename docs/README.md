@@ -39,10 +39,11 @@ updated: 2026-09-17
 - [implementation](news-search/implementation.md) · 后端技术实现（Spring Boot :18080）
 - [api](news-search/api.md) · 接口文档（后端开发对接）
 
-## ai-pipeline/ — AI 管道（三条独立管道）
+## ai-pipeline/ — AI 管道（四条独立管道）
 
 - [announcement-rag](ai-pipeline/announcement-rag.md) · 公告提取与蒸馏管道（announcement 域）设计
 - [cls-article-vector](ai-pipeline/cls-article-vector.md) · cls_article 向量化（语义检索基座）设计
+- [cls-news-kg](ai-pipeline/cls-news-kg.md) · 《新闻联播》要闻时序知识图谱（kg 域）设计
 - [ocr-llm](ai-pipeline/ocr-llm.md) · 多渠道 OCR + 免费 LLM 全链路管道
 
 ## architecture/ — 架构与模块拆分

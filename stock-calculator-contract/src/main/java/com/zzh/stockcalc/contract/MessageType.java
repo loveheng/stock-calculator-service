@@ -47,4 +47,10 @@ public final class MessageType {
         MqKey.RESULT_MEMORY_EXTRACTED;
     public static final String RESULT_MEMORY_PROFILE =
         MqKey.RESULT_MEMORY_PROFILE;
+
+    // ========== kg（docs/ai-pipeline/cls-news-kg.md §4） ==========
+
+    public static final String TASK_KG_EXTRACT = MqKey.TASK_KG_EXTRACT;
+    public static final String RESULT_KG_DONE = MqKey.RESULT_KG_DONE;
+    public static final String RESULT_KG_FAILED = MqKey.RESULT_KG_FAILED;
 }

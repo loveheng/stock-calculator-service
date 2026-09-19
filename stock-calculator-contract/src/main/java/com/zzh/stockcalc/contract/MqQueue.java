@@ -52,6 +52,9 @@ public final class MqQueue {
     /** 日历型定时任务工作队列（§8 一次性消费：无 delay 队列、无续种，collector 门控消费） */
     public static final String TASK_HELLO_WORLD = "task.hello.world.q";
 
+    /** 《新闻联播》要闻 KG 抽取任务（worker 竞争消费，prefetch=2） */
+    public static final String TASK_KG_EXTRACT = "task.kg.extract.q";
+
     /** 结果入库（主服务消费，绑定 result.#） */
     public static final String RESULT_INGEST = "result.ingest.q";
 
@@ -71,6 +74,9 @@ public final class MqQueue {
 
     public static final String TASK_HISTORY_SYNC_RETRY =
         "task.history.sync.q.retry";
+
+    public static final String TASK_KG_EXTRACT_RETRY =
+        "task.kg.extract.q.retry";
 
     /** 死信停放队列（消费方 x-death >= 3 后主动投递，绑定 dead.#） */
     public static final String DEAD = "dead.q";

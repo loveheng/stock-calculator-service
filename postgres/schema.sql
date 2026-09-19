@@ -481,3 +481,103 @@ CREATE INDEX IF NOT EXISTS idx_announcement_title_trgm
 	ON public.announcement USING gin (title gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_announcement_summary_trgm
 	ON public.announcement USING gin (summary gin_trgm_ops);
+
+-- =====================================================================
+-- news-kg：《新闻联播》要闻时序知识图谱（2026-09-19，docs/ai-pipeline/cls-news-kg.md §5）。
+-- 管线：main 发布 task.kg.extract → data 无状态 LLM 抽取 → result.kg.done 上行
+-- → main 证据落库（cls_article_kg 状态机 + kg_evidence 判重）→ 融合进图谱四表。
+-- 全部幂等（IF NOT EXISTS / UNIQUE 约束判重），kg_relation.valid_from/valid_to 二期启用。
+-- =====================================================================
+
+-- 抽取任务状态表（1 篇 = 1 任务，复刻 cls_article_embedding 范式）
+CREATE TABLE IF NOT EXISTS public.cls_article_kg (
+	article_id int8 NOT NULL,
+	status varchar(10) DEFAULT 'PENDING' NOT NULL,
+	status_reason varchar(200) NULL,
+	fail_count int4 DEFAULT 0 NOT NULL,
+	content_hash varchar(64) NOT NULL,
+	extracted_at timestamptz NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT cls_article_kg_pkey PRIMARY KEY (article_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cls_article_kg_pending
+	ON public.cls_article_kg (article_id) WHERE status = 'PENDING';
+
+-- 抽取证据表（一篇文章一版，改稿重抽覆盖；图谱可随时从证据重建）
+CREATE TABLE IF NOT EXISTS public.kg_evidence (
+	id bigserial NOT NULL,
+	article_id int8 NOT NULL,
+	content_hash varchar(64) NOT NULL,
+	payload jsonb NOT NULL,
+	model varchar(100) NULL,
+	extracted_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT kg_evidence_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_kg_evidence_article UNIQUE (article_id)
+);
+
+-- 实体表（字典锚点 + 自由实体；MERGED/canonical_id 二期别名归并启用）
+CREATE TABLE IF NOT EXISTS public.kg_entity (
+	id bigserial NOT NULL,
+	name varchar(200) NOT NULL,
+	entity_type varchar(30) NOT NULL,
+	anchor_type varchar(20) NULL,
+	anchor_id varchar(64) NULL,
+	aliases jsonb NULL,
+	first_seen_at timestamptz NULL,
+	last_seen_at timestamptz NULL,
+	mention_count int4 DEFAULT 0 NOT NULL,
+	status varchar(10) DEFAULT 'ACTIVE' NOT NULL,
+	canonical_id int8 NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT kg_entity_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_kg_entity_type_name UNIQUE (entity_type, name)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kg_entity_anchor
+	ON public.kg_entity (anchor_type, anchor_id) WHERE anchor_id IS NOT NULL;
+
+-- 关系边表（一期落库但 valid_from/valid_to 不启用）
+CREATE TABLE IF NOT EXISTS public.kg_relation (
+	id bigserial NOT NULL,
+	subject_entity_id int8 NOT NULL,
+	object_entity_id int8 NOT NULL,
+	predicate varchar(50) NOT NULL,
+	valid_from timestamptz NULL,
+	valid_to timestamptz NULL,
+	confidence numeric(4,3) NULL,
+	evidence_article_id int8 NOT NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT kg_relation_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_kg_relation
+		UNIQUE (subject_entity_id, object_entity_id, predicate, evidence_article_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kg_relation_subject ON public.kg_relation (subject_entity_id);
+CREATE INDEX IF NOT EXISTS idx_kg_relation_object ON public.kg_relation (object_entity_id);
+
+-- 事件表（一期时序主体：事件时间线）
+CREATE TABLE IF NOT EXISTS public.kg_event (
+	id bigserial NOT NULL,
+	article_id int8 NOT NULL,
+	event_time timestamptz NULL,
+	event_time_text varchar(100) NULL,
+	title varchar(300) NOT NULL,
+	detail text NULL,
+	event_type varchar(30) NULL,
+	content_hash varchar(64) NOT NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT kg_event_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_kg_event_article_hash UNIQUE (article_id, content_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_kg_event_time ON public.kg_event (event_time);
+
+-- 事件-实体关联
+CREATE TABLE IF NOT EXISTS public.kg_event_entity (
+	id bigserial NOT NULL,
+	event_id int8 NOT NULL,
+	entity_id int8 NOT NULL,
+	role varchar(30) NULL,
+	CONSTRAINT kg_event_entity_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_kg_event_entity UNIQUE (event_id, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kg_event_entity_entity ON public.kg_event_entity (entity_id);

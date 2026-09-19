@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: task-unify
-total-merged: 0
-last-merge: none
+total-merged: 1
+last-merge: 2026-09-19
 ---
 
 # task-unify：任务管理统一（CALENDAR 消化 → 合表 + executor 策略化）
@@ -24,6 +24,11 @@ last-merge: none
 - hello.world 依赖普查：contract 2 常量（MqKey/MqQueue.TASK_HELLO_WORLD）· data MqTopologyConfig 队列+绑定 + hello/HelloWorldConsumer（~70 行自包含，仅依赖 ResultPublisher）· main 认领引擎全泛型（taskCode 只是数据：PullLoopWatchdogTask / PullLoopDispatchPort / TaskPublisher.dispatchCalendarTask）· postgres/data.sql:115 一行播种 · 测试 PullLoopWatchdogTaskTest 6 CALENDAR 场景 + HelloWorldConsumerTest 3 场景 · docs/architecture/pull-loop-unification.md §8 已实施（§8.8 实施记录）。
 - 测试基线：381（用户口径；§8.8 实施时点为 main 383 / data 79）。
 - 第二步实施对账（2026-09-18）：384 = 384 − 7（删 AppTaskSchedulerTest）− 8（旧 CALENDAR 场景）+ 15（重写 CalendarTaskClaimSchedulerTest：5 MQ 投递 + 5 进程内 + 5 启动校验）全绿；app-task.enabled 收窄为只压制进程内半区（E2E 契约不变，本地 false 构造用例守护）。
+
+## 实施记录
+
+- 第一步、第二步均已实施完结（2026-09-18）：CalendarTaskClaimScheduler 统一认领（validate 注册表 + calendarClaim 双分发）+ 合表策略化全落地，删 AppTaskScheduler*/app_task_config 三件套，schema.sql 幂等迁移段 + data.sql 播种合一 9 行，11 处 javadoc 与 application.yml 注释联动，docs 4 文档联动 + lint 通过；main 384 全绿（对账 384 = 384 − 7 − 8 + 15）。
+- native 契约 DTO 缺口修复（2026-09-19，data 侧已闭环）：ContractRuntimeHints.DTO_TYPES 补登记 PullConfigPayload/PullHeartbeatPayload（message 包 27 类逐一核对仅此两个漏网），data 新增 ContractRuntimeHintsCoverageTest 包扫描守卫（message 包每个具体类必须已注册，人工约定升级为构建期断门）；data native 全量重建 201M ELF + 冒烟过 + LavinMQ 管理台直发 control.pull.config 信封实证 "pull config applied tasks=2" 全链路绿。
 
 ## 断点
 
