@@ -15,9 +15,12 @@ import java.util.List;
  * 查询侧为时间轴卡片流提供日聚合/过滤事件两段原生 SQL（跨 KgEventLink/KgEntity 的
  * EXISTS 子查询用 theta 写法——实体间无 JPA 关联，且别名 jsonb 检索必须下到 SQL）。
  * 过滤参数统一「null = 不限」，pattern 由调用方拼 %kw%。
- * <p>红线：temporal null 参数出现在 IS NULL 位必须显式 CAST 定型——Hibernate 7 对
- * 时间型 null 按未声明类型绑定，PG 无法从「? IS NULL」推断（42P18，实测报
- * could not determine data type of parameter）；String/Long null 自带类型绑定无此问题。</p>
+ * <p>红线：可空参数出现在 IS NULL 位必须显式 CAST 定型——PG 无法从「? IS NULL」
+ * 推断参数类型（42P18 could not determine data type of parameter）。实测两条绑定路径
+ * 行为不同：JVM 动态代理下 temporal null untyped（String/Long 自带类型绑定）；native AOT
+ * （KgEventRepositoryImpl__AotRepository）下 temporal/String null 均 untyped（Long 未单独
+ * 验证）——故 keyword/entityId/eventType/fromTime/toTime 五参在 IS NULL 位全部 CAST，
+ * 一律覆盖任意绑定路径（CAST 对 PG 语义无副作用，比对位可由列/算子自行推断无需加）。</p>
  */
 public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
 
@@ -34,14 +37,14 @@ public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
                    COUNT(*) AS "eventCount",
                    MAX(e.event_time) AS "dayTime"
             FROM kg_event e
-            WHERE (:keyword IS NULL OR e.title ILIKE :keyword OR e.detail ILIKE :keyword
+            WHERE (CAST(:keyword AS text) IS NULL OR e.title ILIKE :keyword OR e.detail ILIKE :keyword
                    OR EXISTS (SELECT 1 FROM kg_event_entity l
                               JOIN kg_entity en ON en.id = l.entity_id
                               WHERE l.event_id = e.id
                                 AND (en.name ILIKE :keyword OR en.aliases::text ILIKE :keyword)))
-              AND (:entityId IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
+              AND (CAST(:entityId AS bigint) IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
                               WHERE l2.event_id = e.id AND l2.entity_id = :entityId))
-              AND (:eventType IS NULL OR e.event_type = :eventType)
+              AND (CAST(:eventType AS text) IS NULL OR e.event_type = :eventType)
               AND (CAST(:fromTime AS timestamptz) IS NULL OR e.event_time >= CAST(:fromTime AS timestamptz))
               AND (CAST(:toTime AS timestamptz) IS NULL OR e.event_time < CAST(:toTime AS timestamptz))
             GROUP BY e.article_id
@@ -60,14 +63,14 @@ public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
     @Query(value = """
             SELECT COUNT(DISTINCT e.article_id)
             FROM kg_event e
-            WHERE (:keyword IS NULL OR e.title ILIKE :keyword OR e.detail ILIKE :keyword
+            WHERE (CAST(:keyword AS text) IS NULL OR e.title ILIKE :keyword OR e.detail ILIKE :keyword
                    OR EXISTS (SELECT 1 FROM kg_event_entity l
                               JOIN kg_entity en ON en.id = l.entity_id
                               WHERE l.event_id = e.id
                                 AND (en.name ILIKE :keyword OR en.aliases::text ILIKE :keyword)))
-              AND (:entityId IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
+              AND (CAST(:entityId AS bigint) IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
                               WHERE l2.event_id = e.id AND l2.entity_id = :entityId))
-              AND (:eventType IS NULL OR e.event_type = :eventType)
+              AND (CAST(:eventType AS text) IS NULL OR e.event_type = :eventType)
               AND (CAST(:fromTime AS timestamptz) IS NULL OR e.event_time >= CAST(:fromTime AS timestamptz))
               AND (CAST(:toTime AS timestamptz) IS NULL OR e.event_time < CAST(:toTime AS timestamptz))
             """, nativeQuery = true)
@@ -84,14 +87,14 @@ public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
     @Query(value = """
             SELECT e.* FROM kg_event e
             WHERE e.article_id IN (:articleIds)
-              AND (:keyword IS NULL OR e.title ILIKE :keyword OR e.detail ILIKE :keyword
+              AND (CAST(:keyword AS text) IS NULL OR e.title ILIKE :keyword OR e.detail ILIKE :keyword
                    OR EXISTS (SELECT 1 FROM kg_event_entity l
                               JOIN kg_entity en ON en.id = l.entity_id
                               WHERE l.event_id = e.id
                                 AND (en.name ILIKE :keyword OR en.aliases::text ILIKE :keyword)))
-              AND (:entityId IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
+              AND (CAST(:entityId AS bigint) IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
                               WHERE l2.event_id = e.id AND l2.entity_id = :entityId))
-              AND (:eventType IS NULL OR e.event_type = :eventType)
+              AND (CAST(:eventType AS text) IS NULL OR e.event_type = :eventType)
               AND (CAST(:fromTime AS timestamptz) IS NULL OR e.event_time >= CAST(:fromTime AS timestamptz))
               AND (CAST(:toTime AS timestamptz) IS NULL OR e.event_time < CAST(:toTime AS timestamptz))
             """, nativeQuery = true)
