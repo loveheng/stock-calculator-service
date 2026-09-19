@@ -36,7 +36,6 @@ updated: 2026-09-19
 
 非目标（一期）：
 
-- 历史存量 1114 条回填（二期：backfill 任务按 ctime 分批）
 - 开放域别名自动归并（MERGED 机制仅预留字段）
 - 关系边有效期抽取与 as-of 查询 API、前端可视化（二期）
 - content 匹配与泛「新闻联播」主题抓取（噪音源，明确不做）
@@ -219,7 +218,7 @@ ORDER BY ctime DESC LIMIT :scanWindow;
 ```
 
 - scanWindow 取 dispatch-limit 的 3 倍，为「最新 3 条未处理」过滤留余量
-- 扫描窗口以 ctime 游标近似——历史汇编含 1114 条存量，LIMIT 3 天然只看最新；二期回填走独立 backfill 任务不经本扫描
+- **历史回填（二期首项，2026-09-19 落地）**：独立 `job.kg.backfill` CALENDAR 行（每 30 分钟，Asia/Shanghai）+ `KgBackfillTask`，与 daily 共用发布核/任务队列/结果通道/限流熔断，worker 与摄取侧零改动；扫描为最旧优先 ASC（`ClsArticleQueryApi.oldestDigestArticles`），窗口 = `kg.backfill.batch-size`（默认 20）× `scan-multiplier`（默认 3），每轮最多补发 batch-size 条——窗口随终态累积自然前滑、追平后窗口内全 DONE 零下发空转；startup 15s 首轮触发与 DB 调度双路径（单飞守卫防重叠），`kg.backfill.enabled=false` 整体停用（E2E 共享 broker 必关）。回填状态行在下发时才建（PENDING 年龄≈在途时长），不预播种全量，PENDING_AGE 巡检语义不受影响
 
 ## 8. 抽取契约与 Prompt 骨架
 
@@ -261,7 +260,7 @@ Prompt 规则（system 骨架，实现随断点迭代）：
 | 期 | 范围 |
 |---|---|
 | 一期（本 epic） | 全链路（调度→发布→抽取→摄取→融合）、字典锚点、事件时间线、证据表、队列巡检接入 |
-| 二期 | 历史回填 backfill（1114 条按 ctime 分批）、别名归并（MERGED 流转人工/规则触发）、kg_relation 有效期与 as-of 查询、查询 API 与前端可视化 |
+| 二期 | 历史回填 backfill ✅ 已落地（2026-09-19：job.kg.backfill 每 30 分钟最旧优先分批补发，存量 1105 条 ≈ 1.2 天追平，见 §7）；别名归并（MERGED 流转人工/规则触发）、kg_relation 有效期与 as-of 查询、查询 API 与前端可视化 |
 
 ## 12. 改动面清单
 
@@ -272,6 +271,6 @@ Prompt 规则（system 骨架，实现随断点迭代）：
 | main crawler | 基包增汇编查询 API（按标题模式取最新候选）与字典锚点查询 API；mq/ClsArticleMqConsumer 分发增 kg 分支；data.sql 播种 job.kg.extract 行 |
 | data | worker/KgExtractWorker（Spring AI ChatClient structured output）、config/KgWorkerConfig（复用 LlmGatewayProperties 网关配置）、错误三分类上报 |
 | schema | postgres/schema.sql 增 6 张表（§5）；postgres/data.sql 增 1 行播种 |
-| 配置 | main application.yml：kg.digest-title-pattern、kg.dispatch-limit、kg.max-fail-attempts |
+| 配置 | main application.yml：kg.digest.*、kg.process.*、kg.backfill.*（enabled/batch-size/scan-multiplier/startup-delay） |
 | 监控 | monitor/PipelineWatchTask 队列清单 + PENDING_AGE 纳入 |
 | 文档/索引 | docs/README.md ai-pipeline 域增条目；stock-calculator-service-index 归属表增 kg 行（实施首轮同步） |

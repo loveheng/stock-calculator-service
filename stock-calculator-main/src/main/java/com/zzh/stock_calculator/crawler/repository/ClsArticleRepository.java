@@ -43,4 +43,10 @@ public interface ClsArticleRepository extends JpaRepository<ClsArticle, Long> {
      * 走 idx_cls_article_ctime 序扫描过滤，命中每天 1 条的汇编稿成本可忽略）。
      */
     List<ClsArticle> findByTitleContainingOrderByCtimeDesc(String title, Limit limit);
+
+    /**
+     * 标题含关键字的最旧电报（news-kg 历史回填扫描：title LIKE %kw%，ctime 正序取前 limit 条；
+     * 扫描窗口随 DONE 累积自然前滑，追平后窗口内全终态零下发）。
+     */
+    List<ClsArticle> findByTitleContainingOrderByCtimeAsc(String title, Limit limit);
 }

@@ -116,6 +116,22 @@ public class ClsArticleQueryApi {
                 .toList();
     }
 
+    /**
+     * 最旧《新闻联播》要闻汇编候选（news-kg 历史回填扫描源，cls-news-kg.md §7 二期）：
+     * 与 {@link #latestDigestArticles} 同口径镜像，ctime 正序取前 limit 条——
+     * 回填「最旧优先」分批补录，窗口随终态累积自然前滑。
+     */
+    public List<DigestArticle> oldestDigestArticles(String titleKeyword, int limit) {
+        if (titleKeyword == null || titleKeyword.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        return articleRepository
+                .findByTitleContainingOrderByCtimeAsc(titleKeyword.trim(), Limit.of(limit))
+                .stream()
+                .map(a -> new DigestArticle(a.getId(), a.getTitle(), a.getCtime(), a.getContent()))
+                .toList();
+    }
+
     private static ArticleHit toArticleHit(ClsArticle article) {
         return new ArticleHit(article.getId(), article.getTitle(), article.getBrief(),
                 article.getContent(), article.getLevel(), article.getCtime());

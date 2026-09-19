@@ -129,3 +129,10 @@ ON CONFLICT (task_code) DO NOTHING;
 INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone) VALUES
     ('job.kg.extract', true, 0, 'CALENDAR', '0 30 2 * * *', 'Asia/Shanghai')
 ON CONFLICT (task_code) DO NOTHING;
+
+-- news-kg 历史回填（二期）：最旧优先 ASC 扫描按批补发 task.kg.extract（kg.backfill.batch-size），
+-- 与 job.kg.extract 共用任务队列/结果通道/限流熔断；追平后窗口内全终态零下发空转，
+-- kg.backfill.enabled=false 可整体停用（startup 首轮触发同门控）。
+INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone) VALUES
+    ('job.kg.backfill', true, 0, 'CALENDAR', '0 */30 * * * *', 'Asia/Shanghai')
+ON CONFLICT (task_code) DO NOTHING;

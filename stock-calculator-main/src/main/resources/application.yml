@@ -254,6 +254,15 @@ kg:
     max-fail-attempts: 5
     # RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，发布端熔断）
     rate-limit-cooldown-minutes: 30
+  backfill:
+    # 历史回填总开关（startup/DB 调度两条触发路径都停；E2E 共享 broker 场景必关）
+    enabled: true
+    # 每轮最多下发任务数（1114 条存量最旧优先分批；每 30 分钟一轮 × 20 ≈ 1.2 天追平）
+    batch-size: 20
+    # 回填扫描窗口倍数（scan = batch-size * multiplier，为未终态过滤留余量）
+    scan-multiplier: 3
+    # 启动后延迟触发首轮回填（与 DB 调度互补，单飞守卫防重叠）
+    startup-delay: 15s
 
 # ======================= search 域（docs/news-search/implementation.md §9） =======================
 # 默认值 = 拍板值（B6 限流 10 次/10s + 综合 3 次/10s；C11 threshold=0.3/topK=10），显式落配置便于调参
