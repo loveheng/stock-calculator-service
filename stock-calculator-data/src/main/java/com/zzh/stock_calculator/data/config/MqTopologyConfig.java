@@ -63,6 +63,12 @@ public class MqTopologyConfig {
         return businessQueue(MqQueue.TASK_EMBEDDING_COMPUTE);
     }
 
+    /** 《新闻联播》要闻 KG 抽取任务（worker 竞争消费，prefetch=2） */
+    @Bean
+    public Queue taskKgExtractQueue() {
+        return businessQueue(MqQueue.TASK_KG_EXTRACT);
+    }
+
     /**
      * 历史补录队列：单活跃消费者（x-single-active-consumer）——单镜像多副本下
      * 「恰一个补录执行者」从打包门控迁移到协议仲裁：全舰队任一时刻仅一个副本
@@ -198,6 +204,11 @@ public class MqTopologyConfig {
     }
 
     @Bean
+    public Queue taskKgExtractRetryQueue() {
+        return retryQueue(MqQueue.TASK_KG_EXTRACT_RETRY, MqExchange.TASKS);
+    }
+
+    @Bean
     public Queue taskHistorySyncRetryQueue() {
         return retryQueue(MqQueue.TASK_HISTORY_SYNC_RETRY, MqExchange.TASKS);
     }
@@ -229,6 +240,11 @@ public class MqTopologyConfig {
             tasksExchange(),
             MqKey.TASK_EMBEDDING_COMPUTE
         );
+    }
+
+    @Bean
+    public Binding taskKgExtractBinding() {
+        return bind(MqQueue.TASK_KG_EXTRACT, tasksExchange(), MqKey.TASK_KG_EXTRACT);
     }
 
     @Bean
@@ -350,6 +366,11 @@ public class MqTopologyConfig {
             dlxExchange(),
             MqKey.TASK_EMBEDDING_COMPUTE
         );
+    }
+
+    @Bean
+    public Binding dlxTaskKgRetryBinding() {
+        return bind(MqQueue.TASK_KG_EXTRACT_RETRY, dlxExchange(), MqKey.TASK_KG_EXTRACT);
     }
 
     @Bean

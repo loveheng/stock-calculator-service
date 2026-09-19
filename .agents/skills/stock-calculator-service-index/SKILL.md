@@ -33,6 +33,7 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 | sync | 服务端密文同步（登录即备份）：快照 CAS 上传/拉取/meta 对账/频控/历史 | controller · dto · entity · repository · service — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/sync -name '*.java'` | docs/server-sync/ |
 | customstat | 用户自定义统计（自选统计定义 CRUD：/api/custom-stats） | controller · dto · entity · repository · service — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/customstat -name '*.java'` | docs/custom-stats/ |
 | announcement | 公告订阅/处理任务下发与结果对账/内容溯源/向量化二段下发 | 基包(AnnouncementQueryApi) · config · controller · dto · entity · event · mq · repository · service · task — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/announcement -name '*.java'` | docs/ai-pipeline/（announcement-rag） |
+| kg | 《新闻联播》要闻时序知识图谱：任务发布（最新 3 条未处理扫描）/结果摄取（证据先行+DONE 判重）/字典锚点融合（实体/关系/事件时间线） | 基包 · config · entity · mq · repository · service · task — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/kg -name '*.java'` | docs/ai-pipeline/（cls-news-kg） |
 | monitor | 拉取循环心跳记录/看门狗/管道巡检告警（pull_heartbeat） | 基包(PullLoopWatchdogTask 等) · entity · repository — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/monitor -name '*.java'` | — |
 | search | 资讯搜索（news-search，:18080） | config · controller · dto · service · task · util — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/search -name '*.java'` | docs/news-search/ |
 | common | 统一响应/全局异常 | 基包，无子包 — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/common -name '*.java'` | — |
@@ -47,6 +48,7 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 - **vision**：截图、OCR、Gemini、vision、识别、草稿、TradeDraft、trade、ocr-parse、图片、预处理、ImagePreprocess、OcrExecutor、缓存、交易截图、截图导入
 - **copilot**：copilot、AI 聊天、AI 对话、DeepSeek、会话、消息、SSE、流式、提示词模板
 - **llm**：llm、LLM、大模型、Groq、provider、模型路由、模型切换、fallback、OpenAI 兼容
+- **kg**：知识图谱、新闻联播、联播要闻、时序图谱、实体、三元组、关系边、事件时间线、证据、融合、锚点、kg
 - **sync**：同步、备份、backup、快照、密文、信封、envelope、CAS、版本冲突、频控、user_sync、云备份、登录即备份
 - **common**：ApiResponse、BusinessException、GlobalExceptionHandler、异常处理、统一响应
 - **customstat**：自定义统计、custom-stats、统计定义、UserCustomStat

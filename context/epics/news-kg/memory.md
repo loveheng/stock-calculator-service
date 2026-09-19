@@ -24,4 +24,4 @@ last-merge: none
 
 ## 断点
 
-- [断点] 下一步：断点三——data 侧 KgExtractWorker（Spring AI ChatClient structured output + LlmGatewayProperties 网关）+ MqTopologyConfig 声明 task.kg.extract.q/.retry（quorum+DLX，prefetch=2）+ 错误三分类上报 + E2E 验证
+- [断点] 下一步：用户验收——重启 main/data 使新队列与 worker 生效，观察次日 02:30 job.kg.extract 首轮（发布→抽取→done→融合→DONE + kg 六表落库），必要时 LavinMQ 管理台核队列；二期可选：历史回填/别名归并/关系有效期/as-of 查询
