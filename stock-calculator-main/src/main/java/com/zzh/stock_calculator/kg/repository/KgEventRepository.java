@@ -15,6 +15,9 @@ import java.util.List;
  * 查询侧为时间轴卡片流提供日聚合/过滤事件两段原生 SQL（跨 KgEventLink/KgEntity 的
  * EXISTS 子查询用 theta 写法——实体间无 JPA 关联，且别名 jsonb 检索必须下到 SQL）。
  * 过滤参数统一「null = 不限」，pattern 由调用方拼 %kw%。
+ * <p>红线：temporal null 参数出现在 IS NULL 位必须显式 CAST 定型——Hibernate 7 对
+ * 时间型 null 按未声明类型绑定，PG 无法从「? IS NULL」推断（42P18，实测报
+ * could not determine data type of parameter）；String/Long null 自带类型绑定无此问题。</p>
  */
 public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
 
@@ -39,8 +42,8 @@ public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
               AND (:entityId IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
                               WHERE l2.event_id = e.id AND l2.entity_id = :entityId))
               AND (:eventType IS NULL OR e.event_type = :eventType)
-              AND (:fromTime IS NULL OR e.event_time >= :fromTime)
-              AND (:toTime IS NULL OR e.event_time < :toTime)
+              AND (CAST(:fromTime AS timestamptz) IS NULL OR e.event_time >= CAST(:fromTime AS timestamptz))
+              AND (CAST(:toTime AS timestamptz) IS NULL OR e.event_time < CAST(:toTime AS timestamptz))
             GROUP BY e.article_id
             ORDER BY MAX(e.event_time) DESC NULLS LAST, e.article_id DESC
             LIMIT :pageSize OFFSET :offset
@@ -65,8 +68,8 @@ public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
               AND (:entityId IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
                               WHERE l2.event_id = e.id AND l2.entity_id = :entityId))
               AND (:eventType IS NULL OR e.event_type = :eventType)
-              AND (:fromTime IS NULL OR e.event_time >= :fromTime)
-              AND (:toTime IS NULL OR e.event_time < :toTime)
+              AND (CAST(:fromTime AS timestamptz) IS NULL OR e.event_time >= CAST(:fromTime AS timestamptz))
+              AND (CAST(:toTime AS timestamptz) IS NULL OR e.event_time < CAST(:toTime AS timestamptz))
             """, nativeQuery = true)
     long countDistinctArticle(@Param("keyword") String keyword,
                               @Param("entityId") Long entityId,
@@ -89,8 +92,8 @@ public interface KgEventRepository extends JpaRepository<KgEvent, Long> {
               AND (:entityId IS NULL OR EXISTS (SELECT 1 FROM kg_event_entity l2
                               WHERE l2.event_id = e.id AND l2.entity_id = :entityId))
               AND (:eventType IS NULL OR e.event_type = :eventType)
-              AND (:fromTime IS NULL OR e.event_time >= :fromTime)
-              AND (:toTime IS NULL OR e.event_time < :toTime)
+              AND (CAST(:fromTime AS timestamptz) IS NULL OR e.event_time >= CAST(:fromTime AS timestamptz))
+              AND (CAST(:toTime AS timestamptz) IS NULL OR e.event_time < CAST(:toTime AS timestamptz))
             """, nativeQuery = true)
     List<KgEvent> findFilteredByArticleIds(@Param("articleIds") Collection<Long> articleIds,
                                            @Param("keyword") String keyword,
