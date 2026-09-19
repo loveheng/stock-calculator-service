@@ -3,6 +3,7 @@ package com.zzh.stock_calculator.crawler.mq;
 import com.rabbitmq.client.Channel;
 import com.zzh.stock_calculator.crawler.AnnouncementIngestApi;
 import com.zzh.stock_calculator.crawler.CopilotMemoryIngestApi;
+import com.zzh.stock_calculator.crawler.KgIngestApi;
 import com.zzh.stock_calculator.crawler.embedding.service.EmbeddingResultService;
 import com.zzh.stock_calculator.crawler.entity.ClsArticle;
 import com.zzh.stock_calculator.crawler.entity.ClsArticleStock;
@@ -28,6 +29,8 @@ import com.zzh.stockcalc.contract.message.ClsStockLink;
 import com.zzh.stockcalc.contract.message.ClsSubjectDict;
 import com.zzh.stockcalc.contract.message.ClsSubjectLink;
 import com.zzh.stockcalc.contract.message.EmbeddingComputeResult;
+import com.zzh.stockcalc.contract.message.KgExtractDonePayload;
+import com.zzh.stockcalc.contract.message.KgExtractFailedPayload;
 import com.zzh.stockcalc.contract.message.PullHeartbeatPayload;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -67,6 +70,8 @@ public class ClsArticleMqConsumer {
     private final ObjectProvider<AnnouncementIngestApi> announcementIngestProvider;
     /** copilot 记忆链入库端口（copilot 基包接口；ObjectProvider 防实现缺失阻启动） */
     private final ObjectProvider<CopilotMemoryIngestApi> copilotMemoryProvider;
+    /** kg 摄取端口（kg 域实现；ObjectProvider 防实现缺失阻启动） */
+    private final ObjectProvider<KgIngestApi> kgIngestProvider;
     /** 跨域事件通道（result.pull.heartbeat → monitor 落表，事件对象在 monitor 基包） */
     private final ApplicationEventPublisher eventPublisher;
 
@@ -119,6 +124,12 @@ public class ClsArticleMqConsumer {
                 envelope
             );
             case MessageType.RESULT_MEMORY_PROFILE -> handleMemoryProfile(
+                envelope
+            );
+            case MessageType.RESULT_KG_DONE -> handleKgDone(
+                envelope
+            );
+            case MessageType.RESULT_KG_FAILED -> handleKgFailed(
                 envelope
             );
             case MessageType.RESULT_CLS_HISTORY_REPORT -> log.info(
@@ -554,6 +565,84 @@ public class ClsArticleMqConsumer {
             "mq memory profile dispatched, messageId={}",
             envelope.getMessageId()
         );
+    }
+
+    /**
+     * result.kg.done（docs/ai-pipeline/cls-news-kg.md §6/§9）：worker 抽取成果 → 端口落账
+     * （证据行 upsert + 图谱融合均在 kg 域内）。载荷非法业务性跳过（ack 丢弃）；
+     * 其余异常抛出 → handleFailure 重试环。
+     */
+    private void handleKgDone(MessageEnvelope envelope) {
+        if (!schemaSupported(envelope)) {
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
+            return;
+        }
+        KgExtractDonePayload payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            KgExtractDonePayload.class
+        );
+        KgIngestApi ingestApi = kgIngestProvider.getIfAvailable();
+        if (ingestApi == null) {
+            log.error(
+                "kg ingest api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
+            return;
+        }
+        boolean ingested = ingestApi.ingestDone(payload);
+        if (ingested) {
+            log.info(
+                "mq kg done ingested, articleId={}, messageId={}",
+                payload == null ? null : payload.getArticleId(),
+                envelope.getMessageId()
+            );
+        } else {
+            log.debug("mq kg done skipped, messageId={}", envelope.getMessageId());
+        }
+    }
+
+    /**
+     * result.kg.failed（docs/ai-pipeline/cls-news-kg.md §6）：worker 错误分类回报 → 端口落账
+     * （fail_count 计次/终态判定，RATE_LIMITED 触发发布端熔断窗口）。
+     * 载荷非法/未知文章/非 PENDING 行业务性跳过；其余异常抛出 → handleFailure 重试环。
+     */
+    private void handleKgFailed(MessageEnvelope envelope) {
+        if (!schemaSupported(envelope)) {
+            log.error(
+                "unsupported schemaVersion={} type={} messageId={}",
+                envelope.getSchemaVersion(),
+                envelope.getType(),
+                envelope.getMessageId()
+            );
+            return;
+        }
+        KgExtractFailedPayload payload = objectMapper.convertValue(
+            envelope.getPayload(),
+            KgExtractFailedPayload.class
+        );
+        KgIngestApi ingestApi = kgIngestProvider.getIfAvailable();
+        if (ingestApi == null) {
+            log.error(
+                "kg ingest api absent, dropped, messageId={}",
+                envelope.getMessageId()
+            );
+            return;
+        }
+        boolean ingested = ingestApi.ingestFailed(payload);
+        if (ingested) {
+            log.info(
+                "mq kg failed ingested, articleId={}, messageId={}",
+                payload == null ? null : payload.getArticleId(),
+                envelope.getMessageId()
+            );
+        } else {
+            log.debug("mq kg failed skipped, messageId={}", envelope.getMessageId());
+        }
     }
 
     private void handleFailure(

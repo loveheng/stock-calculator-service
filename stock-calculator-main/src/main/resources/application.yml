@@ -203,7 +203,7 @@ embedding:
     # 口令不落库，同 POSTGRES_PASS 模式经环境变量注入
     account-id: ${CLOUDFLARE_ACCOUNT_ID:}
     api-token: ${CLOUDFLARE_API_TOKEN:}
-    model: '@cf/baai/bge-m3'
+    model: ${CLOUDFLARE_MODEL:'@cf/baai/bge-m3'}
     dimensions: 1024
   # 单日回填上限（免费额度 10000 Neurons/日，00:00 UTC 刷新；bge-m3 计价实测 1075 Neurons/M tokens，
   # 均值 ~115 tokens/条 → 60000 条/天 ≈ 75%~84% 额度；留 ~20% 防回填打爆当日额度
@@ -238,6 +238,22 @@ announcement:
   pdf:
     # 超体积终态判定阈值（result.announcement.collected 消费端）
     max-size-mb: 50
+
+# ======================= kg 域（docs/ai-pipeline/cls-news-kg.md §7） =======================
+# 调度走 pull_task_config CALENDAR 行（job.kg.extract，改库即生效，代码零定时器）
+kg:
+  digest:
+    # 汇编稿标题关键字（title LIKE %kw%；content 匹配有噪音，勿改用 content 口径）
+    title-keyword: 《新闻联播》要闻
+    # 每轮最多下发任务数（每天产 1 条，3 = 3 天追赶窗口，覆盖断档自愈）
+    dispatch-limit: 3
+    # 候选扫描窗口倍数（scan = dispatch-limit * multiplier，为未终态过滤留余量）
+    scan-multiplier: 3
+  process:
+    # 瞬时失败计次上限，达限落 FAILED 终态
+    max-fail-attempts: 5
+    # RATE_LIMITED 上报后暂停任务发布的冷却窗口（分钟，发布端熔断）
+    rate-limit-cooldown-minutes: 30
 
 # ======================= search 域（docs/news-search/implementation.md §9） =======================
 # 默认值 = 拍板值（B6 限流 10 次/10s + 综合 3 次/10s；C11 threshold=0.3/topK=10），显式落配置便于调参

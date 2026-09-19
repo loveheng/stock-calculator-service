@@ -24,4 +24,4 @@ last-merge: none
 
 ## 断点
 
-- [断点] 下一步：断点二——crawler 基包汇编/字典查询 API + main kg 域骨架（KgExtractTask handler、KgExtractPublisher、KgResultService、KgFuseService、entity×6、repository×6）+ application.yml kg.* 配置 + monitor 队列巡检接入
+- [断点] 下一步：断点三——data 侧 KgExtractWorker（Spring AI ChatClient structured output + LlmGatewayProperties 网关）+ MqTopologyConfig 声明 task.kg.extract.q/.retry（quorum+DLX，prefetch=2）+ 错误三分类上报 + E2E 验证

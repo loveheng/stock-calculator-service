@@ -40,7 +40,8 @@ public class PipelineWatchTask implements AppTaskHandler {
 
     /** 任务队列（data 侧消费）；consumer 归零 = 数据服务停机（all-in-one 部署口径） */
     private static final List<String> TASK_QUEUES =
-            List.of(MqQueue.TASK_ANNOUNCEMENT_PROCESS, MqQueue.TASK_EMBEDDING_COMPUTE);
+            List.of(MqQueue.TASK_ANNOUNCEMENT_PROCESS, MqQueue.TASK_EMBEDDING_COMPUTE,
+                    MqQueue.TASK_KG_EXTRACT);
 
     private final RabbitManagementClient managementClient;
     private final JdbcTemplate jdbcTemplate;
@@ -113,6 +114,9 @@ public class PipelineWatchTask implements AppTaskHandler {
         pendingAge("cls_article_embedding",
                 "SELECT COUNT(*), COALESCE(EXTRACT(EPOCH FROM (now() - MIN(created_at))), 0)"
                         + " FROM cls_article_embedding WHERE status = 'PENDING'");
+        pendingAge("cls_article_kg",
+                "SELECT COUNT(*), COALESCE(EXTRACT(EPOCH FROM (now() - MIN(created_at))), 0)"
+                        + " FROM cls_article_kg WHERE status = 'PENDING'");
     }
 
     private void pendingAge(String kind, String sql) {

@@ -31,6 +31,9 @@ public interface AppTaskHandler {
     /** 数据管线巡检告警（队列积压/停机/PENDING 停滞，R4） */
     String TASK_PIPELINE_WATCH = "job.pipeline.watch";
 
+    /** 《新闻联播》要闻知识图谱抽取（PENDING 扫描 → task.kg.extract，docs/ai-pipeline/cls-news-kg.md） */
+    String TASK_KG_EXTRACT = "job.kg.extract";
+
     /** 任务码（pull_task_config.task_code，job. 前缀） */
     String taskCode();
 

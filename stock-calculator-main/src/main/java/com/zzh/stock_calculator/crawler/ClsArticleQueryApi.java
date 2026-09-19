@@ -101,6 +101,21 @@ public class ClsArticleQueryApi {
                 .toList();
     }
 
+    /**
+     * 最新《新闻联播》要闻汇编候选（news-kg 发布器扫描源，docs/ai-pipeline/cls-news-kg.md §7）：
+     * title 含关键字（LIKE %kw%）按 ctime 倒序取前 limit 条；正文随载体直入任务 payload（data 不回源）。
+     */
+    public List<DigestArticle> latestDigestArticles(String titleKeyword, int limit) {
+        if (titleKeyword == null || titleKeyword.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        return articleRepository
+                .findByTitleContainingOrderByCtimeDesc(titleKeyword.trim(), Limit.of(limit))
+                .stream()
+                .map(a -> new DigestArticle(a.getId(), a.getTitle(), a.getCtime(), a.getContent()))
+                .toList();
+    }
+
     private static ArticleHit toArticleHit(ClsArticle article) {
         return new ArticleHit(article.getId(), article.getTitle(), article.getBrief(),
                 article.getContent(), article.getLevel(), article.getCtime());
@@ -113,5 +128,9 @@ public class ClsArticleQueryApi {
     /** 关键词精确检索命中项（基包公开载体，字段对齐 EmbeddingSearchApi.Hit，无相关性分数） */
     public record ArticleHit(Long articleId, String title, String brief, String content,
                              String level, Long ctime) {
+    }
+
+    /** 汇编候选载体（news-kg；content 为电报正文全文，level 恒 B 不需携带） */
+    public record DigestArticle(Long articleId, String title, Long ctime, String content) {
     }
 }
