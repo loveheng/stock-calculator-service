@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
@@ -210,7 +211,12 @@ public class KgFuseService {
         }
     }
 
-    /** ISO-8601 容错解析：OffsetDateTime 优先，Instant（无时区 Z 之外的 UTC 时刻）兜底 */
+    /**
+     * ISO-8601 容错解析：OffsetDateTime 优先 → Instant → 纯日期串兜底。
+     * 纯日期（yyyy-MM-dd）是 worker 的事实主流输出（证据实测几乎全为此形态，只能归一到
+     * 日期精度），按本地时区当日零点落锚；查询侧展示/过滤必须用同一时区
+     * （ZoneId.systemDefault()）提取日期，跨时区部署会整体平移一天。
+     */
     private OffsetDateTime parseTime(String time) {
         if (time == null || time.isBlank()) {
             return null;
@@ -222,8 +228,13 @@ public class KgFuseService {
             try {
                 return Instant.parse(value).atZone(ZoneId.systemDefault()).toOffsetDateTime();
             } catch (DateTimeParseException e2) {
-                log.warn("kg event time unparsable, kept null (timeText fallback), value={}", value);
-                return null;
+                try {
+                    return LocalDate.parse(value)
+                            .atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+                } catch (DateTimeParseException e3) {
+                    log.warn("kg event time unparsable, kept null (timeText fallback), value={}", value);
+                    return null;
+                }
             }
         }
     }

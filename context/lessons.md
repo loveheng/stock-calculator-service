@@ -76,3 +76,5 @@ main 由 IDE 托管时 AI 出口代理不稳定，且 JVM 全局代理会劫持 
 
 ## 追加区
 
+- [kg] main 重启验收首条 result.kg.done 摄取即崩：column kg_evidence.created_at does not exist（ingestDone→upsertEvidence→findByArticleId） ➔ 断点二实体 KgEvidence 带 @CreationTimestamp created_at 字段，断点一 schema.sql DDL 漏了该列；ddl-auto=none 下 Hibernate 不补列，而断点一的 DDL 试跑只验「SQL 本身可执行」（BEGIN-ROLLBACK）不验「实体↔表逐列对齐」，常规验证命令又排除两个 @SpringBootTest → 集成层对齐零覆盖，漏到运行期才炸 ➔ 新表落 schema.sql 时以实体字段清单为基准逐列核对（漂移只在运行期暴露）；可用 -Dspring.jpa.hibernate.ddl-auto=validate 跑 contextLoads 做全库对齐审计（零改动、复用现有测试），或正式启用 validate 让漂移启动期 fail-fast；已建表的线上库用 ALTER TABLE ADD COLUMN IF NOT EXISTS 补列（CREATE TABLE IF NOT EXISTS 对存量表不生效）。(Ref: news-kg)
+- [kg] LLM 抽取时间字段实测 100% 为纯日期串（yyyy-MM-dd），ISO 容错解析仅认 OffsetDateTime/Instant 致 kg_event.event_time 全量 null、时序图谱时间轴空转 ➔ 解析链缺 LocalDate 兜底分支（纯日期按 systemDefault 当日零点落锚，展示/过滤必须同时区提取日期） ➔ LLM 结构化输出的时间/数值字段解析按「最宽格式优先」编写前先查证据实测格式，不能只认标准 ISO 全形 (Ref: news-kg)

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,9 @@ public interface ClsArticleRepository extends JpaRepository<ClsArticle, Long> {
 
     /** 窗口内新增电报数（按发布时间 ctime，秒；统计报告用，爬虫近实时入库 ctime ≈ 入库时间） */
     long countByCtimeGreaterThanEqual(Long ctime);
+
+    /** 按主键批量取电报（news-kg 时间轴日头场景：≤ pageSize 量级，id 集合来自图谱聚合） */
+    List<ClsArticle> findByIdIn(Collection<Long> ids);
 
     /**
      * 关键词精确检索（短查询路由路径）：content 子串匹配（LIKE '%kw%'，走 pg_trgm GIN 索引），

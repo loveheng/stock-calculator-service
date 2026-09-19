@@ -22,7 +22,8 @@ last-merge: none
 - LLM 错误三分类：解析失败 PERMANENT / 网络 TRANSIENT 留 PENDING 对账重发（仿 EmbeddingErrorClassifier）。
 - 事件时间归一化：以正文绝对日期为准，相对表述基于文章 ctime；标题日期与联播播出日可能差一天。
 - 历史回填（二期首项，2026-09-19 落地）：独立 job.kg.backfill（每 30min）最旧优先 ASC 分批补发，复用 task.kg.extract 队列/结果通道/熔断，无独立状态机；kg.backfill.batch-size=20 / scan-multiplier=3 / startup-delay=15s，enabled 总开关（E2E 必关）；状态行下发时才建，不预播种（保 PENDING_AGE 语义）。
+- 前端可视化定案（2026-09-19）：搜索驱动 + 竖向时间轴合体——时间轴卡片流为唯一渲染形态，搜索（关键词/实体）为入口；空态 = 最近时间轴 + 实体热榜 chips（用户拍板不展示补录进度）；API 三端点 /api/kg/timeline（搜索与浏览共用，日分页 page 0 起）/entities/suggest/entities/{id}，鉴权挂 AuthInterceptor（/api/kg/**）；keyword 命中口径=事件文本 OR 关联实体名/别名（jsonb::text ILIKE）；时区约定 event_time 落库与展示同用 systemDefault。
 
 ## 断点
 
-- [断点] 下一步：回填观察——重启 main/data（sql.init 幂等建 kg 六表+播种生效）后验证 KgBackfillTask startup 首轮与每 30min 轮次：task.kg.extract.q 流动、cls_article_kg PENDING→DONE、kg 六表增长，存量 1105 条约 1.2 天追平后空转零下发；必要时 LavinMQ 管理台核队列。二期剩余可选：别名归并/关系有效期/as-of 查询
+- [断点] 下一步：主服务重启生效 parseTime 修复（窗口期融合的日期事件可重跑回填 SQL）→ 前端按 /api/kg 契约接时间轴页面；注意：回填中 FAILED 已涨到 9 条（PERMANENT），需人工抽查 evidence/失败原因决定是否置回 PENDING

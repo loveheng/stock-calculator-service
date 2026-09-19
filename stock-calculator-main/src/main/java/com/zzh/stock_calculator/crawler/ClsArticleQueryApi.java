@@ -132,6 +132,21 @@ public class ClsArticleQueryApi {
                 .toList();
     }
 
+    /**
+     * 按主键批量取电报头（news-kg 时间轴日头：articleId → 标题/ctime，仅头不取正文）；
+     * 未知 id 静默跳过（图谱行与源表弱一致，源站撤稿时日头缺省为空串）。
+     */
+    public Map<Long, ArticleHead> articleHeadsByIds(Collection<Long> articleIds) {
+        if (articleIds == null || articleIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ArticleHead> result = new LinkedHashMap<>();
+        for (ClsArticle a : articleRepository.findByIdIn(articleIds)) {
+            result.put(a.getId(), new ArticleHead(a.getId(), a.getTitle(), a.getCtime()));
+        }
+        return result;
+    }
+
     private static ArticleHit toArticleHit(ClsArticle article) {
         return new ArticleHit(article.getId(), article.getTitle(), article.getBrief(),
                 article.getContent(), article.getLevel(), article.getCtime());
@@ -148,5 +163,9 @@ public class ClsArticleQueryApi {
 
     /** 汇编候选载体（news-kg；content 为电报正文全文，level 恒 B 不需携带） */
     public record DigestArticle(Long articleId, String title, Long ctime, String content) {
+    }
+
+    /** 电报头载体（news-kg 时间轴日头；仅标题与发布时间，不含正文） */
+    public record ArticleHead(Long articleId, String title, Long ctime) {
     }
 }
