@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # MCP 服务实现规划（stock-calculator-mcp）
@@ -42,7 +42,7 @@ updated: 2026-09-19
 ## 四、M3 calc 工具
 
 1. quote/：EastmoneyDailyClient（RestClient 拉日线 250-500 根）+ TencentDailyClient 备用实现位；
-   Caffeine 缓存（key=stockId+days，TTL 到收盘后失效粒度即可）。
+   Redis 行情缓存（key=quote:daily:{stockId}|{days}，TTL 30min；2026-09-20 由 Caffeine 改定，见 design.md §5.4）。
 2. indicator/：ta4j 封装——MaSeries/MacdSeries/RsiSeries/BollSeries/KdjSeries，
    输入 BarSeries 输出最新值 + 近 N 日趋势摘要（升/降/金叉死叉标记）。
 3. tool/：StockAnalysisTool / StockDailyTool（@Tool 注解，description 按 design.md §九口径写）。
@@ -77,8 +77,44 @@ updated: 2026-09-19
 - @SpringBootTest / MCP 客户端实测依赖本地中间件容器存活（compose + .env 口令，见 workflow skill）。
 - mcp 模块不涉及 native 构建与 E2E MQ 门控。
 
-## 七、文档联动
+## 七、M5 行情落库（2026-09-20 追加）
+
+- quote_daily 表（sql.init 自动建）；QuoteSyncService：全窗口/增量窗口（last_date-10d）判定 + JdbcTemplate
+  ON CONFLICT 批量 upsert + 读库；EastmoneyDailyClient 纯化为 fetchWindow（无缓存）。
+- 工具 stock_analysis/stock_daily 改读库；管理口 POST /admin/quote/resync（漂移修复）、
+  GET /admin/quote/bars?stockId&from&to（全量分析读取）、GET /admin/quote/status。
+- Redis 行情缓存（quote:daily:*，当日寿命半日）由落库取代退役。
+
+## 八、M6 支撑压力工具（2026-09-20 追加）
+
+- indicator/SupportResistanceService：三法合一——昨根枢轴点公式（P/R1/S1/R2/S2，平盘日同价去重）、
+  摆动高低点严格极值检测（左右各 3 根确认，末段未确认不计）+ 1.5% 阈值聚类成带（触及计数）、
+  近似 Volume Profile（30 桶摊派 volume，HVN=均值 1.8 倍以上相邻合并，取前 3 带）。
+- tool/StockLevelsTool（stock_levels）：现价上方为压力由近及远、下方为支撑由近及远各 ≤5 档；
+  输出位带（low-high）+ 类型 + 触及次数/成交量占比 + 距现价 %。手算对照单测 4 条。
+
+## 九、文档联动
 
 - M3/M4 工具定稿后：本域新增 docs/mcp/api.md 固化工具契约（design.md §九 为活口径，api.md 为冻结快照）。
 - 灌书管线若调参（切块/批次）：回写 design.md §8.2。
 - main 侧 StockDictRedisSync 属 crawler 域核心流程：完成后按 docs 规范 §二 提示核对 crawler 相关文档。
+
+## 十、M7 博主观点库 M1（2026-09-20 追加，epic: mcp-blogger-kb）
+
+- 订阅源注册表 kb_source（name 唯一 / source_type text|rss / location / status active|removed）+
+  /admin/source REST 口：POST 注册即灌入、DELETE 移除（停更保数据，检索侧过滤 removed 源）、
+  GET 清单（含块数）。RSS 拉取属 M1b，注册入口先行拒绝避免半注册源。
+- 微博备份解析 KbWeiboBackupParser：头块跳过、一条微博=一个观点单元 chunk、published_at 提取、
+  纯媒体条目（分享图片/视频）与「转发微博」标记行剔除；非微博格式 txt 回落 600/80 切块。
+- 博主伪书：kb_book category=blogger + source_id 关联（kb_book/kb_chunk 补列 ALTER IF NOT EXISTS）；
+  KbIngestService.ingestSource 与灌书共用批量向量化写入；灌入幂等 = 按书 truncate 重载。
+- E2E 实证：注册「麻辣新鲜」（微博备份 59 条）→ 55 块入库全部带 published_at（09-06→09-20）→
+  删除后块保留（停更保数据）→ 重注册重灌 55/55 → MCP kb_search 真调命中「麻辣新鲜/微博时间」
+  出处，与书籍段落同榜返回。旧实例占 18081 需先杀再起新构建。
+- 单测 33/33（新增解析器/灌入编排/源服务 8 条）。
+- M1b（同日追加，RSS 增量）：KbRssFeedParser（JDK DOM 零依赖；RSS 2.0/Atom；标题型 feed 的
+  description 复读标题自动去重，块=标题+链接；RFC-822/ISO-8601 时间双容错折算系统时区）+
+  KbRssPoller（默认 6h，kb.rss.* 门控，逐源 fail-open）+ POST /admin/source/{name}/refresh 手动刷新；
+  ingestSourceRss 按 content_hash 增量只补新条目（chunk_index 续排，chapter_path=条目标题）。
+  E2E：注册「政策法规」（gov.cn 标题型 feed）首拉 11/11、refresh 二刷 0 新 11 跳、检索真调命中。
+  单测 38/38。

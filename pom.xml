@@ -20,6 +20,7 @@
         <module>stock-calculator-contract</module>
         <module>stock-calculator-main</module>
         <module>stock-calculator-data</module>
+        <module>stock-calculator-mcp</module>
     </modules>
     <dependencyManagement>
         <dependencies>

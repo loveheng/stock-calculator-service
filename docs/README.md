@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # 文档索引
@@ -51,6 +51,7 @@ updated: 2026-09-19
 
 - [design](mcp/design.md) · stock-calculator-mcp 模块设计（独立模块/独立库/Redis 字典镜像/bge-m3 复用）
 - [implementation](mcp/implementation.md) · 实现规划（M1 骨架建库 → M2 字典镜像 → M3 calc → M4 kb RAG）
+- [usage](mcp/usage.md) · 使用手册（启停/客户端接入/六工具速查/订阅源管理/加书/管理口/FAQ）
 
 ## architecture/ — 架构与模块拆分
 

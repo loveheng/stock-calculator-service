@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: stock-mcp
+  datasource:
+    # 独立库 stock_mcp（D2）：与主库 scs 同实例不同库；变量名带 _MCP 后缀，
+    # 防止 .env 里指向主库的 POSTGRES_URL 误伤本模块；口令同实例复用 POSTGRES_PASS
+    url: ${POSTGRES_URL_MCP:jdbc:postgresql://localhost/stock_mcp}
+    username: ${POSTGRES_USER_MCP:root}
+    # 口令不落库：必须通过 POSTGRES_PASS 环境变量注入
+    password: ${POSTGRES_PASS:}
+  data:
+    redis:
+      # 变量名与 main 同款（.env 的 REDIS_HOST=redis 经 /etc/hosts 127.0.0.1 映射可用）
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # 字典为旁路设施：故障快速失败走 fail-open 降级，不拖启动
+      connect-timeout: 2s
+      timeout: 2s
+  sql:
+    init:
+      # mcp-schema.sql（kb 两表 + vector 扩展）每次启动幂等执行；回滚此行 = 停用
+      mode: always
+      schema-locations: classpath:mcp-schema.sql
+  jpa:
+    hibernate:
+      # 库表以 sql.init 为准，validate 保持实体↔DDL 账实对齐（main 同款审计口径）
+      ddl-auto: validate
+  ai:
+    mcp:
+      server:
+        name: stock-mcp
+        version: 0.0.1
+
+server:
+  port: 18081
+
+# 本地书库知识检索（kb RAG，design.md §八）
+cf:
+  account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+  api-token: ${CLOUDFLARE_API_TOKEN:}
+kb:
+  rss:
+    # RSS 订阅源轮询（M1b）：默认 6h 一轮、启动 1min 后首拉；本地自用无更密需求
+    poll-enabled: true
+    poll-fixed-delay-ms: 21600000
+    poll-initial-delay-ms: 60000
+  ingest:
+    # 离线灌书开关：默认关；启用需同时给 path/title（见 KbIngestProperties javadoc）
+    enabled: false
+    path: ''
+    title: ''
+    author: ''
+    category: ''

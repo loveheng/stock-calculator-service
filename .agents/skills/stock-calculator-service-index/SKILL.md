@@ -20,7 +20,7 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 - 测试目录与主源同域镜像：`stock-calculator-main/src/test/java/com/zzh/stock_calculator/`
 - data 模块 Base 包：`stock-calculator-data/src/main/java/com/zzh/stock_calculator/data/`（MQ 拉取循环 + 公告/向量化 worker；子包 announcement/cls/config/hello/ingest/llm/mq/worker）
 - contract 模块：`stock-calculator-contract/src/main/java/com/zzh/stockcalc/contract/`（MqKey/MqQueue/MessageType/MqExchange 等契约常量，消息 payload 在 message/ 子包；包名无下划线）
-- mcp 模块（规划中，未建，M1 落地后更新本行）：`stock-calculator-mcp/src/main/java/com/zzh/stock_calculator/mcp/`（本地 MCP 服务 :18081；子包 tool/kb/quote/indicator；独立库 stock_mcp + Redis 字典镜像；文档落点 docs/mcp/）
+- mcp 模块：`stock-calculator-mcp/src/main/java/com/zzh/stock_calculator/mcp/`（本地 MCP 服务 :18081，JVM 模式；子包 tool/dict/kb/quote/indicator；独立库 stock_mcp + Redis 字典镜像 stock:dict；文档落点 docs/mcp/）
 
 ## 归属表
 

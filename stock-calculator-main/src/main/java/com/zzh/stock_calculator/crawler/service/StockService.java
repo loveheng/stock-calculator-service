@@ -1,6 +1,7 @@
 package com.zzh.stock_calculator.crawler.service;
 import com.zzh.stock_calculator.crawler.entity.Stock;
 import com.zzh.stock_calculator.crawler.repository.StockRepository;
+import com.zzh.stock_calculator.crawler.util.StockDictRedisSync;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class StockService {
 
     private final StockRepository stockRepository;
+    private final StockDictRedisSync stockDictRedisSync;
 
     /**
      * 不存在则插入，已存在则跳过
@@ -22,6 +24,7 @@ public class StockService {
             return;
         }
         stockRepository.save(stock);
+        stockDictRedisSync.syncOne(stock);
         log.debug("inserted new stock, stockId={}, name={}", stock.getStockId(), stock.getName());
     }
 }

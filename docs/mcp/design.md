@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # MCP 服务设计（stock-calculator-mcp）
@@ -48,7 +48,7 @@ flowchart LR
     subgraph M["stock-calculator-mcp :18081"]
         T["tool 层<br/>4 个 MCP 工具"] --> QI["quote / indicator<br/>日线客户端 + ta4j"]
         T --> KB["kb<br/>向量检索 + 出处拼接"]
-        QI --- CACHE["进程内 Caffeine 缓存"]
+        QI -->|"增量同步 upsert"| DBQ[("quote_daily<br/>日线落库 stock_mcp")]
     end
 ```
 
@@ -71,9 +71,8 @@ stock-calculator-mcp/            新 Maven 模块（父 POM 挂载，packaging j
 | spring-ai-starter-mcp-server-webmvc | MCP 服务端（Streamable HTTP，端口 18081） |
 | spring-ai-starter-model-openai + pgvector | 查询侧 embedding（bge-m3）与向量检索 |
 | spring-boot-starter-data-jpa + postgresql | kb 两表读写 |
-| spring-boot-starter-data-redis | 字典镜像读取 |
+| spring-boot-starter-data-redis | 字典镜像读取（行情缓存已由 quote_daily 落库取代，D9） |
 | ta4j | 技术指标计算（纯 Java，约 130+ 指标） |
-| caffeine | 行情日线进程内缓存 |
 
 **明确不引入**：amqp / stock-calculator-contract / spring-security / native 构建脚本。
 
@@ -102,10 +101,27 @@ stock-calculator-mcp/            新 Maven 模块（父 POM 挂载，packaging j
 - main 为唯一写入方；mcp 只读：启动时 HGETALL 一次性载入内存 Map（约 5000 条 ≈ 1MB），
   代码 ↔ 名称 ↔ 曾用名双向解析全在内存做，不逐请求查 Redis。
 
-### 5.4 行情缓存：进程内
+### 5.4 行情落库：quote_daily（D9，2026-09-20；由 Redis 行情缓存再演进）
 
-- Caffeine + TTL，key = stockId+天数；TTL 内重复请求不外呼。
-- 刻意不落 PG：日线按需拉取即可满足指标计算，落库是路线二（选股/回测）的事。
+- 表：quote_daily（stock_mcp），UNIQUE(stock_id, trade_date)，前复权口径（adjust=qfq）。
+- 同步规则：新书/存量不足 → 全窗口（days×2+30 日历日）；存量足 → 增量窗口 last_date-10 天，
+  ON CONFLICT 批量 upsert（JdbcTemplate batch）。工具读库（近 n 根），管理口读任意区间。
+- 已知取舍：前复权历史在除权后整体漂移，10 日重叠只修复近端；远端漂移用
+  POST /admin/quote/resync?stockId=&days= 手动全量重灌修复。
+- 演进路径：Redis 行情缓存（当日退役）→ quote_daily 落库；全市场批量灌入仍属路线二独立 epic，复用本表。
+
+### 5.5 订阅源注册表 kb_source（mcp-blogger-kb M1，2026-09-20）
+
+- 博主观点库源登记：name（唯一，= 博主名 = 伪书名）/ source_type（text|rss）/ location（txt 路径或
+  RSS URL）/ status（active|removed）。管理走 /admin/source（POST 注册即灌入、DELETE 停更保数据、GET 清单）。
+- kb_book 加 source_id 关联（博主伪书 category=blogger）；kb_chunk 加 published_at（条目发布时间，
+  供观点时效排序）。removed 源：轮询跳过 + kb_search 过滤，已入库观点保留。
+- RSS 增量（M1b）：KbRssPoller 默认 6h 轮询（kb.rss.* 门控，逐源 fail-open）+
+  POST /admin/source/{name}/refresh 手动刷新；按 content_hash 只补新条目。
+  解析 JDK DOM 零依赖（RSS 2.0/Atom）：全文型取 content:encoded、标题型 feed（description 复读
+  标题）去重后块=标题+链接，当条目雷达用。
+- 微博备份导出（「日期 | 原创/转发」+ 正文 + 长横线分隔）一条即一个观点单元 chunk，不走 600/80；
+  非该格式 txt 回落通用切块。
 
 ## 六、股票字典镜像（main 侧唯一改动点）
 
@@ -118,14 +134,15 @@ main 现状：stock 表仅 crawler 域使用，Redis 中无字典镜像（Redis 
 
 ## 七、指标计算（calc）
 
-**路线一（一期，按需现算）**：工具入参股票代码 → 校验字典 → 东财/腾讯公开日线接口拉近 250-500 根 →
-ta4j 内存计算 → 返回指标值。零管道零行情表，个人频率下公开接口绰绰有余。
+**路线一（一期，2026-09-20 升级为按需落库）**：工具入参股票代码 → 字典解析 → QuoteSyncService 增量同步
+（新窗口全量 / 存量足只拉 last_date-10 天增量，ON CONFLICT upsert 进 quote_daily）→ 读库 → ta4j 计算 → 返回指标值。
+被查询过的股票自动积累全量历史，支撑后续大范围分析（路线二的低成本前奏）。
 
 **路线二（后置，独立 epic）**：全市场日线经 data 模块拉取循环落 stock_daily 表 → 支撑全市场选股与回测。
 一期不做；若未来做，mcp 的 calc 工具改为读库，工具契约不变。
 
 - 只做**日线**：分钟线/实时盘口免费源不稳定，经典书籍方法论亦基于日线。
-- ta4j 选型理由：Java 生态标准库，130+ 指标免手搓（KDJ/SAR 手算易错），纯 Java 对 JVM 零负担。
+- ta4j 选型理由：Java 生态标准库，130+ 指标免手搓（KDJ/SAR 手算易错），纯 Java 对 JVM 零负担；版本钉 0.17（实测 0.18 起字节码基线升级，0.22.8+ 为 class v69=Java 25，无法在 Java 21 工具链编译运行）。
 - 粗粒度返回原则：stock_analysis 一次返回全家桶**最新值 + 近期趋势摘要**，严禁吐完整序列——
   数万数字灌进 LLM 上下文是灾难；需要原始序列的客户端显式调 stock_daily。
 
@@ -133,8 +150,9 @@ ta4j 内存计算 → 返回指标值。零管道零行情表，个人频率下�
 
 ### 8.1 向量化：复用 bge-m3
 
-- 模型：Cloudflare Workers AI `@cf/baai/bge-m3`（1024 维），main/data 已有成熟客户端
-  （EmbeddingConfig + CfUsageFixingClient），mcp 抄精简版，CLOUDFLARE_API_TOKEN 走自己的 yml。
+- 模型：Cloudflare Workers AI `@cf/baai/bge-m3`（1024 维）。实现走 **CF 原生 REST**（POST /ai/run 直调），
+  不走 main 的 OpenAI 垫片路径——垫片需连 CfUsageFixingClient 修 usage，mcp 离线灌书 + 查询直调更简
+  （实现与原计划的偏差，2026-09-20 定案）。CLOUDFLARE_ACCOUNT_ID/TOKEN 走自己的 yml。
 - 额度测算：免费 10000 Neurons/日（UTC 零点刷新），实测 1075 Neurons/M tokens；
   10 本书 × 约 40 万 token ≈ 4300 Neurons——**整个书库一天免费额度内灌完**，查询侧开销忽略不计。
 
@@ -156,7 +174,7 @@ ta4j 内存计算 → 返回指标值。零管道零行情表，个人频率下�
 
 本地自用不分发，整书文本入库无实际风险；**红线**：服务与库数据不得开源或提供他人接入。
 
-## 九、MCP 工具契约（4 个起步）
+## 九、MCP 工具契约（6 个）
 
 | 工具 | 入参 | 返回 | 背后 |
 |---|---|---|---|
@@ -164,6 +182,7 @@ ta4j 内存计算 → 返回指标值。零管道零行情表，个人频率下�
 | stock_daily | stockId, days | 原始日线序列（紧凑 JSON） | quote |
 | kb_search | query, topK(默认5) | chunk 正文 + 书名/章节出处，两路合并 | kb |
 | kb_book_list | — | 书目清单（含 chunk 数/分类/阅读顺序） | kb |
+| stock_levels | stockId（或名称） | 支撑/压力位带各 ≤5 档（枢轴/摆动聚类/成交密集三类型，带触及次数与占比依据） | SupportResistanceService（D10，2026-09-20） |
 
 工具描述（description）写给 LLM 看：说明何时该用、入参口径（支持名称模糊解析）、返回结构——
 描述质量直接决定客户端调用命中率。
@@ -180,6 +199,8 @@ ta4j 内存计算 → 返回指标值。零管道零行情表，个人频率下�
 | D6 | JVM 模式，无 native | 个人自用无需启动内存优化，绕开全部 AOT 成本 |
 | D7 | 无 MQ / 无鉴权 | 灌书离线一次性；端点本地裸跑 |
 | D8 | config 复制不抽公共 | 三模块变四模块，保持 contract 只管 MQ 的现状 |
+| D9 | 行情落库 quote_daily（2026-09-20） | 增量同步 + 全量分析读取（用户需求）；Redis 行情缓存与 Caffeine 相继退役，DB 为日线唯一事实源 |
+| D10 | 支撑压力=位带三法合一（2026-09-20） | 日线级数据支撑压力本质是区间，输出位带非伪精确点位；枢轴+摆动聚类+近似 Volume Profile 互补 |
 
 ## 十一、风险与对策
 

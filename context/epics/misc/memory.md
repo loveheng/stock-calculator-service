@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: misc
-total-merged: 5
-last-merge: 2026-09-19
+total-merged: 6
+last-merge: 2026-09-20
 ---
 
 # misc：散修与小改动挂靠（常驻杂项 epic）
@@ -47,6 +47,13 @@ last-merge: 2026-09-19
 - /api/search/cls 检索口径重构（下推 + 近窗优先）：废弃「topK×4 召回后内存过滤」过渡口径（48万语料下新数据挤不进 topK、窄时段过滤后空集）；ctime 区间/共表排除下推 SQL（(metadata->>'ctime')::bigint），EmbeddingSearchApi 门面扩 6 参（ctimeFrom/To/excludeIds），ArticleEmbeddingSearchService 手写 SQL（同 EmbeddingResultService 口径）+ 事务域 SET LOCAL hnsw.iterative_scan=relaxed_order（pgvector<0.8 一次性降级）；无 dateRange 近窗(30天, recent-window-days)优先两段式 + 全量回落(full-corpus-fallback)，dateRange 单段硬下推不回落；输出恒 ctime 倒序（相关度只决定入选）。
 - 双路径路由修短查询相关性：「闻泰」类 2 字实体查询嵌入区分度差（token 重叠噪声如「纳指ETF国泰」混入近窗）→ 实体型/短查询路由 content LIKE 关键词精确路径（无阈值、ctime 倒序）；主判据 isEntityLikeQuery（纯数字代码 | 股票 name/old_name/题材 subjectName 字典包含命中），兜底无空格 ≤ short-query-max-chars(4)；pg_trgm GIN 索引（schema.sql 幂等段，planner 与 ctime 序扫描择优）；关键词 0 命中回落向量；embedding 门控收窄进向量路径（短查询不受 CF 可用性影响）。
 - 分页（无限滑动）：请求 page(0起)/pageSize（topK 兼容别名），响应 hasMore（fetchDepth=depth+1 精确判定，末页不空拉）；两路径统一「前缀加深+切片」depth=(page+1)*pageSize，向量两段式同步加深保持跨页前缀性质，翻超界空页收尾；validatePage（负/超 100 → 400）；CompositeSearchService 固定 page=0。
+
+## 公告域（检索对齐 + 向量化收口 2026-09-19）
+
+- 公告检索对齐电报同款双路径+分页：keywordSearch（title/summary/secName/secCode LIKE + trgm GIN 幂等段）+ AnnouncementEmbeddingSearchService（announcementId 共表判别 + secCode 恒下推 + annDate 区间/近窗两段式门控）经 EmbeddingSearchApi 门面上提；实体型/短查询路由关键词 0 命中回落向量，depth=(page+1)*pageSize + hasMore 精确判定；api.md v1.6 同步。
+- 公告向量化端到端收口：EmbeddingComputeWorker kind 门控放开 announcement（曾静默 skip+ack 零向量零死信）；metadata.announcementId 键义修复（内部自增 id → CNINFO 标识）+ 存量 96 行 jsonb_set 治愈；端到端验收全绿（语义命中/分页切片/关键词路由）；相关教训已入 lessons（kind 白名单同轮接线 / metadata 键以读方口径 / 42P18 四法分流）。
+- 单日检索双断点修复：前端 searchSlice 丢 input.dateRange 已接线；后端 JPQL :param IS NULL 谓词 42P18 拆四个显式方法由 Service 分流，单日=start=end 闭区间契约不变。
+- 部署口径：main 脱离 IDE 托管（setsid 拉起，启动器 /tmp/scs-main-launch.py，日志 /tmp/scs-main.log）；.env 真 key + JAVA_TOOL_OPTIONS JVM 代理 nonProxyHosts 排除 lavinmq 修 composite 503。
 
 ## 断点
 
