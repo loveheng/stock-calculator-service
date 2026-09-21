@@ -53,6 +53,7 @@ datasvc:
     base-url: ${LLM_BASE_URL:}
     api-key: ${LLM_API_KEY:}
     model: ${LLM_MODEL:}
+    max-tokens: ${DATASVC_LLM_MAX_TOKENS:}
   # webhook 摄取端点（阶段 5）：默认关闭；部署经 DATASVC_INGEST_ENABLED=true +
   # INGEST_SECRET 开启（HMAC-SHA256 共享密钥，见 docs/architecture/data-source-onboarding.md）
   ingest:

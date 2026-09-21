@@ -28,6 +28,8 @@ public class LlmGatewayProperties {
     private java.time.Duration readTimeout = java.time.Duration.ofSeconds(60);
 
     /** 输出 token 上限（必须显式传：OpenAI 兼容网关缺省值偏小，长 JSON 输出会被腰斩在
-     *  数组中间导致解析 EOF——记忆提炼实证；仅放宽上限不改变自然停止行为） */
-    private int maxTokens = 4096;
+     *  数组中间导致解析 EOF——记忆提炼实证；仅放宽上限不改变自然停止行为。
+     *  KG 抽取正文长、事件多，4096 会在字符串中途截断（articleId=2487479 实证），
+     *  提到 8192；可经 DATASVC_LLM_MAX_TOKENS 覆盖） */
+    private int maxTokens = 8192;
 }
