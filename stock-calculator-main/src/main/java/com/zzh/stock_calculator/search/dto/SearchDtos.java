@@ -102,6 +102,8 @@ public class SearchDtos {
         /** 恒 telegraph（Q3 终版定案：无早报/晚报，语料即财联社电报） */
         private String edition;
         private String title;
+        /** 电报全文（title 显示不全时前端可用 content 兜底展示） */
+        private String content;
         /** brief 优先，缺失截断 content ≤200 字 */
         private String summary;
         private List<Mention> mentions;

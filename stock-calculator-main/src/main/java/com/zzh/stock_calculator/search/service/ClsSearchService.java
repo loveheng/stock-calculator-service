@@ -99,6 +99,7 @@ public class ClsSearchService {
                             .format(PUBLISHED_AT_FORMAT))
                     .edition("telegraph") // 恒定口径（Q3 终版定案：无早报/晚报）
                     .title(hit.title())
+                    .content(hit.content())
                     .summary(summarize(hit.brief(), hit.content()))
                     .mentions(mentions.getOrDefault(hit.articleId(), List.of()).stream()
                             .map(m -> Mention.builder()
