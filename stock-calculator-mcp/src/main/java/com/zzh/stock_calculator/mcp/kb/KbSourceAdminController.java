@@ -21,6 +21,7 @@ import java.util.Map;
 public class KbSourceAdminController {
 
     private final KbSourceService sourceService;
+    private final KbPersonaService personaService;
 
     @PostMapping
     public Map<String, Object> register(@RequestParam String name,
@@ -43,5 +44,11 @@ public class KbSourceAdminController {
     @PostMapping("/{name}/refresh")
     public Map<String, Object> refresh(@PathVariable String name) {
         return sourceService.refresh(name);
+    }
+
+    /** 提炼/重跑人格卡（M2）：博主全量语料 -> LLM 风格层卡 + 金句 -> 伪书覆盖写 */
+    @PostMapping("/{name}/persona")
+    public Map<String, Object> persona(@PathVariable String name) {
+        return personaService.generate(name);
     }
 }

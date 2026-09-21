@@ -309,3 +309,15 @@ pipeline:
     max-pending-age-hours: 24
     # 同类告警冷却窗口（分钟）
     alert-cooldown-minutes: 30
+
+# ======================= web-push（PWA 推送，docs/notify/design.md 触达扩展） =======================
+# VAPID 密钥对（ES256）：openssl 生成后 base64url 编码填入，或用 nl.martijndwars KeyPairWriter 生成。
+# 公钥（p256dh 原始 65 字节 base64url）同时配置给前端 pushService.subscribe 使用。
+push:
+  enabled: ${PUSH_ENABLED:false}
+  # VAPID 主题（一般为站点 origin 或 mailto:）
+  subject: ${PUSH_SUBJECT:mailto:admin@example.com}
+  # VAPID 公钥（base64url，浏览器 pushManager.subscribe 的 applicationServerKey）
+  public-key: ${PUSH_VAPID_PUBLIC_KEY:}
+  # VAPID 私钥（base64url，PKCS#8）
+  private-key: ${PUSH_VAPID_PRIVATE_KEY:}

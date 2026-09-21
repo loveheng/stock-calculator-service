@@ -2,6 +2,7 @@ package com.zzh.stock_calculator.mcp.tool;
 
 import com.zzh.stock_calculator.mcp.kb.KbBookRepository;
 import com.zzh.stock_calculator.mcp.kb.KbChunkRepository;
+import com.zzh.stock_calculator.mcp.kb.KbPersonaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,9 @@ public class KbBookListTool {
     public List<Map<String, Object>> list() {
         List<Map<String, Object>> rows = new ArrayList<>();
         bookRepository.findAll().forEach(book -> {
+            if (KbPersonaService.CATEGORY_PERSONA.equals(book.getCategory())) {
+                return; // 人格卡不是知识书（经 kb_persona 获取），不进书目清单
+            }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("title", book.getTitle());
             row.put("author", book.getAuthor());

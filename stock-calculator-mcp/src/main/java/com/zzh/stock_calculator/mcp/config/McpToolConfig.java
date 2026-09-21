@@ -1,6 +1,7 @@
 package com.zzh.stock_calculator.mcp.config;
 
 import com.zzh.stock_calculator.mcp.tool.KbBookListTool;
+import com.zzh.stock_calculator.mcp.tool.KbPersonaTool;
 import com.zzh.stock_calculator.mcp.tool.KbSearchTool;
 import com.zzh.stock_calculator.mcp.tool.PingTool;
 import com.zzh.stock_calculator.mcp.tool.StockAnalysisTool;
@@ -23,9 +24,11 @@ public class McpToolConfig {
                                                            StockDailyTool stockDailyTool,
                                                            StockLevelsTool stockLevelsTool,
                                                            KbSearchTool kbSearchTool,
-                                                           KbBookListTool kbBookListTool) {
+                                                           KbBookListTool kbBookListTool,
+                                                           KbPersonaTool kbPersonaTool) {
         return MethodToolCallbackProvider.builder()
-                .toolObjects(pingTool, stockAnalysisTool, stockDailyTool, stockLevelsTool, kbSearchTool, kbBookListTool)
+                .toolObjects(pingTool, stockAnalysisTool, stockDailyTool, stockLevelsTool,
+                        kbSearchTool, kbBookListTool, kbPersonaTool)
                 .build();
     }
 }

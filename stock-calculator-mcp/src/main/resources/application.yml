@@ -38,6 +38,11 @@ server:
 cf:
   account-id: ${CLOUDFLARE_ACCOUNT_ID:}
   api-token: ${CLOUDFLARE_API_TOKEN:}
+deepseek:
+  # persona 提炼离线调用（M2）：OpenAI 兼容原生 REST，三键复用 .env 既有变量
+  base-url: ${DEEPSEEK_BASE_URL:}
+  api-key: ${DEEPSEEK_API_KEY:}
+  model: ${DEEPSEEK_MODEL:deepseek-chat}
 kb:
   rss:
     # RSS 订阅源轮询（M1b）：默认 6h 一轮、启动 1min 后首拉；本地自用无更密需求

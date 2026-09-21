@@ -5,6 +5,7 @@ import com.zzh.stock_calculator.mcp.kb.KbBookRepository;
 import com.zzh.stock_calculator.mcp.kb.KbChunkEntity;
 import com.zzh.stock_calculator.mcp.kb.KbChunkRepository;
 import com.zzh.stock_calculator.mcp.kb.KbEmbeddingClient;
+import com.zzh.stock_calculator.mcp.kb.KbPersonaService;
 import com.zzh.stock_calculator.mcp.kb.KbSourceEntity;
 import com.zzh.stock_calculator.mcp.kb.KbSourceRepository;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +73,9 @@ public class KbSearchTool {
                 KbBookEntity book = bookRepository.findById(chunk.getBookId()).orElse(null);
                 if (book != null && book.getSourceId() != null && removedSourceIds.contains(book.getSourceId())) {
                     continue; // 已移除订阅源：观点保留在库但不参与检索（停更保数据语义）
+                }
+                if (book != null && KbPersonaService.CATEGORY_PERSONA.equals(book.getCategory())) {
+                    continue; // 人格卡是风格层不是知识，不进检索层（向量路因无 embedding 天然不可命中，此处挡关键词路）
                 }
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("book", book == null ? "?" : book.getTitle());

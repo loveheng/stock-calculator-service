@@ -50,6 +50,14 @@ public class KbBookEntity {
     @Builder.Default
     private String embeddingModel = "@cf/baai/bge-m3";
 
+    /** persona 伪书专用：提炼所用 LLM 模型（模型留档纪律）；其余书为 NULL */
+    @Column(name = "persona_model", length = 64)
+    private String personaModel;
+
+    /** persona 伪书专用：卡片生成时间（风格漂移重跑覆盖即刷新） */
+    @Column(name = "persona_generated_at")
+    private LocalDateTime personaGeneratedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP", updatable = false)
     private LocalDateTime createdAt;

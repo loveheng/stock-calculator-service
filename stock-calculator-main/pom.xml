@@ -48,6 +48,30 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
         </dependency>
+        <!-- Web Push（RFC 8291 加密 + VAPID 签名）：PWA 推送触达（iOS 16.4+/Android Chrome 标准 Web Push） -->
+        <dependency>
+            <groupId>nl.martijndwars</groupId>
+            <artifactId>web-push</artifactId>
+            <version>5.1.2</version>
+        </dependency>
+        <!-- web-push 的 ECC 加密（RFC 8291 aes128gcm）依赖 BouncyCastle -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.78.1</version>
+        </dependency>
+        <!-- web-push 5.1.x 的 send() 签名引用 HttpClient 4.x（非传递依赖，需显式引入） -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.5.14</version>
+        </dependency>
+        <!-- web-push 5.1.x 的 VAPID 签名用 jose4j（库 POM 未声明，需显式引入） -->
+        <dependency>
+            <groupId>org.bitbucket.b_c</groupId>
+            <artifactId>jose4j</artifactId>
+            <version>0.9.6</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>

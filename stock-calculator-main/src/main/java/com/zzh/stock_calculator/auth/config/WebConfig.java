@@ -34,6 +34,7 @@ public class WebConfig implements WebMvcConfigurer {
                 "/api/custom-stats/**",   // 自定义统计定义持久化（D17：登录即可用，非 E2EE 通道）
                 "/api/announcement/subscriptions/**",   // 公告订阅（announcement 域，登录即可用）
                 "/api/search/**",    // 资讯搜索（search 域，backend-implementation §6）
-                "/api/kg/**");       // 时序知识图谱查询（kg 域前端可视化，登录即可用）
+                "/api/kg/**",        // 时序知识图谱查询（kg 域前端可视化，登录即可用）
+                "/api/push/**");     // Web Push 订阅管理（notify 域，登录即可用）
     }
 }

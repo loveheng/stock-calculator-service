@@ -75,3 +75,6 @@ CREATE TABLE IF NOT EXISTS kb_source (
 -- 存量库补列（CREATE IF NOT EXISTS 不补列；M1 观点时效与源关联）
 ALTER TABLE kb_chunk ADD COLUMN IF NOT EXISTS published_at TIMESTAMP;
 ALTER TABLE kb_book ADD COLUMN IF NOT EXISTS source_id BIGINT;
+-- 存量库补列（M2 人格卡留档：生成模型 + 生成日期，照 embedding_model 纪律）
+ALTER TABLE kb_book ADD COLUMN IF NOT EXISTS persona_model VARCHAR(64);
+ALTER TABLE kb_book ADD COLUMN IF NOT EXISTS persona_generated_at TIMESTAMP;

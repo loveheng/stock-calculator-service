@@ -582,3 +582,33 @@ CREATE TABLE IF NOT EXISTS public.kg_event_entity (
 	CONSTRAINT uq_kg_event_entity UNIQUE (event_id, entity_id)
 );
 CREATE INDEX IF NOT EXISTS idx_kg_event_entity_entity ON public.kg_event_entity (entity_id);
+
+-- PWA Web Push 订阅表（docs/notify/design.md 触达扩展；iOS 16.4+/Android Chrome 标准 Web Push）
+CREATE TABLE IF NOT EXISTS public.push_subscription (
+	id bigserial NOT NULL,
+	user_id varchar(64) NOT NULL,
+	endpoint varchar(1024) NOT NULL,
+	p256dh varchar(200) NOT NULL,
+	auth varchar(100) NOT NULL,
+	user_agent varchar(300) NULL,
+	last_success_at timestamptz NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT push_subscription_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_push_subscription_endpoint UNIQUE (endpoint)
+);
+CREATE INDEX IF NOT EXISTS idx_push_subscription_user ON public.push_subscription (user_id);
+
+-- PWA 推送消息落库表（推送漏达兜底：打开 PWA 拉取未读，不依赖订阅存在）
+CREATE TABLE IF NOT EXISTS public.push_message (
+	id bigserial NOT NULL,
+	user_id varchar(64) NOT NULL,
+	title varchar(200) NOT NULL,
+	body varchar(1000) NOT NULL,
+	url varchar(500) NULL,
+	read_at timestamptz NULL,
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT push_message_pkey PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS idx_push_message_user_unread ON public.push_message (user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_push_message_user_time ON public.push_message (user_id, created_at DESC);

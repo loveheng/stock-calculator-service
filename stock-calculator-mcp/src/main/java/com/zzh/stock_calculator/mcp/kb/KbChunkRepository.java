@@ -15,6 +15,8 @@ public interface KbChunkRepository extends JpaRepository<KbChunkEntity, Long> {
 
     long countByBookId(Long bookId);
 
+    List<KbChunkEntity> findByBookIdOrderByChunkIndexAsc(Long bookId);
+
     /** 已入库 hash 集（RSS 增量去重：feed 是持续流，条目 hash 稳定，按 hash 跳过有意义） */
     @Query(value = "SELECT content_hash FROM kb_chunk WHERE book_id = :bookId AND content_hash IS NOT NULL",
             nativeQuery = true)

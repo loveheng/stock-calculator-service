@@ -47,6 +47,11 @@ updated: 2026-09-20
 - [kg-api](ai-pipeline/kg-api.md) · kg 时间轴查询 API 前端对接文档（信封/字段表/样例/待确认清单）
 - [ocr-llm](ai-pipeline/ocr-llm.md) · 多渠道 OCR + 免费 LLM 全链路管道
 
+## notify/ — 个人定制提醒服务（stock-calculator-mcp-notify）
+
+- [design](notify/design.md) · 通知者服务设计（MCP 登记/触发引擎/能力请求/触达，TTL+DLX 自循环，评审稿）
+- [web-push](notify/web-push.md) · Web Push 推送通知双通道（VAPID 推送 + 消息落库拉取兜底，订阅/消息接口/部署配置）
+
 ## mcp/ — MCP 服务（指标计算 + 书籍知识检索）
 
 - [design](mcp/design.md) · stock-calculator-mcp 模块设计（独立模块/独立库/Redis 字典镜像/bge-m3 复用）
@@ -60,6 +65,8 @@ updated: 2026-09-20
 - [module-split-test-plan](architecture/module-split-test-plan.md) · 主/数据模块拆分测试计划
 - [data-source-onboarding](architecture/data-source-onboarding.md) · 新数据源接入指南（webhook ingest · 阶段 5）
 - [agent-skill-system](architecture/agent-skill-system.md) · AI 辅助开发 skill 体系设计意图与使用手册
+- [agent-orchestration](architecture/agent-orchestration.md) · Agent 任务编排系统设计（LLM 规划 DAG + 确定性执行 + 意图复用，评审稿）
+- [agent-orchestration-possibilities](architecture/agent-orchestration-possibilities.md) · Agent 编排的可能性功能展望与演进路线
 
 ## deploy/ — 部署与运维
 

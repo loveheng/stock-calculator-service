@@ -55,7 +55,17 @@ last-merge: none
   refresh 二刷 0 新 11 跳、11 块全带 published_at（+08 折算正确）、MCP kb_search「房车消费」命中
   政策条目带链接出处。单测 38/38。
 - 运维注意：mcp 以旧构建常驻时占 18081，重启用新构建前先杀旧 java 实例。
+- M2（2026-09-21 完成）：persona 提炼管线 + kb_persona 工具——KbLlmClient（OpenAI 兼容原生
+  REST，复用 DEEPSEEK_* 三键，HTTP/1.1 显式工厂 + byte[] 收包 UTF-8 自解码 + max_tokens 8192 +
+  finish_reason=length 显式检测 + 解析失败落「长度+头部」诊断日志；踩坑见 lessons）+
+  KbPersonaService 单次调用抽风格卡（summary/tone/metaphor/stance/syntax，字段代码侧钳 300 字）
+  + 原文金句（10-20 条 ≤100 字提示词约束，代码侧钳 20 条/150 字）→ persona 伪书覆盖写
+  （kb_book 补 persona_model/persona_generated_at 留档）+ POST /admin/source/{name}/persona。
+  persona 不进检索层：kb_search 关键词路显式排除（向量路无 embedding 天然不可命中）+
+  kb_book_list 排除。E2E（模型 step-3.7-flash）：麻辣新鲜真跑 卡+18 金句，MCP 真调
+  tools/list（7 工具）/kb_persona/kb_book_list/kb_search 全通过。单测 47/47。
+  注意：新 MCP 工具必须同步挂 McpToolConfig.toolObjects（显式列举注册，见 lessons）。
 
 ## 断点
 
-- [断点] 下一步：M2 persona 提炼管线 + kb_persona 工具（麻辣新鲜 55 块语料已就绪可先跑单博主卡）；订阅源已 2 个（麻辣新鲜 text / 政策法规 rss），新源随用随加
+- [断点] 下一步：M3 数字人客户端接入调通（M2 已收口；提炼当前模型 = .env 的 step-3.7-flash，风格漂移重跑 /admin/source/{name}/persona 即可）
