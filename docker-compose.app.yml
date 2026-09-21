@@ -21,6 +21,12 @@ services:
     # 启动参数：.env 中 APP_ARGS=--crawler.enabled=false 即可追加程序参数
     entrypoint: ["/bin/sh", "-c", "exec /application/stock-calculator-service $$APP_ARGS"]
     restart: unless-stopped
+    logging:
+      driver: "k8s-file"
+      options:
+        path: "/tmp/scs-app.log"
+        max-size: "20mb"
+        max-file: "5"
     networks:
       - scs-net
 
@@ -37,6 +43,12 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    logging:
+      driver: "k8s-file"
+      options:
+        path: "/tmp/scs-data.log"
+        max-size: "20mb"
+        max-file: "5"
     networks:
       - scs-net
 
@@ -46,6 +58,12 @@ services:
     #ports:
     #  - "3000:3000"
     #restart: unless-stopped
+    #logging:
+    #  driver: "k8s-file"
+    #  options:
+    #    path: "/tmp/scs-frontend.log"
+    #    max-size: "20mb"
+    #    max-file: "5"
     #networks:
     #  - scs-net
 

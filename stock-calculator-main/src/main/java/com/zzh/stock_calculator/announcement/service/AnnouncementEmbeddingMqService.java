@@ -44,9 +44,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AnnouncementEmbeddingMqService implements AnnouncementEmbeddingApi {
 
-    /** 与 cls 共用 CF bge-m3；EmbeddingProperties 属 crawler 子包（Modulith 红线不可引），此处硬编码 */
-    private static final String EMBEDDING_MODEL = "@cf/baai/bge-m3";
-
     private static final String METADATA_KIND = "announcement";
 
     static final String UPSERT_VECTOR_SQL = """
@@ -67,6 +64,10 @@ public class AnnouncementEmbeddingMqService implements AnnouncementEmbeddingApi 
     /** 发布面功能开关（与 EmbeddingGate.isFeatureEnabled 同口径，@Value 平移） */
     @Value("${embedding.enabled:false}")
     private boolean embeddingEnabled;
+
+    /** 模型留档缺省值（EmbeddingProperties 属 crawler 子包，Modulith 红线不可引，@Value 平移） */
+    @Value("${embedding.cloudflare.model:@cf/baai/bge-m3}")
+    private String embeddingModel;
 
     @Override
     public boolean dispatchEmbeddingTask(Long announcementId, boolean force) {
@@ -173,12 +174,12 @@ public class AnnouncementEmbeddingMqService implements AnnouncementEmbeddingApi 
         return METADATA_KIND.equals(kind) && text.equals(content);
     }
 
-    /** 模型留档取值：worker 回报优先，缺省回退共享 bge-m3 常量（与进程内同值） */
+    /** 模型留档取值：worker 回报优先，缺省回退配置值 embedding.cloudflare.model */
     private String resolveModel(EmbeddingComputeResult result) {
         if (result.getModel() != null && !result.getModel().isBlank()) {
             return result.getModel();
         }
-        return EMBEDDING_MODEL;
+        return embeddingModel;
     }
 
     private float[] toFloatArray(List<Float> vector) {

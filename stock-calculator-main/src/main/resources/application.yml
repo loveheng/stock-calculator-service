@@ -203,7 +203,7 @@ embedding:
     # 口令不落库，同 POSTGRES_PASS 模式经环境变量注入
     account-id: ${CLOUDFLARE_ACCOUNT_ID:}
     api-token: ${CLOUDFLARE_API_TOKEN:}
-    model: ${CLOUDFLARE_MODEL:'@cf/baai/bge-m3'}
+    model: ${CLOUDFLARE_MODEL:@cf/baai/bge-m3}
     dimensions: 1024
   # 单日回填上限（免费额度 10000 Neurons/日，00:00 UTC 刷新；bge-m3 计价实测 1075 Neurons/M tokens，
   # 均值 ~115 tokens/条 → 60000 条/天 ≈ 75%~84% 额度；留 ~20% 防回填打爆当日额度

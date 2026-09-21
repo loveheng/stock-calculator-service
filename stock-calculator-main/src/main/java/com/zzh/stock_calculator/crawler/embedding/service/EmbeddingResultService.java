@@ -53,8 +53,6 @@ public class EmbeddingResultService {
             ON CONFLICT (id) DO UPDATE SET content = ?, metadata = ?::jsonb, embedding = ?
             """;
 
-    private static final String DEFAULT_MODEL = "@cf/baai/bge-m3";
-
     private final ClsArticleRepository articleRepository;
     private final ClsArticleEmbeddingRepository embeddingRepository;
     private final JdbcTemplate jdbcTemplate;
@@ -161,7 +159,7 @@ public class EmbeddingResultService {
         embeddingRepository.save(row);
     }
 
-    /** 模型留档取值：worker 回报优先，缺省回退状态行留档 → 默认常量（与实体 Builder.Default 同值） */
+    /** 模型留档取值：worker 回报优先，缺省回退状态行留档 → 配置值 embedding.cloudflare.model */
     private String resolveModel(EmbeddingComputeResult result, ClsArticleEmbedding existing) {
         if (result.getModel() != null && !result.getModel().isBlank()) {
             return result.getModel();
@@ -169,7 +167,7 @@ public class EmbeddingResultService {
         if (existing != null && existing.getModel() != null && !existing.getModel().isBlank()) {
             return existing.getModel();
         }
-        return DEFAULT_MODEL;
+        return properties.getCloudflare().getModel();
     }
 
     private float[] toFloatArray(List<Float> vector) {

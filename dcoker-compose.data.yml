@@ -23,6 +23,12 @@ services:
     env_file:
       - .env.data1
     restart: unless-stopped
+    logging:
+      driver: "k8s-file"
+      options:
+        path: "/tmp/scs-data-1.log"
+        max-size: "20mb"
+        max-file: "5"
     networks:
       - scs-net
 
@@ -36,6 +42,12 @@ services:
     env_file:
       - .env.data2
     restart: unless-stopped
+    logging:
+      driver: "k8s-file"
+      options:
+        path: "/tmp/scs-data-2.log"
+        max-size: "20mb"
+        max-file: "5"
     networks:
       - scs-net
 
