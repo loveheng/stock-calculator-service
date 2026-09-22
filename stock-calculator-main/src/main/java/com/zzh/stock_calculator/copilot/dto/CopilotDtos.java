@@ -30,6 +30,9 @@ public final class CopilotDtos {
         /** 任务类型（docs/custom-stats/api.md §2.1）：custom_stat = 自定义统计代码生成，路由专用提示词模版；
          *  缺省/未知值 = 现有聊天模版，行为零变化。仅参与模版路由编排，不落库、不打日志 */
         private String taskType;
+        /** 博主名（订阅源名）：非空时经 dispatch 调 kb_persona 取语气卡注入 system prompt
+         *  （mcp-blogger-kb 拼装口径）；无卡/源停用/不可达宽松降级为 null，行为零变化 */
+        private String blogger;
     }
 
     @Data

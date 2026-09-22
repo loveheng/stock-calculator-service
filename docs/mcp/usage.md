@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-20
+updated: 2026-09-22
 ---
 
 # MCP 服务使用手册（stock-calculator-mcp）
@@ -51,11 +51,14 @@ kill <pid>
 ## 三、接入 MCP 客户端
 
 - 端点：`http://localhost:18081/sse`（SSE 传输）。
+- **数字人前端不直连本服务**（定案）：后端 main 只挂 `:18083` orchestration dispatch
+  单连接，kb 工具（kb_search/kb_persona）统一经 dispatch 路由调用；`/sse` 直连仅
+  服务端内部消费与本地调试用。
 - ZCode / Claude Desktop 的 MCP 配置里新增一个 server，URL 填上面端点即可，工具列表自动发现。
 - 手工 curl 探活必须走协议序：`initialize` → `notifications/initialized` → 之后再发 `tools/list` /
   `tools/call`——把 tools/list 当首条消息会得到「静默无响应」（协议硬性时序，不是服务挂了）。
 
-## 四、六个工具速查
+## 四、七个工具速查
 
 | 工具 | 入参 | 返回 | 背后 |
 |---|---|---|---|
@@ -63,6 +66,7 @@ kill <pid>
 | stock_daily | stockId（或名称）, days | 原始日线序列（东财 11 字段） | quote_daily 读库 |
 | stock_levels | stockId（或名称） | 支撑/压力位带各 ≤5 档（带触及次数等依据） | 枢轴+摆动聚类+量密集三法 |
 | kb_search | query, topK(默认5) | 相关段落 + 出处（书名/章节、博主/微博时间、政策标题+链接） | 向量+关键词双路 |
+| kb_persona | blogger（订阅源名） | 人格卡（语气/比喻/立场/句式画像）+ 10-20 段原文金句 | persona 伪书首块 |
 | kb_book_list | — | 书目清单（含订阅源伪书与块数） | kb_book |
 | ping | — | 探活 | — |
 
@@ -70,7 +74,25 @@ kill <pid>
 
 - 股票**名称/曾用名/代码都能直接说**（「茅台」「600519」均可，内存字典解析；多命中不会瞎猜，会返回候选）；
 - stock_analysis 是粗粒度摘要（不吐全序列），要原始 K 线显式调 stock_daily；
-- kb_search 覆盖「书 + 博主观点 + 政策条目」三层知识：查概念方法论会命中原著，问行情观点会命中博主，问政策会命中条目标题+链接。
+- kb_search 覆盖「书 + 博主观点 + 政策条目」三层知识：查概念方法论会命中原著，问行情观点会命中博主，问政策会命中条目标题+链接；
+- kb_persona 与 kb_search 互补（拼装口径：**事实引书、观点标博主、语气按 persona 卡**）——persona 卡只管怎么说（语气/句式），不管说什么；行情判断严禁从语气示例固化。
+
+### system prompt 拼装样例（博主语气）
+
+main 侧拼装点：`AiChatOrchestrationService`（AskRequest.blogger 非空时经 dispatch 调
+kb_persona，注入段 `PersonaPromptInjectionService` 渲染；无卡/源停用/不可达宽松降级零感知）：
+
+```text
+【博主语气规则（麻辣新鲜）】
+以下模仿该博主的说话方式（语气/比喻/句式），仅约束表达风格；
+观点与事实仍以检索与快照为准，严禁把语气示例中的行情判断当作当前结论：
+<人格卡正文：语气/比喻/立场/句式画像>
+金句示例（学其句式，不引其数据）：
+- <原文金句 ×5>
+```
+
+工具链配合：回答时 LLM 经 kb_search 检索观点与事实（出处自动携带），语气由上述
+注入段约束——三段拼装口径在此闭环。
 
 典型问法示例：`茅台最近怎么样？` / `贵州茅台的支撑位在哪` / `安全边际是什么意思，原文怎么讲` /
 `麻辣新鲜怎么看黄金` / `最近有什么新政策跟消费相关`。

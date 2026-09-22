@@ -61,6 +61,7 @@ public class AiChatOrchestrationService {
     private final PlatformTransactionManager txnMgr;
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryService memoryService;
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryRecallService memoryRecall;
+    private final com.zzh.stock_calculator.copilot.service.PersonaPromptInjectionService personaInjection;
     private final ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider;
     /** MCP 工具池（:18083 orchestration dispatch 单连接，spring.ai.mcp.client 自动装配）；
      *  ObjectProvider 容错——MCP_CLIENT_ENABLED=false 或服务未起时不挂工具，聊天不阻塞 */
@@ -83,6 +84,7 @@ public class AiChatOrchestrationService {
         PlatformTransactionManager txnMgr,
         com.zzh.stock_calculator.copilot.service.CopilotMemoryService memoryService,
         com.zzh.stock_calculator.copilot.service.CopilotMemoryRecallService memoryRecall,
+        com.zzh.stock_calculator.copilot.service.PersonaPromptInjectionService personaInjection,
         @Qualifier(
             "deepSeekChatModel"
         ) ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider,
@@ -97,6 +99,7 @@ public class AiChatOrchestrationService {
         this.txnMgr = txnMgr;
         this.memoryService = memoryService;
         this.memoryRecall = memoryRecall;
+        this.personaInjection = personaInjection;
         this.deepSeekChatModelProvider = deepSeekChatModelProvider;
         this.mcpToolCallbacksProvider = mcpToolCallbacksProvider;
     }
@@ -649,6 +652,12 @@ public class AiChatOrchestrationService {
             );
             if (memoryInjection != null) {
                 systemPrompt.append(memoryInjection);
+            }
+            // 博主语气卡注入（mcp-blogger-kb 拼装口径第三段）：事实引书 + 观点标博主靠
+            // kb_search 工具调用时 LLM 自主完成，语气约束在此静态注入；无卡/降级返回 null 零感知
+            String personaSegment = personaInjection.buildInjection(req.getBlogger());
+            if (personaSegment != null) {
+                systemPrompt.append(personaSegment);
             }
         }
         List<org.springframework.ai.chat.messages.Message> messages =

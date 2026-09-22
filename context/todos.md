@@ -5,10 +5,7 @@ format: v2
 
 # 待办列表
 
-## orchestration
 ## mcp-blogger-kb
-- [ ] [2026-09-22] (功能) system prompt 拼装口径落地：事实引书（kb_search 经典书）+ 观点标博主（kb_search 出处）+ 语气按 persona 卡（kb_persona 进 system prompt） (src: ai)
-- [ ] [2026-09-22] (文档) docs/mcp/usage.md 接入指引更新：MCP 端点现状（/sse）、kb_persona 用法、system prompt 拼装样例 (src: ai)
 - [ ] [2026-09-22] (风险) 多博主人格合成（每博主一卡 + 离线 LLM 融合跑一次）v1 未做，属同机制延伸玩法，v2 再做 (src: ai)
 
 ## misc
