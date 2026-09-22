@@ -80,6 +80,13 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
+        <!-- MCP client：连 :18081 stock-mcp 经纪人 + :18082 stock-mcp-notify 提醒工具面
+             （docs/notify/design.md §七：reminder_* 四工具与经纪人工具同池注册给 LLM）；
+             2.0.x 无 -webmvc 变体，streamable-http 传输由本 starter 内含（m2 实证） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-client</artifactId>
+        </dependency>
         <!-- 向量存储（方案一）：Spring AI 官方 PgVectorStore，BOM 2.0.1 管版本；
              见 docs/ai-pipeline/cls-article-vector.md D2 -->
         <dependency>

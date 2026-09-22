@@ -1,6 +1,6 @@
 ---
-status active
-updated 2026-09-17
+status: active
+updated: 2026-09-22
 ---
 
 # Copilot 记忆系统速记

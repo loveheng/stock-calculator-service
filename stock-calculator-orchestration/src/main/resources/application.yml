@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: stock-mcp-orchestration
+  datasource:
+    # 三表复用 stock_mcp 独立库（D6，与 mcp/notify 同库分表）；变量名同款防误接主库
+    url: ${POSTGRES_URL_MCP:jdbc:postgresql://localhost/stock_mcp}
+    username: ${POSTGRES_USER_MCP:root}
+    # 口令不落库：必须通过 POSTGRES_PASS 环境变量注入
+    password: ${POSTGRES_PASS:}
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USER:scs}
+    password: ${RABBIT_PASS:}
+  sql:
+    init:
+      # orchestration-schema.sql（三表 + vector 扩展 + HNSW）每次启动幂等执行；回滚此行 = 停用
+      mode: always
+      schema-locations: classpath:orchestration-schema.sql
+  jpa:
+    hibernate:
+      # 库表以 sql.init 为准，validate 保持实体↔DDL 账实对齐（mcp/notify 同款审计口径）
+      ddl-auto: validate
+  ai:
+    mcp:
+      server:
+        name: stock-mcp-orchestration
+        version: 0.0.1
+      client:
+        streamable-http:
+          connections:
+            # Executor kind=mcp 节点统一走 :18081 经纪人（D5：规划器不感知工具背后是 MCP 还是 REST）
+            mcp-broker:
+              url: ${MCP_BROKER_URL:http://localhost:18081/sse}
+
+server:
+  port: 18083
+
+# Planner 自带 LLM provider（D6 代价：不复用 main llm 域 fallback 链，配置独立一份；
+# 连接三键复用 .env 已有 DEEPSEEK_* 三键，客户端套路照 mcp KbLlmClient）
+orchestration:
+  llm:
+    base-url: ${DEEPSEEK_BASE_URL:}
+    api-key: ${DEEPSEEK_API_KEY:}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+  # 意图向量（bge-m3 1024 维，沿用 mcp kb 惯例；Cloudflare Workers AI 直调）
+  embedding:
+    cf-account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+    cf-api-token: ${CLOUDFLARE_API_TOKEN:}
+  # 向量匹配阈值（cosine distance，§6.2 阈值陷阱：verified 人工上架后依匹配日志校准）
+  plan-match:
+    max-distance: 0.25
+    top-k: 3

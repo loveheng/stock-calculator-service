@@ -21,6 +21,8 @@
         <module>stock-calculator-main</module>
         <module>stock-calculator-data</module>
         <module>stock-calculator-mcp</module>
+        <module>stock-calculator-mcp-notify</module>
+        <module>stock-calculator-orchestration</module>
     </modules>
     <dependencyManagement>
         <dependencies>

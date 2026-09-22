@@ -1,9 +1,18 @@
 ---
-status: draft
+status: active
 updated: 2026-09-21
 ---
 
 # 个人定制提醒服务设计（stock-calculator-mcp-notify）
+
+> **落地进度（§八顺序，2026-09-21）**：✅ 1 模块骨架 + MQ 契约；✅ 2 reminder 表 DDL +
+> 四工具（真实实现）；✅ 3 at_time 自循环触发链（fire 消费/幂等/续种/深度守卫/bootstrap/
+> 看门狗已落地，E2E 待验）；✅ 4 text 直达 + push 全链路（main 侧 NotifyPushMqConsumer
+> 消费 notify.push 转 PushDeliveryService，E2E 待验）；✅ 5 capability 动作（main
+> NotifyCapabilityMqConsumer + NotifyCapabilityHandler SPI + notify 回流消费/
+> 超时降级看门狗，「9:30 通知茅台形态」链路代码层已通，E2E 待验）；✅ 6 on_event 事件提醒
+> （reminder.event.q 绑定公告完成事件 + filter 轻量匹配 + ReminderActionExecutor
+> fire/event 共用，E2E 待验）。**六步全部落地，整体待中间件起后 E2E 验证。**
 
 > 用户在聊天窗口说「明天 9:30 通知我茅台的形态」，一句话完成登记；到点或事件出现时，
 > 服务经 MQ 管道请求 main 能力、组装通知、由 main SSE 触达用户。

@@ -1,6 +1,6 @@
 ---
 status: draft
-updated: 2026-09-21
+updated: 2026-09-22
 ---
 
 # Agent 任务编排系统设计（orchestration）
@@ -58,16 +58,20 @@ LLM 规划出任务路径并执行；规划过的路径持久化，后续同/近
 ```mermaid
 flowchart TB
     U["用户（聊天窗口）"] --> CO["main copilot<br/>对话 agent（已有）"]
-    CO -->|"MCP client"| T
+    CO -->|"MCP client<br/>只挂 1 个统一工具"| G
 
     subgraph ORCH["stock-calculator-orchestration :18083（新模块）"]
+        G["dispatch 网关工具<br/>统一入口 + 快慢分流<br/>（能力标签 + 确定性规则）"]
         T["task 工具<br/>create_task / query_task"] --> PS["PlanStore<br/>stock_mcp 库三表<br/>tool_registry / plan / task_instance"]
         P["Planner 规划器<br/>（LLM：意图规范化→匹配→规划）"] --> PS
         E["Executor<br/>确定性 DAG 执行"] --> PS
+        G -->|"sync：直接代调"| E2["ToolInvoker"]
+        G -->|"async：转任务"| P
     end
 
+    E2 -->|"同步小工具"| MCP[":18081 经纪人 / :18082 通知者<br/>main REST 工具"]
     E -->|"REST（kind=rest）"| MAIN["main 业务接口"]
-    E -->|"工具调用（kind=mcp）"| MCP["stock-calculator-mcp :18081<br/>含 mq/ 子包工具"]
+    E -->|"工具调用（kind=mcp）"| MCP
     E -->|"amqp（业务消息）"| MQ[("RabbitMQ")]
     MQ --> DQ["data 模块 worker<br/>（公告识别等，已有）"]
     DQ -->|"结果回写/事件"| E
@@ -78,8 +82,8 @@ flowchart TB
 
 要点：
 
-- **copilot 是入口 agent**：经 MCP client 调 :18083 的 task 工具（与 :18081 经纪人、:18082 通知者同池注册），
-  职责是把用户话术递进 orchestration，不重复包装业务接口；
+- **统一入口（方案 3，快慢车分流）**：copilot 只挂 `dispatch` 一个 MCP 工具，所有自然语言触发都递进 :18083。网关按 tool_registry 的能力标签（`execution_mode: sync / async_long`）+ 确定性规则分流——同步小请求网关内直接代调下游工具秒回；长任务/多步/条件等待转 create_task 走 Planner/Executor。路由复杂度下沉到编排器，copilot 不做架构通道决策；
+- **main 不直连 MCP 工具服务**：copilot 不再挂 :18081/:18082 的工具池，避免两套调用逻辑双源维护（单一事实源 = tool_registry）；
 - **独立进程（D6）**：与 mcp/notify 三服务并列，共用 stock_mcp 库——agent 基础设施（工具面+规划+执行+提醒）数据聚合一处；
 - **Planner 自带 LLM 客户端**：不复用 main llm 域（D6 代价），provider 配置独立维护；
 - **Executor 是纯代码**：按 DAG 逐节点调 ToolInvoker，结果注入下游节点参数，状态落库，可恢复。
@@ -127,6 +131,7 @@ sequenceDiagram
 | domain | text | 领域标签（quote / kb / mq / announcement…），工具超 40 个后按域分组注入 |
 | risk | text | `read` / `low` / `high`；规划 prompt 硬约束只准编排 read/low |
 | output_policy | text | 输出落库策略：`keep_summary` / `keep_head(N)`（默认 2KB）/ `keep_ref`；防 node_states 膨胀 |
+| execution_mode | text | 能力标签（方案 3 分流依据）：`sync`（秒级单跳，网关直接代调）/ `async_long`（长任务/条件等待，转 Planner+Executor）；分流器按此 + 确定性规则路由 |
 | enabled | bool | 下线开关 |
 
 登记方式：mcp 工具启动自注册（或维护 SQL）；main 接口白名单手工登记。
@@ -199,9 +204,9 @@ sequenceDiagram
 
 | 域 | 关系 |
 |---|---|
-| copilot | 入口与出口：经 MCP client 递意图、订阅节点流转事件转发 SSE 中间态、收结果推送；不碰规划/执行内部 |
+| copilot | 入口与出口：只挂 dispatch 一个工具递意图、订阅节点流转事件转发 SSE 中间态、收结果推送；不碰规划/执行内部，不做通道路由决策 |
 | llm（main 域） | **不再复用**（D6 代价）：orchestration 独立进程自带 LLM provider 配置；将来如需统一路由再评估抽公共客户端 |
-| mcp / notify / main | 同为服务拓扑节点：mcp+notify 是工具提供方（:18081 经纪人 / :18082 通知者），main 是 REST 工具提供方与 SSE 触达出口 |
+| mcp / notify / main | 同为服务拓扑节点：mcp+notify 是工具提供方（:18081 经纪人 / :18082 通知者），main 是 REST 工具提供方与 SSE 触达出口；三者的工具**只经 tool_registry 与 dispatch 网关暴露**，main copilot 不直连工具池 |
 | announcement | 公告识别的权威结果仍在 announcement 域表里；DAG 节点读它，不复制数据 |
 | monitor | task_instance 心跳可接入 pull_heartbeat 体系（待定，评审后定） |
 
@@ -214,7 +219,7 @@ sequenceDiagram
 2. ToolDescriptor / ToolRegistry / ToolInvoker（统一工具面）+ traceId 贯穿打点；
 3. Planner（意图规范化 → 带领域过滤的向量匹配 → 完整规划，先接 mcp 既有 6 工具）；
 4. Executor（REST/MCP 节点先行，含 switch/foreach 控制节点与 $ctx 求值；mq_wait/mq_send 随公告场景接）；
-5. copilot 挂 create_task / query_task，端到端跑通首条链路（公告订阅+形态）；
+5. dispatch 网关工具 + copilot 接入：tool_registry 补 execution_mode 能力标签，dispatch 按 sync 直接代调 / async_long 转 create_task，低置信意图返回候选清单澄清（不硬路由）；copilot 只挂 :18083 一个连接（移除 :18081/:18082 直连池），端到端跑通首条链路（公告订阅+形态）；
 6. HITL 审核 API/CLI（D11：plan 详情 + 冒烟回放 + 确认上架）；
 7. mcp 模块 mq/ 子包工具面（message_trace / queue_stats / message_peek…——**不设 task 状态类工具**，防与 task_instance 双状态源冲突；两个视角由 LLM 持 traceId 交叉拼合）。
 
@@ -228,6 +233,7 @@ sequenceDiagram
 | 体验（长时任务黑盒） | 节点流转事件 → copilot → SSE 中间态推送，执行过程白盒化 |
 | token 成本 | 完整规划单次成本可控（一次大 prompt）；复用路径几乎零 LLM 开销 |
 | DAG 表达力上限 | 不引入脚本引擎；条件与批量由控制节点兜住（`switch` 枚举路由 / `foreach` 展开 + LLM 汇总收束），超出此粒度的复杂转换回归「写一个新工具」而不是扩展 DAG 语法 |
+| dispatch 分流误判 | 方案 3 的路由判断在网关分流器：确定性规则（execution_mode 标签 + 关键词）优先；低置信不硬路由，返回候选清单由 LLM 向用户澄清；分流器带单测，误判样本回流规则库；延迟优化（缓存/本地代调）后置 |
 | Modulith 边界 | orchestration 跨域只引用对方基包公开类型（ModulithVerifyTest 守护） |
 
 ## 十二、关联文档

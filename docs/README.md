@@ -16,6 +16,7 @@ updated: 2026-09-20
 - [implementation](copilot/implementation.md) · 开发实施记录
 - [api](copilot/api.md) · 接口文档 v1.0（前端对接）
 - [memory-profile](copilot/memory-profile.md) · 记忆固化与用户画像抽取设计（独立主题，评审稿）
+- [memory-summary](copilot/memory-summary.md) · 记忆系统速记（延迟队列提炼 + 画像抽取要点速查）
 
 ## e2ee-auth/ — E2EE 用户服务
 

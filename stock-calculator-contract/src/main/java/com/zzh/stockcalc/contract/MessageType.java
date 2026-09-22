@@ -53,4 +53,13 @@ public final class MessageType {
     public static final String TASK_KG_EXTRACT = MqKey.TASK_KG_EXTRACT;
     public static final String RESULT_KG_DONE = MqKey.RESULT_KG_DONE;
     public static final String RESULT_KG_FAILED = MqKey.RESULT_KG_FAILED;
+
+    // ========== notify 提醒链（docs/notify/design.md §4.2） ==========
+
+    public static final String TASK_NOTIFY_CAPABILITY =
+        MqKey.TASK_NOTIFY_CAPABILITY;
+    public static final String RESULT_NOTIFY_CAPABILITY =
+        MqKey.RESULT_NOTIFY_CAPABILITY;
+    public static final String NOTIFY_PUSH = MqKey.NOTIFY_PUSH;
+    public static final String TASK_NOTIFY_FIRE = MqKey.TASK_NOTIFY_FIRE;
 }

@@ -88,6 +88,20 @@ public final class MqKey {
     /** copilot 画像重抽结果（version+1 + 游标推进至快照 max(updated_at)） */
     public static final String RESULT_MEMORY_PROFILE = "result.memory.profile";
 
+    // ========== notify 提醒链（docs/notify/design.md §4.2） ==========
+
+    /** notify → main 能力请求（能力名+参数，traceId 进头） */
+    public static final String TASK_NOTIFY_CAPABILITY = "task.notify.capability";
+    /** main → notify 能力结果（摘要+结果，traceId 关联） */
+    public static final String RESULT_NOTIFY_CAPABILITY =
+        "result.notify.capability";
+    /** notify → main 组装后的通知文本（main push 消费者转 SSE 触达） */
+    public static final String NOTIFY_PUSH = "notify.push";
+    /** 定时提醒种子发布目标（per-message TTL，到期 DLX 改写为 TASK_NOTIFY_FIRE） */
+    public static final String REMINDER_DELAY = "reminder.delay";
+    /** 种子到期后经 DLX 改写落 fire 队列的 key */
+    public static final String TASK_NOTIFY_FIRE = "reminder.fire";
+
     // ========== control.*（主服务 → collector） ==========
 
     public static final String CONTROL_SUBSCRIPTION_SNAPSHOT =

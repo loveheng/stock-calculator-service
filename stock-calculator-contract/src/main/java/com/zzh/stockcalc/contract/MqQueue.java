@@ -61,6 +61,28 @@ public final class MqQueue {
     /** 控制面（collector 消费，绑定 control.#：订阅快照等，覆盖式处理） */
     public static final String COLLECTOR_CONTROL = "collector.control.q";
 
+    // ========== notify 提醒链（docs/notify/design.md §4.2） ==========
+
+    /** notify → main 能力请求（main 消费，内部调业务接口或 stock-mcp 经纪人） */
+    public static final String TASK_NOTIFY_CAPABILITY = "task.notify.capability.q";
+
+    /** main → notify 能力结果回流（含 traceId 关联） */
+    public static final String RESULT_NOTIFY_CAPABILITY =
+        "result.notify.capability.q";
+
+    /** notify → main 推送（main 消费转 SSE/Web Push 触达） */
+    public static final String NOTIFY_PUSH = "notify.push.q";
+
+    /** 定时提醒种子队列（classic、无消费者、per-message TTL、DLX→TASKS 交换机；自循环钟摆） */
+    public static final String REMINDER_DELAY = "reminder.delay.q";
+
+    /** TTL 到期死信落地队列（notify 消费触发提醒） */
+    public static final String REMINDER_FIRE = "reminder.fire.q";
+
+    /** on_event 事件提醒队列（notify 独占消费：绑定具体事件 key 如 result.announcement.done，
+     *  命中 trigger_spec.filter 即触发；docs/notify/design.md §五） */
+    public static final String REMINDER_EVENT = "reminder.event.q";
+
     // ========== 伴生队列 ==========
 
     /** result.ingest.q 的 TTL 重试环（classic，quorum 不支持 per-queue TTL） */

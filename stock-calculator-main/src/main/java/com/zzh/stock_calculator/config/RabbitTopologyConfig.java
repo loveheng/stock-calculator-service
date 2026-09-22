@@ -67,6 +67,39 @@ public class RabbitTopologyConfig {
         return QueueBuilder.durable(MqQueue.DEAD).build();
     }
 
+    /** notify → main 推送队列（docs/notify/design.md §4.2 N5：触达出口收敛一处；
+     *  quorum + DLX，与 notify 侧 NotifyMqTopologyConfig 参数一致） */
+    @Bean
+    public Queue notifyPushQueue() {
+        return QueueBuilder.durable(MqQueue.NOTIFY_PUSH)
+                .quorum()
+                .deadLetterExchange(MqExchange.DLX)
+                .build();
+    }
+
+    @Bean
+    public Binding notifyPushBinding() {
+        return BindingBuilder.bind(notifyPushQueue())
+                .to(resultsExchange()).with(MqKey.NOTIFY_PUSH);
+    }
+
+    /** notify → main 能力请求队列（docs/notify/design.md §4.2：main 消费执行后沿
+     *  result.notify.capability 回流；quorum + DLX，与 notify 侧参数一致） */
+    @Bean
+    public Queue taskNotifyCapabilityQueue() {
+        return QueueBuilder.durable(MqQueue.TASK_NOTIFY_CAPABILITY)
+                .quorum()
+                .deadLetterExchange(MqExchange.DLX)
+                .build();
+    }
+
+    @Bean
+    public Binding taskNotifyCapabilityBinding() {
+        // main 不声明 TASKS 交换机（下行半区属 data/notify 侧），绑定用内联幂等声明
+        return BindingBuilder.bind(taskNotifyCapabilityQueue())
+                .to(new TopicExchange(MqExchange.TASKS)).with(MqKey.TASK_NOTIFY_CAPABILITY);
+    }
+
     @Bean
     public Binding resultIngestBinding() {
         return BindingBuilder.bind(resultIngestQueue()).to(resultsExchange()).with(MqKey.BIND_RESULT_ALL);

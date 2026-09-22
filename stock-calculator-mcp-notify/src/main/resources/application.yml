@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: stock-mcp-notify
+  datasource:
+    # reminder 表复用 stock_mcp 独立库（N3，与 mcp 模块同库分表）；变量名同款防误接主库
+    url: ${POSTGRES_URL_MCP:jdbc:postgresql://localhost/stock_mcp}
+    username: ${POSTGRES_USER_MCP:root}
+    # 口令不落库：必须通过 POSTGRES_PASS 环境变量注入
+    password: ${POSTGRES_PASS:}
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USER:scs}
+    password: ${RABBIT_PASS:}
+  sql:
+    init:
+      # notify-schema.sql（reminder + capability_request）每次启动幂等执行；回滚此行 = 停用
+      mode: always
+      schema-locations: classpath:notify-schema.sql
+  jpa:
+    hibernate:
+      # 库表以 sql.init 为准，validate 保持实体↔DDL 账实对齐（mcp 模块同款审计口径）
+      ddl-auto: validate
+  ai:
+    mcp:
+      server:
+        name: stock-mcp-notify
+        version: 0.0.1
+
+server:
+  port: 18082

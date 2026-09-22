@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.zzh</groupId>
+        <artifactId>stock-calculator-service</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>stock-calculator-orchestration</artifactId>
+    <name>stock-calculator-orchestration</name>
+    <description>Agent 任务编排服务 :18083：MCP task 工具面（create_task/query_task）+ Planner 规划器 + Executor 确定性 DAG 执行，三表落 stock_mcp 库，设计见 docs/architecture/agent-orchestration.md</description>
+    <dependencies>
+        <!-- MQ 契约：MessageEnvelope/MqKey 常量与消息 DTO（mq_send/mq_wait 节点与 traceId 贯穿，D6 自引） -->
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-contract</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+        <!-- MCP 服务端（Streamable HTTP）：task 工具面 :18083/sse，copilot 经 MCP client 调用 -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+        </dependency>
+        <!-- MCP 客户端（Streamable HTTP）：Executor kind=mcp 节点调 :18081 工具（D5 统一工具面） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-client</artifactId>
+        </dependency>
+        <!-- MQ：mq_send 下发任务消息 / mq_wait 事件唤醒（与 notify 同款独立 amqp 依赖） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <!-- 三表（tool_registry/plan/task_instance，stock_mcp 库，D6） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Jackson 3（Boot 4 线）：DAG/信封/payload 序列化 -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

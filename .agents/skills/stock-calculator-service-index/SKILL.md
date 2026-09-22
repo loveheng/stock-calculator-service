@@ -21,7 +21,7 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 - data 模块 Base 包：`stock-calculator-data/src/main/java/com/zzh/stock_calculator/data/`（MQ 拉取循环 + 公告/向量化 worker；子包 announcement/cls/config/hello/ingest/llm/mq/worker）
 - contract 模块：`stock-calculator-contract/src/main/java/com/zzh/stockcalc/contract/`（MqKey/MqQueue/MessageType/MqExchange 等契约常量，消息 payload 在 message/ 子包；包名无下划线）
 - mcp 模块：`stock-calculator-mcp/src/main/java/com/zzh/stock_calculator/mcp/`（本地 MCP 服务 :18081，JVM 模式；子包 tool/dict/kb/quote/indicator；独立库 stock_mcp + Redis 字典镜像 stock:dict；文档落点 docs/mcp/）
-- notify 模块：`stock-calculator-mcp-notify/src/main/java/com/zzh/stock_calculator/notify/`（规划中，未建；本地 MCP 服务 :18082，提醒登记/触发引擎/触达；文档落点 docs/notify/）
+- notify 模块：`stock-calculator-mcp-notify/src/main/java/com/zzh/stock_calculator/notify/`（已建（2026-09-21）：本地 MCP 服务 :18082，提醒登记/触发引擎/触达；子包 config/entity/mq/repository/service/tool；文档落点 docs/notify/）
 
 ## 归属表
 

@@ -62,6 +62,10 @@ public class AiChatOrchestrationService {
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryService memoryService;
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryRecallService memoryRecall;
     private final ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider;
+    /** MCP 工具池（:18081 经纪人 + :18082 reminder_*，spring.ai.mcp.client 自动装配）；
+     *  ObjectProvider 容错——MCP_CLIENT_ENABLED=false 或服务未起时不挂工具，聊天不阻塞 */
+    private final ObjectProvider<org.springframework.ai.tool.ToolCallbackProvider>
+        mcpToolCallbacksProvider;
 
     /**
      * 显式构造器（项目无 lombok.config，@RequiredArgsConstructor 不会复制 @Qualifier）。
@@ -81,7 +85,8 @@ public class AiChatOrchestrationService {
         com.zzh.stock_calculator.copilot.service.CopilotMemoryRecallService memoryRecall,
         @Qualifier(
             "deepSeekChatModel"
-        ) ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider
+        ) ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider,
+        ObjectProvider<org.springframework.ai.tool.ToolCallbackProvider> mcpToolCallbacksProvider
     ) {
         this.sessionStore = sessionStore;
         this.messageRepository = messageRepository;
@@ -93,6 +98,7 @@ public class AiChatOrchestrationService {
         this.memoryService = memoryService;
         this.memoryRecall = memoryRecall;
         this.deepSeekChatModelProvider = deepSeekChatModelProvider;
+        this.mcpToolCallbacksProvider = mcpToolCallbacksProvider;
     }
 
     /** LLM 超时窗口（秒）：pending 状态下同一 cid 在窗内视为「请求正在处理中」 */
@@ -648,6 +654,13 @@ public class AiChatOrchestrationService {
         List<org.springframework.ai.chat.messages.Message> messages =
             new ArrayList<>();
         messages.add(new SystemMessage(systemPrompt.toString()));
+        // 会话身份注入（docs/notify/design.md §七）：reminder_* 工具的 userId 由 copilot
+        // 持会话身份传入——LLM 无从得知用户身份，必须在系统提示词中显式携带并要求原样透传
+        messages.add(new SystemMessage(
+            "【会话身份】当前用户 userId=" + userId
+                + "。调用 reminder_create/reminder_list/reminder_update/reminder_cancel 工具时，"
+                + "userId 参数必须原样传入此值，不得虚构或省略。"
+        ));
         for (AiChatMessage m : history) {
             String prefix = "[" + formatCtime(m.getCtime()) + "] ";
             if ("user".equals(m.getRole())) messages.add(
@@ -658,7 +671,24 @@ public class AiChatOrchestrationService {
             );
         }
         messages.add(new UserMessage(currentQuestion));
-        return new Prompt(messages);
+        org.springframework.ai.chat.prompt.ChatOptions options = mcpOptions();
+        return options == null ? new Prompt(messages) : new Prompt(messages, options);
+    }
+
+    /**
+     * MCP 工具挂载（docs/notify/design.md §七）：:18081 经纪人 + :18082 reminder_* 工具同池。
+     * defaultOptions 兜底 DeepSeek 渠道原有采样参数（options 非 null 时模型不再读 model 级默认）。
+     * MCP client 未启用/未装配时返回 null（Prompt 无 options，纯聊天零工具）。
+     */
+    private org.springframework.ai.chat.prompt.ChatOptions mcpOptions() {
+        org.springframework.ai.tool.ToolCallbackProvider provider =
+            mcpToolCallbacksProvider.getIfAvailable();
+        if (provider == null) {
+            return null;
+        }
+        return org.springframework.ai.model.tool.ToolCallingChatOptions.builder()
+            .toolCallbacks(provider.getToolCallbacks())
+            .build();
     }
 
     /**
