@@ -27,6 +27,9 @@ spring:
         name: stock-mcp-orchestration
         version: 0.0.1
       client:
+        common:
+          # 超时梯队第 1 层（步 5 定案 3）：ToolInvoker 8s < dispatch 10s < copilot HTTP 15s
+          request-timeout: 8s
         streamable-http:
           connections:
             # Executor kind=mcp 节点统一走 :18081 经纪人（D5：规划器不感知工具背后是 MCP 还是 REST）
@@ -51,3 +54,6 @@ orchestration:
   plan-match:
     max-distance: 0.25
     top-k: 3
+  # 服务级通行证（步 5 定案 1）：main/copilot 持证转发即放行；空值 = 本地开发放行
+  security:
+    passport-token: ${ORCH_PASSPORT_TOKEN:}

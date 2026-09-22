@@ -16,7 +16,9 @@ import java.util.Map;
 /**
  * stock_analysis 能力实现（docs/notify/design.md §六：main 能力消费者内部调
  * stock-mcp 经纪人工具）：经 MCP client（spring.ai.mcp.client 自动装配的
- * ToolCallbackProvider）同步调用 :18081 的 stock_analysis 工具，结果原文回流。
+ * ToolCallbackProvider）同步调用 stock_analysis 工具，结果原文回流。
+ * 步 5 起 MCP 池只挂 :18083 dispatch（工具不再直连注册），本 handler 按名找不到
+ * stock_analysis 回调即走「能力未注册」降级文案（不阻启动）；去留随步 7 一并评估。
  * 装配条件：MCP client 已启用（无 MCP 时 notify 的 capability 动作回落
  * 「能力未注册」降级文案，不阻启动）。
  */

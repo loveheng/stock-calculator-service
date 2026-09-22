@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tool_registry (
     domain VARCHAR(32) NOT NULL,
     risk VARCHAR(8) NOT NULL DEFAULT 'read',
     output_policy VARCHAR(16) NOT NULL DEFAULT 'keep_head',
+    execution_mode VARCHAR(16) NOT NULL DEFAULT 'sync',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -54,3 +55,6 @@ CREATE TABLE IF NOT EXISTS task_instance (
 );
 CREATE INDEX IF NOT EXISTS idx_task_instance_status ON task_instance (status);
 CREATE INDEX IF NOT EXISTS idx_task_instance_plan ON task_instance (plan_id);
+
+-- 步 6-2 mq_wait 挂起支撑：挂起截止时间（Zombie 防御，@Scheduled 扫描超时置 timeout）
+ALTER TABLE task_instance ADD COLUMN IF NOT EXISTS wait_deadline TIMESTAMP;

@@ -28,13 +28,19 @@ public class ToolInvoker {
     public static final String TRACE_HEADER = "X-Trace-Id";
     private static final String MAIN_BASE = "http://localhost:18080";
 
+    /** 超时梯队第 1 层（步 5 定案 3）：ToolInvoker 8s < dispatch 10s < copilot HTTP 15s */
+    public static final java.time.Duration INVOKE_TIMEOUT = java.time.Duration.ofSeconds(8);
+
     private final List<McpSyncClient> mcpSyncClients;
     private final RestClient restClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ToolInvoker(List<McpSyncClient> mcpSyncClients, RestClient.Builder restClientBuilder) {
         this.mcpSyncClients = mcpSyncClients;
-        this.restClient = restClientBuilder.build();
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) INVOKE_TIMEOUT.toMillis());
+        factory.setReadTimeout((int) INVOKE_TIMEOUT.toMillis());
+        this.restClient = restClientBuilder.requestFactory(factory).build();
     }
 
     /**

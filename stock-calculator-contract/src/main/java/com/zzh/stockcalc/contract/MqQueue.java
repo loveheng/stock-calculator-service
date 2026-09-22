@@ -83,6 +83,12 @@ public final class MqQueue {
      *  命中 trigger_spec.filter 即触发；docs/notify/design.md §五） */
     public static final String REMINDER_EVENT = "reminder.event.q";
 
+    // ========== orchestration 异步任务链（步 6-3b，memory 定案②：x-expires 禁 auto-delete） ==========
+
+    /** 异步任务终态事件（main 独占消费：绑定 task.completed.* / task.failed.*，
+     *  查 user_async_task_log 还原 user 推 SSE + 审计终态；与 orchestration 唤醒队列各自独立绑定） */
+    public static final String ASYNC_TASK_RESULT = "async.task.result.q";
+
     // ========== 伴生队列 ==========
 
     /** result.ingest.q 的 TTL 重试环（classic，quorum 不支持 per-queue TTL） */

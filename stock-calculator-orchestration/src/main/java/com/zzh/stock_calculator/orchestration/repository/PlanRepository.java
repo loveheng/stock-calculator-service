@@ -16,6 +16,9 @@ import java.util.List;
 @Repository
 public interface PlanRepository extends JpaRepository<PlanEntity, Long> {
 
+    /** HITL 待审核清单（draft+candidate） */
+    java.util.List<PlanEntity> findByStatusInOrderByIdDesc(java.util.Collection<String> statuses);
+
     /** 向量写入（规划落库后补列）；qv 为 "[a,b,...]" 字面量 */
     @Modifying
     @Query(value = "UPDATE plan SET intent_embedding = CAST(:qv AS vector) WHERE id = :id", nativeQuery = true)

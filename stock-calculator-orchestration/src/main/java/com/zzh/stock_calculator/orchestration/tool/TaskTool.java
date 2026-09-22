@@ -2,7 +2,6 @@ package com.zzh.stock_calculator.orchestration.tool;
 
 import com.zzh.stock_calculator.orchestration.entity.PlanEntity;
 import com.zzh.stock_calculator.orchestration.entity.TaskInstanceEntity;
-import com.zzh.stock_calculator.orchestration.executor.Executor;
 import com.zzh.stock_calculator.orchestration.planner.Planner;
 import com.zzh.stock_calculator.orchestration.repository.TaskInstanceRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +13,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * task MCP 工具面（agent-orchestration §四/步 5）：copilot 入口 agent 经 MCP client 调用，
@@ -28,7 +26,7 @@ import java.util.UUID;
 public class TaskTool {
 
     private final Planner planner;
-    private final Executor executor;
+    private final com.zzh.stock_calculator.orchestration.mq.TaskMessageSender taskMessageSender;
     private final TaskInstanceRepository taskInstanceRepository;
     private final ObjectMapper om = new ObjectMapper();
 
@@ -37,7 +35,8 @@ public class TaskTool {
     public String createTask(
             @ToolParam(description = "用户意图原文（聊天话术，如「订阅最新公告摘要并算出台后茅台的形态」）") String intentText,
             @ToolParam(description = "用户 ID（copilot 持会话身份传入）") String userId) {
-        String traceId = UUID.randomUUID().toString();
+        // 步 6-0：优先外部透传（dispatch 显式参数 / main 下传 traceparent），无则本地生成
+        String traceId = com.zzh.stock_calculator.orchestration.config.TraceIdHolder.resolve(null);
         try {
             Planner.PlanDecision decision = planner.plan(intentText, userId);
             ObjectNode params = decision.params() instanceof ObjectNode p
@@ -50,13 +49,11 @@ public class TaskTool {
                     .params(params)
                     .build();
             TaskInstanceEntity saved = taskInstanceRepository.save(instance);
-            executor.run(saved);
-            TaskInstanceEntity after = taskInstanceRepository.findById(saved.getId()).orElse(saved);
-            if ("done".equals(after.getStatus())) {
-                return "任务完成（traceId=" + traceId + "，plan " + (decision.reused() ? "复用" : "新建")
-                        + "）节点摘要：" + after.getNodeStates().toString();
-            }
-            return "任务未完成（status=" + after.getStatus() + "，traceId=" + traceId + "），可用 query_task 查询详情";
+            // 步 6-3a 真异步：存实例即发启动请求，即刻返回 RUNNING 契约（执行在 MQ 消费侧）
+            taskMessageSender.sendRunRequest(saved.getId(), traceId);
+            return "{\"taskId\":" + saved.getId() + ",\"traceId\":\"" + traceId
+                    + "\",\"status\":\"RUNNING\",\"plan\":" + (decision.reused() ? "\"reused\"" : "\"new\"")
+                    + "}（稍后用 query_task 按 traceId 查询结果）";
         } catch (IllegalArgumentException e) {
             // §七：宁可说不会，不可编错
             return "无法编排该意图：" + e.getMessage() + "（traceId=" + traceId + "）";

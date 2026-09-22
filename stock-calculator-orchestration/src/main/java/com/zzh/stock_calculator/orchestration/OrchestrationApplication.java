@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan
+@org.springframework.scheduling.annotation.EnableScheduling // mq_wait 超时扫描（步 6-2 Zombie 防御）
 public class OrchestrationApplication {
 
     public static void main(String[] args) {

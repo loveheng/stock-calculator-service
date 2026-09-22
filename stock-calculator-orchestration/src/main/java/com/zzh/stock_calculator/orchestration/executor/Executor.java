@@ -35,6 +35,7 @@ public class Executor {
     private final ToolRegistry toolRegistry;
     private final ToolInvoker toolInvoker;
     private final TaskInstanceRepository taskInstanceRepository;
+    private final com.zzh.stock_calculator.orchestration.mq.TaskMessageSender taskMessageSender;
 
     private final ObjectMapper om = new ObjectMapper();
 
@@ -55,6 +56,9 @@ public class Executor {
      */
     @Transactional
     public void run(TaskInstanceEntity instance) {
+        // 步 6-1 多实例并发定案：同 plan 串行（pg_advisory_xact_lock，事务级，
+        // 事务结束自动释放）；锁点在任务启动入口——步 6-3a Runner 移 MQ 消费侧后此入口即消费侧位置
+        taskInstanceRepository.acquirePlanLock(String.valueOf(instance.getPlanId()));
         JsonNode dag = instance.getPlanDagSnapshot();
         try {
             validateDag(dag);
@@ -63,11 +67,25 @@ public class Executor {
             return;
         }
         CtxEvaluator.Ctx ctx = new CtxEvaluator.Ctx(instance.getParams(), instance.getUserId(), instance.getTraceId());
-        ObjectNode nodeStates = om.createObjectNode();
+        ObjectNode nodeStates = instance.getNodeStates() instanceof tools.jackson.databind.node.ObjectNode existing
+                ? existing : om.createObjectNode();
+        // 断点续跑（§八）：注入落库的上游节点输出——mq_wait 唤醒/失败重放共用此入口
+        Map<String, JsonNode> restored = new LinkedHashMap<>();
+        nodeStates.propertyNames().forEach(nid -> {
+            JsonNode st = nodeStates.get(nid);
+            if (st != null && "done".equals(st.path("status").asText())) {
+                restored.put(nid, st.path("output"));
+            }
+        });
+        ctx.restoreNodeOutputs(restored);
 
         List<JsonNode> nodes = toList(dag.path("nodes"));
         for (JsonNode node : nodes) {
             String nodeId = node.path("id").asText("n" + nodeStates.size());
+            // 断点续跑：已 done 的节点直接跳过（输出已在 ctx）
+            if (nodeStates.path(nodeId).path("status").asText("").equals("done")) {
+                continue;
+            }
             String type = node.path("type").asText(node.has("tool") ? "tool" : "tool");
             long start = System.currentTimeMillis();
             try {
@@ -76,6 +94,15 @@ public class Executor {
                 nodeStates.set(nodeId, nodeState("done", output, node, System.currentTimeMillis() - start));
                 log.info("[orchestration] node {} done traceId={} cost={}ms", nodeId, instance.getTraceId(),
                         System.currentTimeMillis() - start);
+            } catch (MqWaitSuspendedException suspended) {
+                // 挂起不是失败：实例已置 waiting + wait_deadline，断点保留在 nodeStates 之外——
+                // 重入 run() 时已完成节点经 ctx.restoreNodeOutputs 注入跳过重跑
+                instance.setNodeStates(nodeStates);
+                instance.setUpdatedAt(LocalDateTime.now());
+                taskInstanceRepository.save(instance);
+                log.info("[orchestration] instance {} suspended at {} traceId={}",
+                        instance.getId(), suspended.getNodeId(), instance.getTraceId());
+                return;
             } catch (RuntimeException e) {
                 nodeStates.set(nodeId, nodeState("failed", om.createObjectNode().put("error", e.getMessage()),
                         node, System.currentTimeMillis() - start));
@@ -97,8 +124,86 @@ public class Executor {
             case "switch" -> executeSwitch(node, ctx);
             case "foreach" -> executeForeach(node, ctx);
             case "tool", "rest", "mcp" -> executeTool(node, ctx, instance);
-            default -> throw new IllegalArgumentException("暂不支持的节点类型: " + type + "（mq_wait/mq_send 随公告场景接入）");
+            case "mq_send" -> executeMqSend(node, ctx, instance);
+            case "mq_wait" -> executeMqWait(node, ctx, instance);
+            case "hitl_wait" -> executeHitlWait(node, ctx, instance);
+            case "sleep" -> executeSleep(node);
+            default -> throw new IllegalArgumentException("暂不支持的节点类型: " + type);
         };
+    }
+
+    /**
+     * sleep 节点（冒烟/E2E 专用 Dummy 耗时工具，步 6 冒烟 Gate）：模拟长耗时下游，
+     * DAG 显式声明 ms 才生效——Planner 产出的真实 DAG 不会含此类型（无工具注册），
+     * 不构成生产面攻击点。
+     */
+    private JsonNode executeSleep(JsonNode node) {
+        long ms = node.path("ms").asLong(0);
+        if (ms <= 0 || ms > 120_000) {
+            throw new IllegalArgumentException("sleep 节点 ms 非法（0<ms<=120000）: " + node.path("id").asText("?"));
+        }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("sleep 被中断");
+        }
+        return om.createObjectNode().put("slept_ms", ms);
+    }
+
+    // ========== 步 6-2 MQ 节点 ==========
+
+    /** mq_send：按 contract routing_key 下发 task.* 消息；$ctx 求值 payload（脱敏：仅 correlationId+参数） */
+    private JsonNode executeMqSend(JsonNode node, CtxEvaluator.Ctx ctx, TaskInstanceEntity instance) {
+        String routingKey = node.path("routing_key").asText("");
+        if (routingKey.isBlank()) {
+            throw new IllegalArgumentException("mq_send 节点缺 routing_key: " + node.path("id").asText("?"));
+        }
+        JsonNode payload = CtxEvaluator.evaluate(node.path("payload_mapping"), ctx);
+        String messageId = taskMessageSender.send(routingKey, ctx.getEnv().get("trace_id"), payload);
+        ObjectNode out = om.createObjectNode();
+        out.put("message_id", messageId);
+        out.put("routing_key", routingKey);
+        out.put("sent", true);
+        return out;
+    }
+
+    /**
+     * mq_wait 挂起语义（步 6-2）：置实例 waiting + wait_deadline（@Scheduled 扫超时），
+     * 抛 WaitingException 让 run() 跳过「置 done」收尾——实例保持挂起，由 MQ 结果事件
+     * 监听器标记节点 done 后重入 run() 从断点续跑（§八 Zombie 防御：timeout/on_timeout
+     * 必填拒载已在 validateDag，wait_deadline 由 @Scheduled 兜底扫描）。
+     */
+    private JsonNode executeMqWait(JsonNode node, CtxEvaluator.Ctx ctx, TaskInstanceEntity instance) {
+        long timeoutSeconds = node.path("timeout_seconds").asLong(0);
+        if (timeoutSeconds <= 0) {
+            throw new IllegalArgumentException("mq_wait 节点 timeout_seconds 非法: " + node.path("id").asText("?"));
+        }
+        instance.setStatus(TaskInstanceEntity.ST_WAITING);
+        instance.setWaitDeadline(LocalDateTime.now().plusSeconds(timeoutSeconds));
+        taskInstanceRepository.save(instance);
+        log.info("[orchestration] instance {} waiting on mq_wait node={} deadline={} traceId={}",
+                instance.getId(), node.path("id").asText("?"), instance.getWaitDeadline(), instance.getTraceId());
+        throw new MqWaitSuspendedException(node.path("id").asText("mq_wait"));
+    }
+
+    /**
+     * hitl_wait 人工审核挂起（步 7-1，mq_wait 复用）：机制同 mq_wait（waiting +
+     * wait_deadline + 断点续跑），差异只在唤醒入口——由 HitlReviewController 的
+     * 人工决策端点回调（approve 续跑 / reject 置 cancelled），不走 MQ 事件。
+     * timeout 兜底同款：审核超时由 MqWaitTimeoutScanner 置 timeout，防永久滞留。
+     */
+    private JsonNode executeHitlWait(JsonNode node, CtxEvaluator.Ctx ctx, TaskInstanceEntity instance) {
+        long timeoutSeconds = node.path("timeout_seconds").asLong(0);
+        if (timeoutSeconds <= 0) {
+            throw new IllegalArgumentException("hitl_wait 节点 timeout_seconds 非法: " + node.path("id").asText("?"));
+        }
+        instance.setStatus(TaskInstanceEntity.ST_WAITING);
+        instance.setWaitDeadline(LocalDateTime.now().plusSeconds(timeoutSeconds));
+        taskInstanceRepository.save(instance);
+        log.info("[orchestration] instance {} waiting on hitl_wait node={} deadline={} traceId={}",
+                instance.getId(), node.path("id").asText("?"), instance.getWaitDeadline(), instance.getTraceId());
+        throw new MqWaitSuspendedException(node.path("id").asText("hitl_wait"));
     }
 
     /** rest/mcp 工具节点：版本漂移比对 → $ctx 求值 → ToolInvoker */

@@ -69,6 +69,7 @@ class AnnouncementEmbeddingMqServiceTest {
         service = new AnnouncementEmbeddingMqService(announcementRepository, quotaGuard,
                 taskDispatchApi, jdbcTemplate, transactionTemplate, new ObjectMapper());
         ReflectionTestUtils.setField(service, "embeddingEnabled", true);
+        ReflectionTestUtils.setField(service, "embeddingModel", "test-embed-model");
 
         row = Announcement.builder()
                 .announcementId("ann-1").title("t").adjunctUrl("u.pdf").secCode("990002")

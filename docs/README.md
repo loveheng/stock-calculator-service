@@ -67,6 +67,7 @@ updated: 2026-09-20
 - [data-source-onboarding](architecture/data-source-onboarding.md) · 新数据源接入指南（webhook ingest · 阶段 5）
 - [agent-skill-system](architecture/agent-skill-system.md) · AI 辅助开发 skill 体系设计意图与使用手册
 - [agent-orchestration](architecture/agent-orchestration.md) · Agent 任务编排系统设计（LLM 规划 DAG + 确定性执行 + 意图复用，评审稿）
+- [agent-orchestration-implementation](architecture/agent-orchestration-implementation.md) · Agent 编排实现技术文档（代码落点 / 执行流程 / 链路边界口径 / 进度）
 - [agent-orchestration-possibilities](architecture/agent-orchestration-possibilities.md) · Agent 编排的可能性功能展望与演进路线
 
 ## deploy/ — 部署与运维

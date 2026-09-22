@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: mcp-blogger-kb
-total-merged: 0
-last-merge: none
+total-merged: 1
+last-merge: 2026-09-22
 ---
 
 # mcp-blogger-kb：博主观点知识库 + 人格提炼（数字人前菜）
@@ -66,6 +66,12 @@ last-merge: none
   tools/list（7 工具）/kb_persona/kb_book_list/kb_search 全通过。单测 47/47。
   注意：新 MCP 工具必须同步挂 McpToolConfig.toolObjects（显式列举注册，见 lessons）。
 
+## orchestration（本 epic 内顺带推进的编排器主线，设计见 docs/architecture/agent-orchestration.md）
+
+- 步 0-5（2026-09-22 完成）：新 Maven 模块 stock-calculator-orchestration（:18083，库连 stock_mcp 三表 tool_registry/plan/task_instance + vector HNSW，schema 幂等 sql.init 恒跑 + hibernate validate 对齐）；统一工具面 ToolDescriptor/ToolRegistry（7 个 mcp 工具启动自注册 + schemaMatches 漂移比对）/ToolInvoker（mcp 走 :18081 经纪人、rest 走 main :18080，X-Trace-Id 贯穿）；Planner（意图规范化→向量匹配 verified 前置过滤→廉价 LLM yes/no 校验→参数填槽→draft 落库，LLM/嵌入客户端自带 provider 照 KbLlmClient 套路）；Executor（确定性 DAG：rest/mcp/switch/foreach + $ctx 三命名空间求值 + output_policy 瘦身落库 + mq_wait 无 timeout 拒载）；dispatch 网关（sync 直调 / async_long 转 create_task 即刻 RUNNING / 低置信回候选澄清）；copilot 只挂 :18083 单连（移除 main :18081/:18082 直连池）+ PassportFilter 静态 Bearer 通行证（空配置放行）。
+- 步 6 MQ 异步通道（2026-09-22 完成）：6-0 TraceId 透传（main W3C traceparent → McpTraceHeaderConfig → PassportFilter 捕获 → TraceIdHolder → $ctx env.trace_id）；6-1 通道映射（user_async_task_log 审计表 + AsyncTaskChannelService 生成 correlationId 兼作 orchestration traceId 双写 + pg_advisory_xact_lock 同 plan 串行）；6-2 mq_send/mq_wait（TASKS 交换机 + messageId=traceId 重放幂等 + TaskMessageSender 脱敏 payload + Executor 挂起 waiting/wait_deadline + TaskResultEventListener 唤醒断点续跑 + MqWaitTimeoutScanner 超时兜底 + contract task.completed./failed. key）；6-3a 真异步（TaskRunnerListener MQ 消费侧执行 + 幂等拒重放 + 终态回发）；6-3b SSE（main AsyncTaskResultConsumer 独占 async.task.result.q → finalizeTask CAS 终态回写 → SseEmitter 注册表推 task_result；订阅端点 GET /api/copilot/async-tasks/{correlationId}/events）；6-4a 限流双闸门（AsyncTaskRateLimiter 并发+频控，user_async_task_log 为源，超限 429）；6-4b GC 双保险（三队列 x-expires 24h + AsyncTaskLogGcScanner 5min 扫超期 RUNNING 置 TIMEOUT 释放额度）。
+- 步 6 冒烟 Gate（2026-09-22 通过，硬性门禁）：双半区 E2E——orchestration OrchestrationSmokeGateE2ETest 五场景（挂起/唤醒续跑/回发路由/超时收口/失败，sleep Dummy 上限 120s，SMOKE_E2E 门控）+ main AsyncTaskResultSseE2ETest（SSE task_result 推流 + 审计 RUNNING→DONE/FAILED CAS 回写），SMOKE_E2E=true 全绿。踩坑沉淀 lessons：orchestration pom 必须显式声明 spring-boot-starter-webmvc + spring-boot-starter-restclient（Boot 4 拆模块，spring-ai 传递 starter-web 不含 restclient）；SSE E2E 不等握手直接发事件（SseEmitter 首推前不提交响应头）。
+
 ## 断点
 
-- [断点] 下一步：M3 数字人客户端接入调通（M2 已收口；提炼当前模型 = .env 的 step-3.7-flash，风格漂移重跑 /admin/source/{name}/persona 即可）
+- [断点] 下一步：orchestration 步 7-1 HITL 审核（plan 详情 API 返 DAG+冒烟真实输入输出/耗时 + 确认上架 verified 接口，draft→candidate 自动冒烟衔接，复用 mq_wait 挂起/回调唤醒）；随后 7-2 mq 可观测工具面与单测收口（见 context/todos.md orchestration 节）

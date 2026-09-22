@@ -62,7 +62,7 @@ public class AiChatOrchestrationService {
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryService memoryService;
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryRecallService memoryRecall;
     private final ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider;
-    /** MCP 工具池（:18081 经纪人 + :18082 reminder_*，spring.ai.mcp.client 自动装配）；
+    /** MCP 工具池（:18083 orchestration dispatch 单连接，spring.ai.mcp.client 自动装配）；
      *  ObjectProvider 容错——MCP_CLIENT_ENABLED=false 或服务未起时不挂工具，聊天不阻塞 */
     private final ObjectProvider<org.springframework.ai.tool.ToolCallbackProvider>
         mcpToolCallbacksProvider;
@@ -676,7 +676,7 @@ public class AiChatOrchestrationService {
     }
 
     /**
-     * MCP 工具挂载（docs/notify/design.md §七）：:18081 经纪人 + :18082 reminder_* 工具同池。
+     * MCP 工具挂载（步 5 定案）：只挂 :18083 orchestration dispatch 单连接，工具经网关分流。
      * defaultOptions 兜底 DeepSeek 渠道原有采样参数（options 非 null 时模型不再读 model 级默认）。
      * MCP client 未启用/未装配时返回 null（Prompt 无 options，纯聊天零工具）。
      */

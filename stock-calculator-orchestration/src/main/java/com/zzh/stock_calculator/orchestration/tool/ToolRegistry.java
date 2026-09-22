@@ -37,6 +37,10 @@ public class ToolRegistry {
     public static final String OP_KEEP_HEAD = "keep_head";
     public static final String OP_KEEP_REF = "keep_ref";
 
+    /** 执行模式取值（步 5 分流地基）：sync 网关直接代调 / async_long 转 create_task */
+    public static final String EM_SYNC = "sync";
+    public static final String EM_ASYNC_LONG = "async_long";
+
     /** mcp 工具的领域 → 调用端点（:18081 经纪人，全部工具同端点，D5） */
     private static final String MCP_BROKER_ENDPOINT = "http://localhost:18081/sse";
 
@@ -93,11 +97,18 @@ public class ToolRegistry {
     /** upsert 单工具（登记/更新共用），随后调 reload() 刷缓存 */
     public void upsert(String toolName, String kind, String endpoint, String domain,
                        String description, JsonNode paramSchema) {
+        upsert(toolName, kind, endpoint, domain, description, paramSchema, EM_SYNC);
+    }
+
+    /** upsert 单工具（带执行模式），随后调 reload() 刷缓存 */
+    public void upsert(String toolName, String kind, String endpoint, String domain,
+                       String description, JsonNode paramSchema, String executionMode) {
         ToolRegistryEntity entity = toolRegistryRepository.findById(toolName).orElse(null);
         if (entity == null) {
             entity = ToolRegistryEntity.builder()
                     .toolName(toolName).kind(kind).endpoint(endpoint)
                     .paramSchema(paramSchema).description(description).domain(domain)
+                    .executionMode(executionMode)
                     .build();
         } else {
             entity.setKind(kind);
@@ -105,6 +116,7 @@ public class ToolRegistry {
             entity.setParamSchema(paramSchema);
             entity.setDescription(description);
             entity.setDomain(domain);
+            entity.setExecutionMode(executionMode);
         }
         toolRegistryRepository.save(entity);
         log.info("[orchestration] tool_registry upsert: {} ({})", toolName, kind);
@@ -118,6 +130,7 @@ public class ToolRegistry {
                     .toolName(e.getToolName()).kind(e.getKind()).endpoint(e.getEndpoint())
                     .paramSchema(e.getParamSchema()).description(e.getDescription())
                     .domain(e.getDomain()).risk(e.getRisk()).outputPolicy(e.getOutputPolicy())
+                    .executionMode(e.getExecutionMode())
                     .enabled(Boolean.TRUE.equals(e.getEnabled()))
                     .build());
         }

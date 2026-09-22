@@ -18,6 +18,18 @@
             <artifactId>stock-calculator-contract</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <!-- Boot 4 webmvc 标准装配（含 spring-boot-restclient → RestClient.Builder，ToolInvoker rest 节点依赖；
+             spring-ai mcp server-webmvc 传递的 spring-boot-starter-web 不含 restclient 模块，缺它服务起不来） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <!-- RestClient.Builder 自动装配（RestClientAutoConfiguration，Boot 4 拆模块后独立 starter）：
+             ToolInvoker/PlannerLlmClient/IntentEmbeddingClient 构造注入依赖（mcp 模块靠 openai starter 传递拿到，本模块无 model starter 需显式声明） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
         <!-- MCP 服务端（Streamable HTTP）：task 工具面 :18083/sse，copilot 经 MCP client 调用 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>

@@ -49,6 +49,17 @@ public final class MqKey {
     public static final String CONTROL_PULL_CONFIG = "control.pull.config";
     public static final String RESULT_PULL_HEARTBEAT = "result.pull.heartbeat";
 
+    // ========== orchestration 异步任务终态事件（步 6-2 mq_wait 唤醒 + 步 6-3b SSE，memory 定案②） ==========
+    // 下游完成/失败后发回；mq_wait 按 correlation_id 匹配唤醒，main 侧按它清映射推 SSE（GC 双保险触发源）
+
+    /** 异步任务完成事件（routing key 后缀带业务任务类型，如 task.completed.announcement） */
+    public static final String TASK_COMPLETED_PREFIX = "task.completed.";
+    /** 异步任务失败事件 */
+    public static final String TASK_FAILED_PREFIX = "task.failed.";
+
+    /** orchestration 任务启动请求（dispatch/create_task 即刻返回后，消费侧取实例调 Executor 真异步） */
+    public static final String TASK_ORCHESTRATION_RUN = "task.orchestration.run";
+
     // ========== result.*（数据服务 → 主服务） ==========
 
     /** CLS 电报：解析好的文章 + 字典 + 关联（阶段 1 链路） */

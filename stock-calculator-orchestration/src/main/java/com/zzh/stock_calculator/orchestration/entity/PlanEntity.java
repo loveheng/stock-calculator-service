@@ -45,11 +45,13 @@ public class PlanEntity {
     @Builder.Default
     private String[] intentDomains = new String[0];
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "param_schema", nullable = false, columnDefinition = "JSONB")
     @Builder.Default
     private JsonNode paramSchema = new tools.jackson.databind.ObjectMapper().createObjectNode();
 
     /** DAG：节点（tool/input_mapping/depends_on/retry/timeout/成功判据），取值 $ctx 寻址（§八） */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "plan_dag", nullable = false, columnDefinition = "JSONB")
     private JsonNode planDag;
 

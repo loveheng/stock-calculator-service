@@ -40,6 +40,9 @@ public class ToolDescriptor {
     /** keep_summary / keep_head / keep_ref（node_states 落库瘦身策略） */
     private String outputPolicy;
 
+    /** sync（dispatch 直接代调）/ async_long（转 create_task 走 Planner/Executor） */
+    private String executionMode;
+
     /** 是否可参与规划与执行 */
     private boolean enabled;
 

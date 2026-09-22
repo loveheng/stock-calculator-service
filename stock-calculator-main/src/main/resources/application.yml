@@ -123,8 +123,8 @@ vision:
       connect-timeout: 5s
       read-timeout: 30s
   ai:
-    # MCP client：连 :18081 stock-mcp 经纪人 + :18082 stock-mcp-notify 提醒工具面，
-    # 两服务工具同池注册给 LLM（docs/notify/design.md §七）；服务未起时失败快速暴露
+    # MCP client：只挂 :18083 orchestration dispatch 单连接（步 5 定案：统一入口，main 不直连
+    # :18081/:18082 工具池）；服务未起时失败快速暴露
     mcp:
       client:
         enabled: ${MCP_CLIENT_ENABLED:true}
@@ -133,10 +133,11 @@ vision:
           enabled: true
         streamable-http:
           connections:
-            stock-mcp:
-              url: ${MCP_STOCK_URL:http://localhost:18081}
-            stock-mcp-notify:
-              url: ${MCP_NOTIFY_URL:http://localhost:18082}
+            orchestration-dispatch:
+              url: ${MCP_ORCH_URL:http://localhost:18083}
+        common:
+          # 超时梯队第 3 层（步 5 定案 3）：copilot HTTP 15s > dispatch 10s > ToolInvoker 8s
+          request-timeout: 15s
     # 智能图片分析门面：图片哈希 -> 交易草稿 AI 结果缓存（Redis，key=vision:ai:draft:<MD5>；命中零 OCR/LLM 消耗，useCache=false 时淘汰）
     result-cache-ttl: 30m
 
@@ -165,6 +166,11 @@ llm:
 
 copilot:
   enabled: true   # Copilot AI 功能总开关
+  async-task:
+    rate-limit:   # 步 6-4a 用户维度限流（memory 定案③：全卡 main，orchestration 只做全局上限）
+      max-concurrent: 2          # 在途 RUNNING 任务并发上限
+      frequency-window-seconds: 60
+      max-per-window: 60         # 频控窗口内创建次数上限
   llm:
     deepseek:
       # Copilot 专用 DeepSeek 渠道；base-url 未配置时模型 Bean 不装配，ask 接口返回 503

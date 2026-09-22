@@ -2,8 +2,8 @@
 dev-loop: lessons
 format: v1
 epic: global
-total-merged: 6
-last-merge: 2026-09-19
+total-merged: 7
+last-merge: 2026-09-22
 ---
 
 # stock-calculator-service 项目经验总结
@@ -15,6 +15,12 @@ last-merge: 2026-09-19
 terminal 沙箱下静默写命令（cat >> / sed -i / mkdir）报 exit 2 "Cannot set tty process group" 属 pty 退出伪故障，命令本体已执行成功；勿据 exit code 盲目重试（会重复写入），先读目标文件核验落盘结果再决定动作。(Ref: stock-common)
 
 edit_file/write_file 落盘的 Java 文件被 Zed 格式化钩子整文件重排（import 重排 + 100 列换行风格，与代码库 125 列风格不一致），且偶发编辑未实际落上但文件已被重排 → 本仓库改代码一律走终端 sed/cat heredoc（绕开编辑器保存管线；含 $ 字面量的行用 python chr(36) 构造或按行号 sed 删除），写完以 git diff --stat 核对变更行数是否符合预期（远超预期 = 被重排，git checkout -- 恢复重做）。(Ref: misc)
+
+## 依赖/构建
+
+新依赖编译期报「无法访问 org.ta4j.core.Bar / 错误的类文件版本 69.0, 应为 65.0」→ 依赖 jar 字节码基线高于工具链 JDK（ta4j 0.22.8+ 实测 class v69=Java 25，0.17=v55=Java 11）→ 引第三方依赖前用 unzip -p jar 类路径 | od -An -j6 -N2 -d 查 major version 选兼容的最高版本（小端读数 17664=0x4500 即 v69），钉版并注释原因；报错形态只有「无法访问」一句时先怀疑字节码版本而非 API 变更。(Ref: mcp-service)
+
+Boot 4 服务启动报 No qualifying bean RestClient.Builder（构造注入处全挂，且服务从未真实启动过所以一直没暴露）→ Boot 4 拆模块：spring-boot-starter-web（spring-ai starter 传递）不含 spring-boot-restclient 模块，mcp 模块能拿到该 Bean 是靠 openai model starter 传递 → webmvc/restclient 一律 Boot 4 标准 starter 显式声明；main RestClientConfig「Boot 4 不再自动配置 RestClient.Builder」注释为过时结论（4.1.1 实证 RestClientAutoConfiguration 提供 Bean，main 只是缺 starter）。(Ref: mcp-blogger-kb)
 
 ## 测试环境
 
@@ -28,11 +34,15 @@ edit_file/write_file 落盘的 Java 文件被 Zed 格式化钩子整文件重排
 
 改动 Repository/接口后跑测试报 Mockito "Cannot instrument interface ... Unresolved compilation problem: List cannot be resolved"（源码其实缺 import）→ IDE 的 ECJ 把带编译错误的 .class 写进 target/classes，Maven 增量编译见 .class 比 .java 新而跳过重编，javac 从未真正编译该文件 → 先补真实编译错误再 clean test，勿信增量产物。(Ref: misc)
 
+SSE 端点 E2E 订阅端 getResponseCode 死等、「先等握手再发事件」与「事件在握手后才发」互相死锁（订阅端收集恒空）→ SseEmitter 首个事件发送前不提交响应头，客户端拿不到 200 → emitter 注册发生在控制器同步段（请求处理即入注册表），固定等待后直接发事件，不等 HTTP 握手。(Ref: mcp-blogger-kb)
+
 ## native（GraalVM）
 
 native 模块注解属性禁止运行期 SpEL 引 bean 属性：@RabbitListener 队列名写 `#{bean.name}` JVM 可跑、native 启动即 "Expression parsing failed"（SpEL 属性访问无反射元数据，Queue.getName() 不在可达性集合）。匿名队列用 @QueueBinding 声明式：@Queue(value="", durable="false", exclusive="true", autoDelete="true")（内部即 AnonymousQueue），一切注解属性用常量。(Ref: misc)
 
 新增 contract message DTO 后 native 消费端报 InvalidDefinitionException "no delegate- or property-based Creator"（JVM 正常，仅 native 必现）→ Spring AOT 推断不了消费端手工 readValue/convertValue 的类型，DTO 必须登记 ContractRuntimeHints.DTO_TYPES（嵌套类随宿主 getNestMembers 自动覆盖），2026-09-19 PullConfigPayload/PullHeartbeatPayload 漏登记即运行期崩 → data 已新增 ContractRuntimeHintsCoverageTest 包扫描守卫：message 包每个具体类必须已注册，人工约定升级为构建期断门。(Ref: task-unify)
+
+data 模块 --no-pkg 增量构建出的二进制缺新加的 kg worker：启动正常、其余 worker 消费者都在、kg 监听器零痕迹（日志无报错、队列未声明）→ 本地 target/spring-aot 产物早于 kg worker 源码，--no-pkg 复用陈旧 AOT，条件装配的新 bean 根本没进二进制 → data 新增 worker/角色代码后必须全量构建重生 AOT；验证法：find target/spring-aot/main/sources -name "*<Worker>*" 确认 bean 定义存在（对照 native-r1-smoke 只验启动不验功能，worker 缺失属静默失效）。(Ref: news-kg)
 
 ## 检索/引用核查
 
@@ -64,6 +74,8 @@ LLM 输出 JSON 被腰斩（UnexpectedEndOfInput expected close marker for Array
 
 LLM 结构化抽取的时间字段实测 100% 纯日期串（yyyy-MM-dd），ISO 容错解析只认 OffsetDateTime/Instant 致 kg_event.event_time 全量 null、时序时间轴空转 → 解析链缺 LocalDate 兜底分支（纯日期按 systemDefault 当日零点落锚）→ LLM 结构化输出的时间/数值字段解析按「最宽格式优先」编写，且动笔前先查证据实测格式，不能只认标准 ISO 全形。(Ref: news-kg)
 
+OpenAI 兼容网关原生 REST 调 LLM 三连坑：JDK HttpClient 走 HTTP/2 报 "Request cancelled"、响应 content-type=application/octet-stream 无 charset 被 String 转换器拒收、长输出被默认 max_tokens 静默截断成非法 JSON → SimpleClientHttpRequestFactory 强制 HTTP/1.1 + byte[] 收包自行 UTF-8 解码 + 请求体显式 max_tokens + 分钟级读超时。(Ref: mcp-blogger-kb)
+
 ## 部署/冒烟
 
 IDE 起服务与容器/脚本起服务环境不一致：角色开关忘配则队列 0 消费者静默积压（历史坑 DATASVC_WORKER_ENABLED 缺省 off；v2.5 后 yml 与 native 构建期均钉死生产恒 true，教训收敛为「冒烟前核对配置差异」）；IDE 注入的 JVM 代理参数(proxyHost)会拦外部 API 调用；IDE 控制台日志无法文件化，排障改走 MQ 管理 API(/api/queues 看 consumers/messages/unacked) + docker exec psql → 冒烟前先核对角色开关与出口网络。(Ref: copilot-memory)
@@ -80,14 +92,14 @@ main 由 IDE 托管时 AI 出口代理不稳定，且 JVM 全局代理会劫持 
 
 新表 DDL 与实体字段漂移（kg_evidence 漏 created_at）只在运行期暴露：ddl-auto=none 下 Hibernate 不补列，断点一 DDL 试跑（BEGIN-ROLLBACK）只验 SQL 可执行不验实体逐列对齐，常规验证命令又排除 @SpringBootTest，集成层零覆盖 → 新表落 schema.sql 时以实体字段清单为基准逐列核对；用 -Dspring.jpa.hibernate.ddl-auto=validate 跑 contextLoads 做全库对齐审计（零改动复用现有测试），或正式启用 validate 让漂移启动期 fail-fast；已建表存量库用 ALTER TABLE ADD COLUMN IF NOT EXISTS 补列（CREATE TABLE IF NOT EXISTS 对存量表不生效）。(Ref: news-kg)
 
+JPA 派生 deleteByXxx 的 DELETE 不立即执行（先 SELECT 实体、按 id 删除排队到 flush）：同一事务里 JdbcTemplate upsert 先写（同键旧行走 ON CONFLICT UPDATE 保留原 id），commit 时 Hibernate flush 才执行排队的按 id DELETE，把刚 upsert 的旧行连带删掉（forceResync 声称 upsert 684 行、库里只剩 ~330 且幸存行恰好是「resync 前不在库里的行」，三次实验头/尾交替互补）→ 同一事务内 JPA 实体删除与 JDBC 直写勿混用：删除改 JdbcTemplate 立即执行（或 deleteBy 后 flush 隔离）；「幸存行=本侧行」的互补模式=延迟删除吃掉新写入的强指纹。(Ref: mcp-service)
+
 ## MCP
 
 MCP 探活把 tools/list 当会话首条消息：POST 返回 200/202 但 SSE 流零响应（服务端对未初始化会话按协议静默丢弃），而非法会话 404 / 非法报文 400 秒回，极易误判成服务端挂起；实测根因是 MCP 协议时序硬性要求 initialize → notifications/initialized → 之后才能发 tools/list 等请求，协议序错误的表现就是静默无响应 → 手工 curl 探活严格按三步协议走；请求合法却零响应先核对消息顺序再怀疑服务端；SSE 流探活用前台 curl + --max-time 兜底（后台任务延迟执行会污染时序判断）。(Ref: mcp-service)
 
+字典镜像 JSON 键 isStib 与 Lombok 布尔字段 stib 错位：@Data 的 isStib() 在 Jackson 里属性名是 stib，且 Jackson 3 裸 new ObjectMapper() 默认 FAIL_ON_UNKNOWN_PROPERTIES=true，读侧逐行抛错被 fail-open 吞成「0 条载入」，写读双方单测各自自洽测不出跨端键义错位 → Jackson 3 注解包仍是 com.fasterxml.jackson.annotation（@JsonProperty 钉键名）；属性名错位+未知键失败叠加时表现为「静默空结果」，跨端 JSON 契约要有一侧用真实镜像样本做端到端断言。(Ref: mcp-service)
+
+新增 @Tool 工具 bean 后 MCP 层报 "Tool not found" → McpToolConfig.toolObjects 是显式列举注册，非自动扫描，漏挂即 bean 存在但工具不可见 → 新增工具类必须同步加进 toolObjects，且验收前先 tools/list 对账。(Ref: mcp-blogger-kb)
+
 ## 追加区
-- [mcp] 字典镜像 JSON 键 isStib 与 Lombok 布尔字段 stib 错位：@Data 的 isStib() 在 Jackson 里属性名是 stib，且 Jackson 3 裸 new ObjectMapper() 默认 FAIL_ON_UNKNOWN_PROPERTIES=true，读侧逐行抛错被 fail-open 吞成「0 条载入」，写读双方单测各自自洽测不出跨端键义错位 ➔ Jackson 3 注解包仍是 com.fasterxml.jackson.annotation（@JsonProperty 钉键名）；属性名错位+未知键失败叠加时表现为「静默空结果」，跨端 JSON 契约要有一侧用真实镜像样本做端到端断言 (Ref: mcp-service)
-- [mcp] 新依赖编译期报「无法访问 org.ta4j.core.Bar / 错误的类文件版本 69.0, 应为 65.0」→ 依赖 jar 字节码基线高于工具链 JDK（ta4j 0.22.8+ 实测 class v69=Java 25，0.17=v55=Java 11）→ 引第三方依赖前用 unzip -p jar 类路径 | od -An -j6 -N2 -d 查 major version 选兼容的最高版本（小端读数 17664=0x4500 即 v69），钉版并注释原因；报错形态只有「无法访问」一句时先怀疑字节码版本而非 API 变更 (Ref: mcp-service)
-- [kg/native] data 模块 --no-pkg 增量构建出的二进制缺新加的 kg worker：启动正常、其余 worker 消费者都在、kg 监听器零痕迹（日志无报错、队列未声明）➔ 本地 target/spring-aot 产物早于 kg worker 源码，--no-pkg 复用陈旧 AOT，条件装配的新 bean 根本没进二进制 ➔ data 新增 worker/角色代码后必须全量构建重生 AOT；验证法：find target/spring-aot/main/sources -name "*<Worker>*" 确认 bean 定义存在（对照 native-r1-smoke 只验启动不验功能，worker 缺失属静默失效） (Ref: news-kg)
-- [mcp] forceResync 声称 upsert 684 行、库里只剩 ~330-356 行且幸存行恰好是「resync 前不在库里的行」（三次实验头/尾交替互补）➔ JPA 派生 deleteByStockId 的 DELETE 不立即执行（先 SELECT 实体、按 id 删除排队到 flush），同一事务里 JdbcTemplate upsert 先写 684 行（同键旧行走 ON CONFLICT UPDATE 保留原 id），commit 时 Hibernate flush 才执行排队的按 id DELETE，把刚 upsert 的旧行连带删掉 ➔ 同一事务内 JPA 实体删除与 JDBC 直写勿混用：删除改 JdbcTemplate 立即执行（或 deleteBy 后 flush 隔离）；「幸存行=本侧行」的互补模式=延迟删除吃掉新写入的强指纹 (Ref: mcp-service)
-- [mcp·kb] OpenAI 兼容网关原生 REST 调 LLM 三连坑：JDK HttpClient 走 HTTP/2 报 "Request cancelled"、响应 content-type=application/octet-stream 无 charset 被 String 转换器拒收、长输出被默认 max_tokens 静默截断成非法 JSON ➔ 用 SimpleClientHttpRequestFactory 强制 HTTP/1.1 + byte[] 收包自行 UTF-8 解码 + 请求体显式 max_tokens + 分钟级读超时 (Ref: mcp-blogger-kb)
-- [mcp] 新增 @Tool 工具 bean 后 MCP 层报 "Tool not found" ➔ McpToolConfig.toolObjects 是显式列举注册，非自动扫描，漏挂即 bean 存在但工具不可见 ➔ 新增工具类必须同步加进 toolObjects，且验收前先 tools/list 对账 (Ref: mcp-blogger-kb)

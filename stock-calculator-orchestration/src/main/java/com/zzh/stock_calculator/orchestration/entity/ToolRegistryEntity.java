@@ -62,6 +62,11 @@ public class ToolRegistryEntity {
     @Builder.Default
     private String outputPolicy = "keep_head";
 
+    /** 执行模式：sync（dispatch 直接代调秒回）/ async_long（转 create_task 走 Planner/Executor） */
+    @Column(name = "execution_mode", nullable = false, length = 16)
+    @Builder.Default
+    private String executionMode = "sync";
+
     /** 下线开关 */
     @Column(nullable = false)
     @Builder.Default

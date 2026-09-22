@@ -612,3 +612,22 @@ CREATE TABLE IF NOT EXISTS public.push_message (
 );
 CREATE INDEX IF NOT EXISTS idx_push_message_user_unread ON public.push_message (user_id, created_at DESC) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_push_message_user_time ON public.push_message (user_id, created_at DESC);
+
+-- 用户异步任务映射审计表（步 6-1 通道映射块）：main 侧 correlation_id ↔ orchestration task_id(traceId)
+-- 映射持久化，作 SSE 断连重连恢复依据 + 异步任务调用审计（实现文档 §5.1 定案）
+CREATE TABLE IF NOT EXISTS public.user_async_task_log (
+	id bigserial NOT NULL,
+	correlation_id varchar(64) NOT NULL,          -- main 生成，MQ payload 仅带此 ID（脱敏）
+	channel_id varchar(64) NULL,                  -- 会话/通道标识（SSE 重连恢复定位）
+	task_id varchar(64) NOT NULL,                 -- orchestration task_instance.trace_id
+	user_id varchar(64) NOT NULL,                 -- 仅 main 侧持有，永不下发编排器
+	task_type varchar(64) NOT NULL,               -- 任务类型（如 announcement_subscribe）
+	status varchar(20) DEFAULT 'RUNNING' NOT NULL,-- RUNNING/DONE/FAILED/TIMEOUT
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT user_async_task_log_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_user_async_task_correlation UNIQUE (correlation_id),
+	CONSTRAINT uq_user_async_task_task UNIQUE (task_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_async_task_user ON public.user_async_task_log (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_async_task_status ON public.user_async_task_log (status) WHERE status = 'RUNNING';

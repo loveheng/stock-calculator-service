@@ -223,6 +223,15 @@ sequenceDiagram
 6. HITL 审核 API/CLI（D11：plan 详情 + 冒烟回放 + 确认上架）；
 7. mcp 模块 mq/ 子包工具面（message_trace / queue_stats / message_peek…——**不设 task 状态类工具**，防与 task_instance 双状态源冲突；两个视角由 LLM 持 traceId 交叉拼合）。
 
+> **实施记录（2026-09-22）**：步 0-6 已落地（步 6 即 MQ 异步通道六子项：TraceId 透传 / 通道映射
+> user_async_task_log / mq_send+mq_wait 挂起唤醒 / 真异步 TaskRunnerListener + SSE
+> AsyncTaskResultConsumer / 限流双闸门 / GC 双保险，与 §十 编号非一一对应）。
+> **步 6 冒烟 Gate 已过**（硬性门禁）：`OrchestrationSmokeGateE2ETest`（orchestration 侧五场景：
+> 挂起/唤醒续跑/回发路由/超时收口/失败，sleep Dummy 上限 120s）+ `AsyncTaskResultSseE2ETest`
+> （main 侧 SSE task_result 推流 + 审计 RUNNING→DONE/FAILED CAS 回写），`SMOKE_E2E=true` 门控。
+> 运维注意：orchestration pom 须显式声明 spring-boot-starter-webmvc + spring-boot-starter-restclient
+> （Boot 4 拆模块，spring-ai 传递依赖不含 restclient 模块，缺则服务无法启动）。
+
 ## 十一、风险与未决项
 
 | 项 | 说明 |

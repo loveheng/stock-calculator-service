@@ -31,6 +31,13 @@ import java.time.LocalDateTime;
         })
 public class TaskInstanceEntity {
 
+    /** 实例状态机：running（执行中）/ waiting（mq_wait 挂起，等 MQ 事件唤醒）/ done / failed / timeout */
+    public static final String ST_RUNNING = "running";
+    public static final String ST_WAITING = "waiting";
+    public static final String ST_DONE = "done";
+    public static final String ST_FAILED = "failed";
+    public static final String ST_TIMEOUT = "timeout";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -38,6 +45,7 @@ public class TaskInstanceEntity {
     @Column(name = "plan_id", nullable = false)
     private Long planId;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "plan_dag_snapshot", nullable = false, columnDefinition = "JSONB")
     private JsonNode planDagSnapshot;
 
@@ -49,19 +57,25 @@ public class TaskInstanceEntity {
     private String userId;
 
     /** 本次填充的具体参数（命中复用路径时 LLM 填槽 + 硬校验后的值） */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "JSONB")
     @Builder.Default
     private JsonNode params = new tools.jackson.databind.ObjectMapper().createObjectNode();
 
     /** 各节点状态（pending/running/done/failed + 按 output_policy 瘦身的输出摘要） */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "node_states", nullable = false, columnDefinition = "JSONB")
     @Builder.Default
     private JsonNode nodeStates = new tools.jackson.databind.ObjectMapper().createObjectNode();
 
-    /** running / done / failed / cancelled */
+    /** running / done / failed / cancelled / waiting（mq_wait 挂起） / timeout */
     @Column(nullable = false, length = 16)
     @Builder.Default
     private String status = "running";
+
+    /** mq_wait 挂起截止时间（NULL=非挂起）；超时由 @Scheduled 扫描置 timeout（Zombie 防御） */
+    @Column(name = "wait_deadline")
+    private LocalDateTime waitDeadline;
 
     @Column(name = "created_at", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP", updatable = false)
     private LocalDateTime createdAt;
