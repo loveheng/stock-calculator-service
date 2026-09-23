@@ -90,7 +90,31 @@ EXTRA_CLASSES = [
     'org.hibernate.type.format.jaxb.JaxbXmlFormatMapper',
     # dialect resolved by name from JDBC metadata
     'org.hibernate.dialect.PostgreSQLDialect',
+    # PgJdbcHelper 按 JDBC type name 实例化的 PG 专用 JdbcType 全族（静态不可达，
+    # 冒烟逐个暴露过 Inet/IntervalSecond，一次注册全族防打地鼠）
+    'org.hibernate.dialect.type.PostgreSQLArrayJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLArrayJdbcTypeConstructor',
+    'org.hibernate.dialect.type.PostgreSQLCastingInetJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLCastingIntervalSecondJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLCastingJsonArrayJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLCastingJsonArrayJdbcTypeConstructor',
+    'org.hibernate.dialect.type.PostgreSQLCastingJsonJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLEnumJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLInetJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLIntervalSecondJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLJsonArrayPGObjectJsonJdbcTypeConstructor',
+    'org.hibernate.dialect.type.PostgreSQLJsonArrayPGObjectJsonbJdbcTypeConstructor',
+    'org.hibernate.dialect.type.PostgreSQLJsonArrayPGObjectType',
+    'org.hibernate.dialect.type.PostgreSQLJsonPGObjectJsonType',
+    'org.hibernate.dialect.type.PostgreSQLJsonPGObjectJsonbType',
+    'org.hibernate.dialect.type.PostgreSQLOrdinalEnumJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLStructCastingJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLStructPGObjectJdbcType',
+    'org.hibernate.dialect.type.PostgreSQLUUIDJdbcType',
     # id optimizers (used when entities map sequences)
+    # hibernate 注解模型运行期按名实例化的注解内部类（静态不可达，冒烟实测
+    #   NoSuchMethodException: CacheAnnotation.<init>(ModelsContext)）
+    'org.hibernate.boot.models.annotations.internal.CacheAnnotation',
     'org.hibernate.id.enhanced.NoopOptimizer',
     'org.hibernate.id.enhanced.PooledOptimizer',
     'org.hibernate.id.enhanced.PooledLoOptimizer',
@@ -108,6 +132,13 @@ EXTRA_CLASSES = [
     'java.util.UUID[]',
     'java.lang.Long[]',
     'java.lang.String[]',
+    # hikari PoolEntry 构造期经 ClockSource/ProxyFactory 反射实例化 JDBC 数组类
+    #（tracing agent 盲区，native 运行期建连即崩：
+    #   MissingReflectionRegistrationError: Cannot reflectively instantiate
+    #   the array class 'java.sql.Statement[]'）
+    'java.sql.Statement[]',
+    'java.sql.ResultSet[]',
+    'java.sql.Connection[]',
     # hibernate bytecode provider, selected via ServiceLoader in hibernate 7.x
     # (BytecodeProviderInitiator ignores hibernate.bytecode.provider settings):
     #   empty service discovery -> built-in none provider (DisallowedProxyFactory,
@@ -424,10 +455,19 @@ logger_set = set(logger_classes)
 # org.jboss.logging.Logger (javap-verified); jboss-logging's getMessageLogger
 # instantiates them reflectively via that constructor. The no-arg entry is kept
 # because native-image silently tolerates registrations for absent members.
+# EXTRA_CTORS: additional constructor signatures invoked reflectively by name
+# (e.g. hibernate models CacheAnnotation.<init>(ModelsContext), smoke-verified)
+EXTRA_CTORS = {
+    'org.hibernate.boot.models.annotations.internal.CacheAnnotation':
+        [['org.hibernate.models.spi.ModelsContext']],
+}
+
 def ctor_entries(fq):
     ctors = [{'name': '<init>', 'parameterTypes': []}]
     if fq in logger_set:
         ctors.append({'name': '<init>', 'parameterTypes': ['org.jboss.logging.Logger']})
+    for params in EXTRA_CTORS.get(fq, []):
+        ctors.append({'name': '<init>', 'parameterTypes': params})
     return ctors
 
 for fq in classes:
