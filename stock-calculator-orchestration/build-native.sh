@@ -149,6 +149,15 @@ echo "==================== 启动冒烟 ===================="
 # 先清掉构建期 dummy SPRING_APPLICATION_JSON，让 .env 真实凭据生效
 unset SPRING_APPLICATION_JSON
 if [ -f ../.env ]; then set -a; . ../.env; set +a; fi
+# mcp-broker(:18081) 是 ToolInvoker 的启动期硬依赖（McpSyncClient bean 创建即连
+# SSE 并 initialize，20s 超时炸启动）。本地冒烟惯例是先联启经纪人做全量验证；
+# CI 各模块 job 跑在隔离 runner 上，mcp 镜像在另一 runner 构建、本机 :18081 恒空——
+# 此时降级为惰性初始化（initialized=false 在 bean 工厂方法运行期读取，native AOT
+# 下同样生效），冒烟只验 orchestration 自身起得来，工具调用路径留待联调。
+if ! (exec 3<>/dev/tcp/127.0.0.1/18081) 2>/dev/null; then
+  echo "⚠️ :18081 无 mcp 经纪人（CI 隔离 runner 场景）→ MCP client 惰性初始化，冒烟不验经纪人链路"
+  export SPRING_AI_MCP_CLIENT_INITIALIZED=false
+fi
 SMOKE_LOG=/tmp/orch-smoke.log
 "target/$BINARY_NAME" > "$SMOKE_LOG" 2>&1 &
 SMOKE_PID=$!
