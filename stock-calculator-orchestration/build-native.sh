@@ -108,9 +108,11 @@ if [ ! -f target/classes/META-INF/native-image/com.zzh/ni-logger-config/reachabi
 fi
 
 echo "█████ 步骤 3/4: native-image（约 8~15 分钟，日志 /tmp/ni-orch-build.log）..."
+# 官方 reachability-metadata 仓库接管 hikari/hibernate 反射缺口（试点已验证）
 if ! native-image \
   -cp "$CP" \
   -H:Class=com.zzh.stock_calculator.orchestration.OrchestrationApplication \
+  -H:ConfigurationFileDirectories=../third_party/graalvm-reachability-metadata/com.zaxxer/HikariCP/7.0.2,../third_party/graalvm-reachability-metadata/org.hibernate.orm/hibernate-core/7.3.0.Final \
   --no-fallback \
   -J-Xmx12g \
   --enable-all-security-services \
@@ -143,8 +145,9 @@ ls -lh "target/$BINARY_NAME"
 file "target/$BINARY_NAME"
 
 echo "==================== 启动冒烟 ===================="
-# 需真实连 stock_mcp 库（sql.init 幂等建表 + JPA validate）；
-# POSTGRES_PASS 从环境/.env 注入（CI 由 workflow 的 postgres service 提供）
+# 需真实连 stock_mcp 库 + RabbitMQ（listener 启动即鉴权）；
+# 先清掉构建期 dummy SPRING_APPLICATION_JSON，让 .env 真实凭据生效
+unset SPRING_APPLICATION_JSON
 if [ -f ../.env ]; then set -a; . ../.env; set +a; fi
 SMOKE_LOG=/tmp/orch-smoke.log
 "target/$BINARY_NAME" > "$SMOKE_LOG" 2>&1 &

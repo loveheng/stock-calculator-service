@@ -30,9 +30,10 @@ spring:
         common:
           # 超时梯队第 1 层（步 5 定案 3）：ToolInvoker 8s < dispatch 10s < copilot HTTP 15s
           request-timeout: 8s
-        streamable-http:
+        sse:
           connections:
-            # Executor kind=mcp 节点统一走 :18081 经纪人（D5：规划器不感知工具背后是 MCP 还是 REST）
+            # Executor kind=mcp 节点统一走 :18081 经纪人（D5：规划器不感知工具背后是 MCP 还是 REST）；
+            # mcp 服务端只开 SSE（/sse），streamable-http client 打 /mcp 404（2026-09-23 冒烟定案）
             mcp-broker:
               url: ${MCP_BROKER_URL:http://localhost:18081/sse}
 

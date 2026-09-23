@@ -114,9 +114,11 @@ if [ ! -f "$OPENAI_META" ]; then
 fi
 
 echo "█████ 步骤 3/4: native-image（约 8~15 分钟，日志 /tmp/ni-data-build.log）..."
+# 官方 reachability-metadata 仓库接管 hikari/hibernate 反射缺口（试点分支验证）
 if ! native-image \
   -cp "$CP" \
   -H:Class=com.zzh.stock_calculator.data.DataServiceApplication \
+  -H:ConfigurationFileDirectories=../third_party/graalvm-reachability-metadata/com.zaxxer/HikariCP/7.0.2,../third_party/graalvm-reachability-metadata/org.hibernate.orm/hibernate-core/7.3.0.Final \
   --no-fallback \
   -J-Xmx12g \
   --enable-all-security-services \

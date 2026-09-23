@@ -130,6 +130,7 @@ echo "        注意：native-image 长时间无输出属正常现象，请勿�
 if ! native-image \
   -cp "$CP" \
   -H:Class=com.zzh.stock_calculator.StockCalculatorApplication \
+  -H:ConfigurationFileDirectories=../third_party/graalvm-reachability-metadata/com.zaxxer/HikariCP/7.0.2,../third_party/graalvm-reachability-metadata/org.hibernate.orm/hibernate-core/7.3.0.Final \
   --no-fallback \
   -J-Xmx12g \
   --enable-all-security-services \
