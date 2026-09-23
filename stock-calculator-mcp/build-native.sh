@@ -104,9 +104,14 @@ if [ ! -f target/classes/META-INF/native-image/com.zzh/ni-logger-config/reachabi
 fi
 
 echo "█████ 步骤 3/4: native-image（约 8~15 分钟，日志 /tmp/ni-mcp-build.log）..."
+# 官方 reachability-metadata 仓库接管 hikari/hibernate 反射缺口（试点分支验证）：
+# -H:ConfigurationFileDirectories 指向官方仓库精简拷贝（HikariCP 7.0.2 精确版 +
+# hibernate-core 7.3.0.Final 相邻版，覆盖 Statement[]/PG JdbcType 全族/
+# CacheAnnotation/DialectOverride$ 46 类），gen-logger-config.py 产物继续兜底
 if ! native-image \
   -cp "$CP" \
   -H:Class=com.zzh.stock_calculator.mcp.StockMcpApplication \
+  -H:ConfigurationFileDirectories=../third_party/graalvm-reachability-metadata/com.zaxxer/HikariCP/7.0.2,../third_party/graalvm-reachability-metadata/org.hibernate.orm/hibernate-core/7.3.0.Final \
   --no-fallback \
   -J-Xmx12g \
   --enable-all-security-services \
