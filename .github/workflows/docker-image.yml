@@ -18,7 +18,7 @@ name: Build and Push Native Docker Images (per-module)
 
 on:
   push:
-    branches: [ "main", "dev", "native" ]
+    branches: [ "main", "dev", "native", "native-metadata-repo" ]
     tags: [ 'v*.*.*' ]
   workflow_dispatch:
 
@@ -600,6 +600,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=docker-orchestration
           cache-to: type=gha,mode=max,scope=docker-orchestration
-
-
-
