@@ -3,6 +3,7 @@ package com.zzh.stock_calculator.mcp.dict;
 import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -22,6 +23,9 @@ import java.util.Optional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+// native 反射注册（javap 实证无参 ctor + 4 setter）：readValue 按值构造 StockDictEntry
+// 仅运行期可达，AOT 静态分析看不见，缺此注册则每行都 "no delegate- or property-based Creator"
+@RegisterReflectionForBinding(StockDictEntry.class)
 public class StockDictMemoryService {
 
     /** 与 main StockDictRedisSync.KEY 保持一致（防双源漂移：改动需两处同步） */

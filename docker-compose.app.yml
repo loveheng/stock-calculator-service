@@ -39,7 +39,7 @@ services:
   data:
     image: ghcr.io/loveheng/stock-calculator-service-data:${DATA_IMAGE_TAG:-3a4f486}
     ports:
-      - "${DATA_PORT:-18081}:8080"   # 仅 ingest webhook 使用，不用 ingest 可注释掉
+      - "${DATA_PORT:-18081}:18081"   # 仅 ingest webhook 使用，不用 ingest 可注释掉
     env_file:
       - .env
     restart: unless-stopped

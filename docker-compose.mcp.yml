@@ -1,0 +1,80 @@
+# MCP 层：mcp 经纪人(:18081) / notify 提醒(:18082) / orchestration 编排(:18083)。
+# 依赖中间件层（docker-compose.middleware.yml 提供 postgres / redis / lavinmq），
+# 与应用层 docker-compose.app.yml 同款约定：
+#   - 启动顺序：先中间件，后本层；均 restart: unless-stopped，中间件晚起可自愈重连，
+#     故不写 depends_on（compose 跨项目无法引用另一文件的服务）。
+#   - 互通：加入中间件层创建的固定名网络 scs-net（external，仅加入不创建），
+#     经服务名 postgres / redis / lavinmq 做 DNS 访问，.env 中的
+#     POSTGRES_URL_MCP / RABBIT_HOST 等无需改动。
+#   - 若本机不跑中间件，先执行：docker network create scs-net
+#   - 文件名不是 compose 默认名，所有命令需 -f 显式指定：
+#       docker compose -f docker-compose.mcp.yml up -d
+services:
+  # MCP 经纪人（CI 推送的 GraalVM Native 镜像，镜像名 = 主镜像 + -mcp 后缀）。
+  # 连 stock_mcp 独立库（POSTGRES_URL_MCP）+ redis（REDIS_HOST）；
+  # CLOUDFLARE_* / DEEPSEEK_*（kb RAG 与 persona 提炼）经 env_file 从 .env 注入。
+  mcp:
+    image: ghcr.io/loveheng/stock-calculator-service-mcp:${MCP_IMAGE_TAG:-latest}
+    ports:
+      - "${MCP_PORT:-18081}:18081"
+    env_file:
+      - .env
+    restart: unless-stopped
+    logging:
+      driver: "k8s-file"
+      options:
+        path: "/tmp/scs-mcp.log"
+        max-size: "20mb"
+        max-file: "5"
+    networks:
+      scs-net:
+        # 显式别名：orchestration 的 MCP_BROKER_URL 经服务名 mcp 解析到本容器
+        aliases: [mcp]
+
+  # Notify 提醒服务（镜像名 = 主镜像 + -notify 后缀）。
+  # reminder 表复用 stock_mcp 独立库（N3），依赖 postgres + lavinmq；
+  # SMTP_* 等发信凭据经 env_file 从 .env 注入。
+  notify:
+    image: ghcr.io/loveheng/stock-calculator-service-notify:${NOTIFY_IMAGE_TAG:-latest}
+    ports:
+      - "${NOTIFY_PORT:-18082}:18082"
+    env_file:
+      - .env
+    restart: unless-stopped
+    logging:
+      driver: "k8s-file"
+      options:
+        path: "/tmp/scs-notify.log"
+        max-size: "20mb"
+        max-file: "5"
+    networks:
+      - scs-net
+
+  # Orchestration 编排服务（镜像名 = 主镜像 + -orchestration 后缀）。
+  # 三表复用 stock_mcp 独立库（D6），依赖 postgres + lavinmq；
+  # Planner 的 DEEPSEEK_* 三键、意图向量 CLOUDFLARE_* 两键、
+  # 服务级通行证 ORCH_PASSPORT_TOKEN 均经 env_file 从 .env 注入。
+  # Executor 的 mcp 经纪人地址：容器内走 scs-net 服务名 mcp（非 .env 的 localhost），
+  # 如经纪人不在本机 scs-net 上，在 .env 里覆盖 MCP_BROKER_URL 即可。
+  orchestration:
+    image: ghcr.io/loveheng/stock-calculator-service-orchestration:${ORCHESTRATION_IMAGE_TAG:-latest}
+    ports:
+      - "${ORCHESTRATION_PORT:-18083}:18083"
+    environment:
+      - MCP_BROKER_URL=${MCP_BROKER_URL:-http://mcp:18081/sse}
+    env_file:
+      - .env
+    restart: unless-stopped
+    logging:
+      driver: "k8s-file"
+      options:
+        path: "/tmp/scs-orchestration.log"
+        max-size: "20mb"
+        max-file: "5"
+    networks:
+      - scs-net
+
+networks:
+  # 中间件层已创建（见 docker-compose.middleware.yml 的 networks 段），此处仅加入
+  scs-net:
+    external: true

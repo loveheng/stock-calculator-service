@@ -150,6 +150,11 @@ EXTRA_CLASSES = [
     # ctor is still registered defensively in case some path instantiates it
     'org.hibernate.bytecode.internal.none.BytecodeProviderImpl',
     'org.hibernate.boot.registry.selector.internal.StrategySelectorImpl',
+    # StockDictMemoryService 字典镜像 readValue(StockDictEntry)：Jackson 3 走
+    # PropertyBasedCreator 反射调无参 ctor；Spring AOT(@RegisterReflectionForBinding)
+    # 只显式注册 getter/setter，构造器依赖 allDeclaredConstructors——新版元数据
+    # 静默忽略该键（技能四节），缺显式 <init> 即每行 "no property-based Creator"
+    'com.zzh.stock_calculator.mcp.dict.StockDictEntry',
 ]
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -181,6 +186,17 @@ for j in open(cp).read().strip().split(':'):
                 line = line.strip()
                 if line and not line.startswith('#'):
                     service_providers.add(line)
+
+# 模块自身类编译在 target/classes（不在任何依赖 jar 里，cp.txt 只有依赖），
+# 但同样运行在 native classpath 上——不扫这里的话 EXTRA_CLASSES 里引用本模块类
+# 会被 extra_on_classpath 过滤静默跳过（2026-09 StockDictEntry 即中招）
+own_classes = 'target/classes'
+if os.path.isdir(own_classes):
+    for root, _, files in os.walk(own_classes):
+        for f in files:
+            if f.endswith('.class'):
+                rel = os.path.relpath(os.path.join(root, f), own_classes)
+                all_names.add(rel[:-6].replace(os.sep, '.'))
 
 OPENAI_ANY_SETTER = {
     'name': 'putAdditionalProperty',
