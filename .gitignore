@@ -51,4 +51,5 @@ build/
 context/CURRENT
 
 ### Python ###
-__pycache__/
+__pycache__
+.toolbox.env

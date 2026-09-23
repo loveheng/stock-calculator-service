@@ -9,6 +9,8 @@
 # name: deploy-cloud-run
 # summary: Cloud Run data 副本一键部署（secrets 同步 + 服务部署）
 # trigger: manual
+# params: RABBIT_USER,RABBIT_PASS,CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_API_TOKEN,LLM_BASE_URL,LLM_API_KEY,LLM_MODEL,INGEST_SECRET
+# alias: depl
 # platform: unix
 
 set -euo pipefail
@@ -26,6 +28,8 @@ RABBIT_PORT="5672"
 ENV_FILE="$(cd "$(dirname "$0")/../.." && pwd)/.env"
 
 envget() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r' || true; }
+# env 优先（toolbox run 参数注入），.env 兜底（裸调通道）
+pget() { eval "v=\${$1:-}"; [ -n "$v" ] && { printf '%s' "$v"; return; }; envget "$1"; }
 
 usage() {
   cat <<'EOF'
@@ -40,13 +44,13 @@ preflight() {
   [ -f "$ENV_FILE" ] || { MSG="缺 .env：$ENV_FILE"; return 1; }
   command -v gcloud >/dev/null 2>&1 || { MSG="gcloud 不在 PATH"; return 1; }
   missing=""
-  [ -n "$(envget RABBIT_USER)" ]            || missing="$missing RABBIT_USER"
-  [ -n "$(envget RABBIT_PASS)" ]            || missing="$missing RABBIT_PASS"
-  [ -n "$(envget CLOUDFLARE_ACCOUNT_ID)" ]  || missing="$missing CLOUDFLARE_ACCOUNT_ID"
-  [ -n "$(envget CLOUDFLARE_API_TOKEN)" ]   || missing="$missing CLOUDFLARE_API_TOKEN"
-  [ -n "$(envget LLM_BASE_URL)" ]           || missing="$missing LLM_BASE_URL"
-  [ -n "$(envget LLM_API_KEY)" ]            || missing="$missing LLM_API_KEY"
-  [ -n "$(envget LLM_MODEL)" ]              || missing="$missing LLM_MODEL"
+  [ -n "$(pget RABBIT_USER)" ]            || missing="$missing RABBIT_USER"
+  [ -n "$(pget RABBIT_PASS)" ]            || missing="$missing RABBIT_PASS"
+  [ -n "$(pget CLOUDFLARE_ACCOUNT_ID)" ]  || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+  [ -n "$(pget CLOUDFLARE_API_TOKEN)" ]   || missing="$missing CLOUDFLARE_API_TOKEN"
+  [ -n "$(pget LLM_BASE_URL)" ]           || missing="$missing LLM_BASE_URL"
+  [ -n "$(pget LLM_API_KEY)" ]            || missing="$missing LLM_API_KEY"
+  [ -n "$(pget LLM_MODEL)" ]              || missing="$missing LLM_MODEL"
   case "$missing" in
     "") MSG="预检通过：.env 键齐全、gcloud 就绪（未执行部署本体）"
         return 0
@@ -81,13 +85,13 @@ main() {
   if [ "$#" -gt 0 ] && [ -n "$1" ]; then IMAGE_TAG="$1"; fi
 
   # ---- 读 .env（grep 取键，cut 取到行尾以兼容含 = 的值；去 \r 防 CRLF；无匹配返回空不报错）----
-  RABBIT_USER=$(envget RABBIT_USER)
-  RABBIT_PASS=$(envget RABBIT_PASS)
-  CLOUDFLARE_ACCOUNT_ID=$(envget CLOUDFLARE_ACCOUNT_ID)
-  CLOUDFLARE_API_TOKEN=$(envget CLOUDFLARE_API_TOKEN)
-  LLM_BASE_URL=$(envget LLM_BASE_URL)
-  LLM_API_KEY=$(envget LLM_API_KEY)
-  LLM_MODEL=$(envget LLM_MODEL)
+  RABBIT_USER=$(pget RABBIT_USER)
+  RABBIT_PASS=$(pget RABBIT_PASS)
+  CLOUDFLARE_ACCOUNT_ID=$(pget CLOUDFLARE_ACCOUNT_ID)
+  CLOUDFLARE_API_TOKEN=$(pget CLOUDFLARE_API_TOKEN)
+  LLM_BASE_URL=$(pget LLM_BASE_URL)
+  LLM_API_KEY=$(pget LLM_API_KEY)
+  LLM_MODEL=$(pget LLM_MODEL)
 
   # INGEST_SECRET 缺失时：优先恢复 .env 中注释掉的非空旧值（发送方不受影响），否则生成
   INGEST_SECRET=$(envget INGEST_SECRET)

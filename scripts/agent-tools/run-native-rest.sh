@@ -7,6 +7,8 @@
 # name: run-native-rest
 # summary: main native REST 门禁冒烟（admin token 门禁 + ApiResponse 信封）
 # trigger: manual
+# params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER,CRAWLER_ADMIN_TOKEN
+# alias: nr
 # platform: unix
 
 set -e
@@ -32,10 +34,12 @@ preflight() {
 
 main() {
   cd "$(dirname "$0")/../../stock-calculator-main"
-  PASS=$(grep -E '^POSTGRES_PASS=' ../.env | cut -d= -f2-)
-  export POSTGRES_PASS="$PASS"
-  export POSTGRES_URL="jdbc:postgresql://localhost/scs"
-  export POSTGRES_USER="root"
+  # env 优先（toolbox run 参数注入），.env 兜底（裸调通道）
+  [ -n "${POSTGRES_PASS:-}" ] || PASS=$(grep -E '^POSTGRES_PASS=' ../.env | cut -d= -f2-)
+  export POSTGRES_PASS="${POSTGRES_PASS:-$PASS}"
+  : "${POSTGRES_URL:=jdbc:postgresql://localhost/scs}"
+  : "${POSTGRES_USER:=root}"
+  export POSTGRES_URL POSTGRES_USER
   sh smoke-curl.sh
 }
 

@@ -8,6 +8,8 @@
 # name: run-jvm-watch
 # summary: monitor 巡检 JVM 侧验证（vhost 双重编码缺陷回归观察）
 # trigger: manual
+# params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER
+# alias: jw
 # platform: unix
 
 usage() {
@@ -29,10 +31,12 @@ preflight() {
 
 main() {
   cd "$(dirname "$0")/../../stock-calculator-main"
-  PASS=$(grep -E '^POSTGRES_PASS=' ../.env | cut -d= -f2-)
-  export POSTGRES_PASS="$PASS"
-  export POSTGRES_URL="jdbc:postgresql://localhost/scs"
-  export POSTGRES_USER="root"
+  # env 优先（toolbox run 参数注入），.env 兜底（裸调通道）
+  [ -n "${POSTGRES_PASS:-}" ] || PASS=$(grep -E '^POSTGRES_PASS=' ../.env | cut -d= -f2-)
+  export POSTGRES_PASS="${POSTGRES_PASS:-$PASS}"
+  : "${POSTGRES_URL:=jdbc:postgresql://localhost/scs}"
+  : "${POSTGRES_USER:=root}"
+  export POSTGRES_URL POSTGRES_USER
   ../../mvnw -q dependency:build-classpath -Dmdep.outputFile=target/jvm-cp.txt >/dev/null 2>&1
   CP="target/classes:$(cat target/jvm-cp.txt)"
   java -cp "$CP" com.zzh.stock_calculator.StockCalculatorApplication > /tmp/jvm-watch.log 2>&1 &

@@ -9,6 +9,8 @@
 # name: run-native-smoke
 # summary: main native 二进制带库启动冒烟（明确退出码）
 # trigger: manual
+# params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER
+# alias: ns
 # platform: unix
 
 set -e
@@ -33,10 +35,12 @@ preflight() {
 
 main() {
   cd "$(dirname "$0")/../../stock-calculator-main"
-  PASS=$(grep -E '^POSTGRES_PASS=' ../.env | cut -d= -f2-)
-  export POSTGRES_PASS="$PASS"
-  export POSTGRES_URL="jdbc:postgresql://localhost/scs"
-  export POSTGRES_USER="root"
+  # env 优先（toolbox run 参数注入），.env 兜底（裸调通道）
+  [ -n "${POSTGRES_PASS:-}" ] || PASS=$(grep -E '^POSTGRES_PASS=' ../.env | cut -d= -f2-)
+  export POSTGRES_PASS="${POSTGRES_PASS:-$PASS}"
+  : "${POSTGRES_URL:=jdbc:postgresql://localhost/scs}"
+  : "${POSTGRES_USER:=root}"
+  export POSTGRES_URL POSTGRES_USER
   timeout --kill-after=3 20 ./target/stock-calculator-service --server.port=19999 > /tmp/ni-run2.log 2>&1 || true
   pkill -9 -f 'target/stock-calculator-service --server.port=19999' 2>/dev/null || true
   grep -E 'Tomcat started|Started StockCalculator' /tmp/ni-run2.log
