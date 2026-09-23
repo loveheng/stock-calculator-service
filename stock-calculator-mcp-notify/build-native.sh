@@ -111,6 +111,7 @@ if ! native-image \
   --enable-all-security-services \
   -H:+AddAllCharsets \
   -H:EnableURLProtocols=https \
+  -H:IncludeResources='notify-schema.sql' \
   -H:+ReportUnsupportedElementsAtRuntime \
   --install-exit-handlers \
   --initialize-at-build-time=ch.qos.logback.classic,ch.qos.logback.core,org.slf4j,org.jboss.logging \
