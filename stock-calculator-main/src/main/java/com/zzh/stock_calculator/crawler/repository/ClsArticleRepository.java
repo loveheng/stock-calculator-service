@@ -49,8 +49,17 @@ public interface ClsArticleRepository extends JpaRepository<ClsArticle, Long> {
     List<ClsArticle> findByTitleContainingOrderByCtimeDesc(String title, Limit limit);
 
     /**
-     * 标题含关键字的最旧电报（news-kg 历史回填扫描：title LIKE %kw%，ctime 正序取前 limit 条；
-     * 扫描窗口随 DONE 累积自然前滑，追平后窗口内全终态零下发）。
+     * 标题含关键字的最旧电报（news-kg 历史回填扫描：title LIKE %kw%，ctime 正序取前 limit 条，
+     * excludeIds 为 kg 侧终态任务行排除集——扫描只回未处理稿，窗口才真正随终态累积前滑，
+     * 修复「最旧 N 条被终态占满 → 回填空转」死锁）。
      */
-    List<ClsArticle> findByTitleContainingOrderByCtimeAsc(String title, Limit limit);
+    @Query("""
+            SELECT a FROM ClsArticle a
+            WHERE a.title LIKE concat('%', :title, '%')
+              AND (:excludeIds IS EMPTY OR a.id NOT IN :excludeIds)
+            ORDER BY a.ctime ASC
+            """)
+    List<ClsArticle> findOldestByTitleExcludingIds(@Param("title") String title,
+                                                   @Param("excludeIds") Collection<Long> excludeIds,
+                                                   Limit limit);
 }

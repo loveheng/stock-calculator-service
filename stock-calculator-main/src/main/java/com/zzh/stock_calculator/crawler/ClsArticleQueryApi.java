@@ -118,15 +118,16 @@ public class ClsArticleQueryApi {
 
     /**
      * 最旧《新闻联播》要闻汇编候选（news-kg 历史回填扫描源，cls-news-kg.md §7 二期）：
-     * 与 {@link #latestDigestArticles} 同口径镜像，ctime 正序取前 limit 条——
-     * 回填「最旧优先」分批补录，窗口随终态累积自然前滑。
+     * 与 {@link #latestDigestArticles} 同口径镜像，ctime 正序取前 limit 条，
+     * 终态任务行（excludeIds，kg 侧提供）不回——扫描窗口随终态累积真正前滑。
      */
-    public List<DigestArticle> oldestDigestArticles(String titleKeyword, int limit) {
+    public List<DigestArticle> oldestDigestArticles(String titleKeyword, Collection<Long> excludeIds, int limit) {
         if (titleKeyword == null || titleKeyword.isBlank() || limit <= 0) {
             return List.of();
         }
         return articleRepository
-                .findByTitleContainingOrderByCtimeAsc(titleKeyword.trim(), Limit.of(limit))
+                .findOldestByTitleExcludingIds(titleKeyword.trim(),
+                        excludeIds == null ? List.of() : excludeIds, Limit.of(limit))
                 .stream()
                 .map(a -> new DigestArticle(a.getId(), a.getTitle(), a.getCtime(), a.getContent()))
                 .toList();

@@ -53,16 +53,19 @@ public class KgExtractPublisher {
     }
 
     /**
-     * 历史回填发布入口（二期，job.kg.backfill / KgBackfillTask）：最旧优先 ASC 扫描按批补发，
-     * 扫描窗口即游标——终态随融合累积、窗口自然前滑，追平后窗口内全 DONE 零下发空转。
+     * 历史回填发布入口（二期，job.kg.backfill / KgBackfillTask）：最旧优先 ASC 扫描按批补发。
+     * 扫描前先取全量 DONE 行作排除集传入 crawler 查询——窗口只含未处理与 FAILED 稿，
+     * 随终态累积真正前滑（修复旧实现「最旧 N 条被终态占满 → 回填空转」死锁）；
+     * FAILED 不排除，进入扫描后由 shouldSkip 标记治愈（置回 PENDING 重抽）。
      * 与 daily 共用任务队列/结果通道/限流熔断窗口，dispatch 语义幂等（D6/D7）。
      * @return 已发布任务数（供调度日志）
      */
     public int publishBackfillBatch() {
         int limit = properties.getBackfill().getBatchSize();
         int scanWindow = limit * properties.getBackfill().getScanMultiplier();
+        List<Long> doneIds = stateRepository.findArticleIdByStatusIn(List.of(KgTaskStatus.DONE));
         return publishFromScan(articleQueryApi.oldestDigestArticles(
-                properties.getDigest().getTitleKeyword(), scanWindow), limit, "backfill");
+                properties.getDigest().getTitleKeyword(), doneIds, scanWindow), limit, "backfill");
     }
 
     /** 共享发布核：限流熔断门 → 未终态过滤（状态即游标）→ 逐条下发（at-least-once，幂等摄取） */
@@ -115,10 +118,21 @@ public class KgExtractPublisher {
         log.warn("LLM 限流上报，KG 任务发布暂停 {} 分钟", minutes);
     }
 
-    /** 终态跳过判定：FAILED 恒跳；DONE 且 hash 未变跳（改稿则置回 PENDING 由下方重发） */
+    /**
+     * 终态处理：DONE 且 hash 未变跳（改稿则置回 PENDING 由下方重发）；
+     * FAILED 标记式治愈——直接置回 PENDING 重抽（fail_count 清零），不做事前校验，
+     * 失败原因（解析截断/网络抖动等）多属可自愈，靠 max-fail-attempts 兜底防毒丸。
+     */
     private boolean shouldSkip(ClsArticleKg state, String hash, Long articleId) {
         if (state.getStatus() == KgTaskStatus.FAILED) {
-            return true;
+            log.info("FAILED 行标记治愈，置回 PENDING 重抽, articleId={}, reason={}",
+                    articleId, state.getStatusReason());
+            state.setStatus(KgTaskStatus.PENDING);
+            state.setFailCount(0);
+            state.setStatusReason(null);
+            state.setContentHash(hash);
+            stateRepository.save(state);
+            return false;
         }
         if (state.getStatus() == KgTaskStatus.DONE && hash.equals(state.getContentHash())) {
             return true;
