@@ -41,6 +41,9 @@ jobs:
     outputs:
       main: ${{ steps.filter.outputs.main }}
       data: ${{ steps.filter.outputs.data }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      notify: ${{ steps.filter.outputs.notify }}
+      orchestration: ${{ steps.filter.outputs.orchestration }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -67,6 +70,33 @@ jobs:
               - 'mvnw.cmd'
               - '.mvn/**'
               - '.github/workflows/docker-image.yml'
+            mcp:
+              - 'stock-calculator-mcp/**'
+              - 'stock-calculator-main/**'
+              - 'stock-calculator-contract/**'
+              - 'pom.xml'
+              - 'mvnw'
+              - 'mvnw.cmd'
+              - '.mvn/**'
+              - '.github/workflows/docker-image.yml'
+            notify:
+              - 'stock-calculator-mcp-notify/**'
+              - 'stock-calculator-main/**'
+              - 'stock-calculator-contract/**'
+              - 'pom.xml'
+              - 'mvnw'
+              - 'mvnw.cmd'
+              - '.mvn/**'
+              - '.github/workflows/docker-image.yml'
+            orchestration:
+              - 'stock-calculator-orchestration/**'
+              - 'stock-calculator-main/**'
+              - 'stock-calculator-contract/**'
+              - 'pom.xml'
+              - 'mvnw'
+              - 'mvnw.cmd'
+              - '.mvn/**'
+              - '.github/workflows/docker-image.yml'
 
       - name: tag 推送或手动触发 → 强制全量构建
         id: force
@@ -74,6 +104,9 @@ jobs:
         run: |
           echo "main=true" >> "$GITHUB_OUTPUT"
           echo "data=true" >> "$GITHUB_OUTPUT"
+          echo "mcp=true" >> "$GITHUB_OUTPUT"
+          echo "notify=true" >> "$GITHUB_OUTPUT"
+          echo "orchestration=true" >> "$GITHUB_OUTPUT"
 
   # ---------------- 主服务镜像（原 docker-image 流程） ----------------
   # 镜像名保持 ghcr.io/<repo> 不变，docker-compose.yml / README 的引用无需改动。
@@ -272,6 +305,301 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=docker-data
           cache-to: type=gha,mode=max,scope=docker-data
+
+  # ---------------- MCP 经纪人镜像（:18081，依赖 main artifact，需 PG+Redis） ----------------
+  # 与 build-main 同套路（同样连 stock_mcp 独立库做启动冒烟），差异点：
+  #   - 镜像名加 -mcp 后缀（ghcr.io/<repo>-mcp）
+  #   - pgvector service 预灌 mcp-schema.sql（sql.init 幂等，CI 冒烟起于已知状态）
+  #   - GHA docker 缓存独立 scope（docker-mcp）
+  build-mcp:
+    name: 构建 MCP 服务镜像 (mcp)
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+          POSTGRES_DB: scs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 初始化数据库 schema
+        env:
+          PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: |
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/schema.sql
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stock_mcp OWNER root'
+          psql -h 127.0.0.1 -U root -d stock_mcp -v ON_ERROR_STOP=1 -f stock-calculator-mcp/src/main/resources/mcp-schema.sql
+
+      - name: 扩展虚拟内存 (Swap Space)
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 8
+
+      - name: 配置 GraalVM JDK 25 环境
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+          native-image-job-reports: true
+
+      - name: 编译 Native 二进制 (build-native.sh)
+        env:
+          POSTGRES_PASS: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: bash stock-calculator-mcp/build-native.sh
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 格式化镜像名称 (全小写)
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}-mcp" >> $GITHUB_ENV
+
+      - name: 解析镜像 Tag 和 Label 标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - name: 初始化 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建并推送 Docker 镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: ./stock-calculator-mcp
+          file: ./stock-calculator-mcp/Dockerfile.native
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=docker-mcp
+          cache-to: type=gha,mode=max,scope=docker-mcp
+
+  # ---------------- Notify 提醒服务镜像（:18082，依赖 main artifact，需 PG） ----------------
+  # 与 build-mcp 同套路（reminder 表复用 stock_mcp 库，N3），差异点：
+  #   - 镜像名加 -notify 后缀（ghcr.io/<repo>-notify）
+  #   - GHA docker 缓存独立 scope（docker-notify）
+  build-notify:
+    name: 构建 Notify 服务镜像 (notify)
+    needs: changes
+    if: needs.changes.outputs.notify == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+          POSTGRES_DB: scs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 初始化数据库 schema
+        env:
+          PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: |
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/schema.sql
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stock_mcp OWNER root'
+          psql -h 127.0.0.1 -U root -d stock_mcp -v ON_ERROR_STOP=1 -f stock-calculator-mcp-notify/src/main/resources/notify-schema.sql
+
+      - name: 扩展虚拟内存 (Swap Space)
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 8
+
+      - name: 配置 GraalVM JDK 25 环境
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+          native-image-job-reports: true
+
+      - name: 编译 Native 二进制 (build-native.sh)
+        env:
+          POSTGRES_PASS: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: bash stock-calculator-mcp-notify/build-native.sh
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 格式化镜像名称 (全小写)
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}-notify" >> $GITHUB_ENV
+
+      - name: 解析镜像 Tag 和 Label 标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - name: 初始化 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建并推送 Docker 镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: ./stock-calculator-mcp-notify
+          file: ./stock-calculator-mcp-notify/Dockerfile.native
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=docker-notify
+          cache-to: type=gha,mode=max,scope=docker-notify
+
+  # ---------------- Orchestration 编排服务镜像（:18083，依赖 main artifact，需 PG） ----------------
+  # 与 build-mcp 同套路（三表复用 stock_mcp 库，D6），差异点：
+  #   - 镜像名加 -orchestration 后缀（ghcr.io/<repo>-orchestration）
+  #   - GHA docker 缓存独立 scope（docker-orchestration）
+  build-orchestration:
+    name: 构建 Orchestration 服务镜像 (orchestration)
+    needs: changes
+    if: needs.changes.outputs.orchestration == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+          POSTGRES_DB: scs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 初始化数据库 schema
+        env:
+          PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: |
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/schema.sql
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
+          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stock_mcp OWNER root'
+          psql -h 127.0.0.1 -U root -d stock_mcp -v ON_ERROR_STOP=1 -f stock-calculator-orchestration/src/main/resources/orchestration-schema.sql
+
+      - name: 扩展虚拟内存 (Swap Space)
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 8
+
+      - name: 配置 GraalVM JDK 25 环境
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+          native-image-job-reports: true
+
+      - name: 编译 Native 二进制 (build-native.sh)
+        env:
+          POSTGRES_PASS: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
+        run: bash stock-calculator-orchestration/build-native.sh
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 格式化镜像名称 (全小写)
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}-orchestration" >> $GITHUB_ENV
+
+      - name: 解析镜像 Tag 和 Label 标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - name: 初始化 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建并推送 Docker 镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: ./stock-calculator-orchestration
+          file: ./stock-calculator-orchestration/Dockerfile.native
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=docker-orchestration
+          cache-to: type=gha,mode=max,scope=docker-orchestration
 
 
 

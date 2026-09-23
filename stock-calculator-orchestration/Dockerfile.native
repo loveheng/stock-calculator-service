@@ -1,0 +1,32 @@
+# ============================================================================
+# Stock MCP Orchestration Service (:18083) — GraalVM Native 镜像（main 同款模板）
+# 构建假设：native 二进制已由 CI/本地编译好（stock-calculator-orchestration/build-native.sh），
+# 本 Dockerfile 只负责打包成最小运行镜像，不再在镜像内编译。
+#
+# glibc 兼容性：CI (ubuntu-latest = 24.04, glibc 2.39) 编出的二进制，
+# 基座必须 >= 2.39，故用 ubuntu:24.04（与 main/data/mcp/notify 同款）。
+# ============================================================================
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libstdc++6 \
+        zlib1g \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r spring && useradd -r -g spring spring
+
+COPY --chown=spring:spring --chmod=755 target/stock-mcp-orchestration-service /application/stock-mcp-orchestration-service
+
+USER spring:spring
+
+EXPOSE 18083
+
+HEALTHCHECK --start-period=10s --timeout=5s --interval=30s --retries=3 \
+    CMD curl -s http://localhost:18083/ > /dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["/application/stock-mcp-orchestration-service"]
