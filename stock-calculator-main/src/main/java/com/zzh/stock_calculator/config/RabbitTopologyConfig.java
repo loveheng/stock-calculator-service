@@ -38,6 +38,12 @@ public class RabbitTopologyConfig {
         return new TopicExchange(MqExchange.RESULTS);
     }
 
+    /** 业务领域事件交换机（P3 领域事件化）：main 发布 event.* 事实，编排器 fan-in 消费 */
+    @Bean
+    public TopicExchange eventsExchange() {
+        return new TopicExchange(MqExchange.EVENTS);
+    }
+
     @Bean
     public TopicExchange dlxExchange() {
         return new TopicExchange(MqExchange.DLX);

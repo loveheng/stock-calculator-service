@@ -77,6 +77,7 @@ class ClsArticleMqConsumerE2ETest {
 
     @Test
     void ingestOnceAndDedupOnDuplicate() throws Exception {
+        long deadBaseline = queueDepth(MqQueue.DEAD) == null ? -1L : queueDepth(MqQueue.DEAD); // 共享 broker 死信基线
         boolean stockExistedBefore = stockRepository.existsById(TEST_STOCK_ID);
         boolean subjectExistedBefore = clsSubjectRepository.existsById(TEST_SUBJECT_ID);
         cleanRows();
@@ -95,7 +96,8 @@ class ClsArticleMqConsumerE2ETest {
         assertEquals(1, clsArticleStockRepository.findByArticleIdIn(List.of(TEST_ARTICLE_ID)).size(),
                 "文章-股票关联不得因重复投递翻倍");
         Long deadDepth = queueDepth(MqQueue.DEAD);
-        assertEquals(0L, deadDepth == null ? -1L : deadDepth, "正常消费不应产生死信");
+        assertTrue(deadDepth == null || deadDepth <= deadBaseline,
+                "正常消费不应产生新死信（共享 broker 基线=" + deadBaseline + "）");
 
         cleanRows();
         if (!stockExistedBefore) {

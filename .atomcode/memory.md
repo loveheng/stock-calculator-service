@@ -1,0 +1,4 @@
+- 数字人前端不直连 MCP 服务，统一由后端经编排器 :18083 dispatch 路由调用 kb 工具；MCP /sse 端点仅服务端内部消费。
+- MCP/编排器全链路不接触用户信息本体：后端把用户需求转成自包含任务描述或参数化请求下发，MCP 只按描述满足请求；身份透传字段方案已废弃。
+- 异步通道可靠性五项定案：①main 侧 user_async_task_log 映射审计表（恢复+审计）；②MQ 队列 x-expires+终态事件+定时扫描 GC，禁 auto-delete；③用户限流全卡 main，orchestration 只做全局并发上限；④私有资源 Scoped Token 暂不做；⑤W3C trace_id 全链路透传，TaskTool 需改为优先接受外部 traceId。
+- 步6执行序已定案并落盘 todos.md：6-0 TraceId透传 → 6-1 通道映射块(审计表DDL+correlationId双写+pg_advisory_xact_lock按plan_id串行，同PR) → 6-2 mq_send/mq_wait → 6-3a/b 真异步(orchestration侧/main侧拆步验收) → 6-4 限流先GC后 → 🚧冒烟Gate(Dummy 30s五场景转E2E) → 步7-1 HITL(mq_wait复用+审核API主体) → 7-2 可观测工具面 → 单测收口。多实例并发定案用 advisory lock「真同步」。

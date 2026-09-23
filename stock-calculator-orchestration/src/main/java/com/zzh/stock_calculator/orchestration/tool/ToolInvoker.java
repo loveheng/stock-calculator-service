@@ -52,12 +52,36 @@ public class ToolInvoker {
      * @return 结构化输出（mcp 取 structuredContent/content 文本；rest 取响应 JSON）
      */
     public JsonNode invoke(ToolDescriptor descriptor, JsonNode arguments, String traceId) {
+        return invoke(descriptor, arguments, traceId, false);
+    }
+
+    /**
+     * 执行单次工具调用（4① Dry-Run 重载）：dryRun=true 时高危（risk=high，写操作）工具
+     * 不真实调用，返回 mock 标记输出——影子执行只产生 node_states 轨迹，不触碰外部系统。
+     *
+     * @param descriptor registry 描述符（决定分派路）
+     * @param arguments  已由 Executor 按 $ctx 求值后的参数对象
+     * @param traceId    全链路追踪键（D9）
+     * @param dryRun     影子运行标记（task_instance.params.dry_run）
+     * @return 结构化输出（mcp 取 structuredContent/content 文本；rest 取响应 JSON）
+     */
+    public JsonNode invoke(ToolDescriptor descriptor, JsonNode arguments, String traceId, boolean dryRun) {
         long start = System.currentTimeMillis();
-        JsonNode out = ToolRegistry.KIND_MCP.equals(descriptor.getKind())
-                ? invokeMcp(descriptor, arguments, traceId)
-                : invokeRest(descriptor, arguments, traceId);
-        log.info("[orchestration] tool invoke {} kind={} traceId={} cost={}ms",
-                descriptor.getToolName(), descriptor.getKind(), traceId, System.currentTimeMillis() - start);
+        JsonNode out;
+        if (dryRun && "high".equals(descriptor.getRisk())) {
+            log.info("[orchestration] tool invoke {} DRY-RUN skipped (risk=high) traceId={}",
+                    descriptor.getToolName(), traceId);
+            out = objectMapper.createObjectNode()
+                    .put("dry_run", true)
+                    .put("mocked_tool", descriptor.getToolName());
+        } else {
+            out = ToolRegistry.KIND_MCP.equals(descriptor.getKind())
+                    ? invokeMcp(descriptor, arguments, traceId)
+                    : invokeRest(descriptor, arguments, traceId);
+        }
+        log.info("[orchestration] tool invoke {} kind={} dryRun={} traceId={} cost={}ms",
+                descriptor.getToolName(), descriptor.getKind(), dryRun, traceId,
+                System.currentTimeMillis() - start);
         return out;
     }
 
@@ -99,11 +123,20 @@ public class ToolInvoker {
                 .header(TRACE_HEADER, traceId);
         ResponseEntity<String> resp;
         if ("GET".equalsIgnoreCase(method)) {
-            // GET：参数拼 query（arguments 平铺）
+            // GET：参数拼 query（arguments 平铺）；数组值展开为重复键（ids=a&ids=b，
+            // Spring MVC List<String> 标准绑定），标量原样
             StringBuilder qs = new StringBuilder();
             for (String name : arguments.propertyNames()) {
-                qs.append(qs.isEmpty() ? '?' : '&').append(name).append('=')
-                        .append(arguments.get(name).asText());
+                JsonNode v = arguments.get(name);
+                if (v.isArray()) {
+                    for (JsonNode item : v) {
+                        qs.append(qs.isEmpty() ? '?' : '&').append(name).append('=')
+                                .append(item.asText());
+                    }
+                } else {
+                    qs.append(qs.isEmpty() ? '?' : '&').append(name).append('=')
+                            .append(v.asText());
+                }
             }
             resp = restClient.method(HttpMethod.GET)
                     .uri(URI.create(url + qs))

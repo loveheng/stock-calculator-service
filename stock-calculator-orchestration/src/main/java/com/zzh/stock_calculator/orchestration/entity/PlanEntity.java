@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
  * 不映射进实体（mcp KbChunkEntity 同款惯例）：写入走 @Modifying 原生 UPDATE CAST，
  * 检索走 PlanRepository 原生 Filtered Vector Search。
  * <p>status 流水线（D10）：draft → candidate（自动冒烟通过）→ verified（HITL 人工确认）
- * / deprecated。needs_review=TRUE 时跳过复用直接重规划（§八 惰性回归）。</p>
+ * / rejected（HITL 拒绝，P2 负样本终态）/ deprecated（过时）。needs_review=TRUE 时跳过复用直接重规划（§八 惰性回归）。</p>
  */
 @Data
 @Builder
@@ -40,6 +40,11 @@ public class PlanEntity {
     @Column(name = "intent_text", nullable = false, columnDefinition = "TEXT")
     private String intentText;
 
+    /** 意图模板（P4①）：数字/实体 → {slot} 占位后的模板句——向量复用锚的新事实源，
+     * 参数不入锚修复「茅台100年 vs 宁德5年」参数污染；NULL=存量行（锚仍为 intent_text） */
+    @Column(name = "intent_template", columnDefinition = "TEXT")
+    private String intentTemplate;
+
     /** 领域标签（可多值），向量检索的前置标量过滤器（§七） */
     @Column(name = "intent_domains", nullable = false, columnDefinition = "TEXT[]")
     @Builder.Default
@@ -55,10 +60,15 @@ public class PlanEntity {
     @Column(name = "plan_dag", nullable = false, columnDefinition = "JSONB")
     private JsonNode planDag;
 
-    /** draft / candidate / verified / deprecated */
+    /** draft / candidate / verified / rejected（P2 人工判定不可用终态）/ deprecated。
+     *  rejected=HITL 拒绝（负样本，语义过近规避复用）；deprecated=过时被替代——语义不同不混用 */
     @Column(nullable = false, length = 16)
     @Builder.Default
     private String status = "draft";
+
+    /** HITL 决策留档（P2：rejectTask 拒绝理由落 plan，此前只进日志不可追溯） */
+    @Column(name = "reviewer_note", columnDefinition = "TEXT")
+    private String reviewerNote;
 
     /** 「待复核」标记（registry 变更惰性回归，§八）：命中即强制重规划不复用 */
     @Column(name = "needs_review", nullable = false)

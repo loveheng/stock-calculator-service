@@ -77,6 +77,7 @@ class EmbeddingResultMqConsumerE2ETest {
 
     @Test
     void ingestOnceAndIdempotentOnDuplicate() throws Exception {
+        Long deadBaseline = queueDepth(MqQueue.DEAD); // 共享 broker 死信基线（断言只看增量，防历史堆积误报）
         ensureVectorStoreTable();
         cleanRows();
         try {
@@ -120,7 +121,8 @@ class EmbeddingResultMqConsumerE2ETest {
             assertTrue(metadata.contains(String.valueOf(TEST_ARTICLE_ID)), "metadata 应含 articleId");
 
             Long deadDepth = queueDepth(MqQueue.DEAD);
-            assertEquals(0L, deadDepth == null ? -1L : deadDepth, "正常消费不应产生死信");
+            assertTrue(deadDepth == null || deadDepth <= (deadBaseline == null ? -1L : deadBaseline),
+                    "正常消费不应产生新死信（共享 broker 基线=" + deadBaseline + "）");
         } finally {
             cleanRows();
         }

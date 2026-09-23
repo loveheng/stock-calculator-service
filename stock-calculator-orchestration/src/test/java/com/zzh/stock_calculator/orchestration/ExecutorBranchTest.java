@@ -18,6 +18,7 @@ import java.lang.reflect.Method;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -33,7 +34,8 @@ class ExecutorBranchTest {
     private final ToolInvoker toolInvoker = Mockito.mock(ToolInvoker.class);
     private final Executor executor = new Executor(
             toolRegistry, toolInvoker,
-            Mockito.mock(TaskInstanceRepository.class), Mockito.mock(TaskMessageSender.class));
+            Mockito.mock(TaskInstanceRepository.class), Mockito.mock(TaskMessageSender.class),
+            Mockito.mock(com.zzh.stock_calculator.orchestration.mq.MqWaitWakeService.class));
 
     private JsonNode invoke(String methodName, Class<?>[] types, Object... args) throws Exception {
         Method m = Executor.class.getDeclaredMethod(methodName, types);
@@ -116,10 +118,11 @@ class ExecutorBranchTest {
         ToolDescriptor descriptor = new ToolDescriptor();
         descriptor.setEnabled(true);
         when(toolRegistry.get("kb_search")).thenReturn(descriptor);
-        when(toolInvoker.invoke(any(), any(JsonNode.class), anyString()))
+        when(toolInvoker.invoke(any(), any(JsonNode.class), anyString(), anyBoolean()))
                 .thenReturn(om.createObjectNode().put("hit", true));
-        JsonNode out = invoke("executeForeach", new Class<?>[]{JsonNode.class, CtxEvaluator.Ctx.class},
-                foreachNode(), ctxWithItems());
+        JsonNode out = invoke("executeForeach", new Class<?>[]{JsonNode.class, CtxEvaluator.Ctx.class,
+                        com.zzh.stock_calculator.orchestration.entity.TaskInstanceEntity.class},
+                foreachNode(), ctxWithItems(), plainInstance());
         assertThat(out.path("items").path("f1:0").path("hit").asBoolean()).isTrue();
         assertThat(out.path("items").path("f1:1").path("hit").asBoolean()).isTrue();
         assertThat(out.path("count").asInt()).isEqualTo(2);
@@ -130,7 +133,9 @@ class ExecutorBranchTest {
         CtxEvaluator.Ctx ctx = ctxWith(om.createObjectNode());
         ctx.putNodeOutput("n1", om.createObjectNode().set("items", om.createArrayNode()));
         assertThatThrownBy(() -> invoke("executeForeach",
-                new Class<?>[]{JsonNode.class, CtxEvaluator.Ctx.class}, foreachNode(), ctx))
+                new Class<?>[]{JsonNode.class, CtxEvaluator.Ctx.class,
+                        com.zzh.stock_calculator.orchestration.entity.TaskInstanceEntity.class},
+                foreachNode(), ctx, plainInstance()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("空数组");
     }
@@ -139,8 +144,17 @@ class ExecutorBranchTest {
     void foreach_子工具未注册_拒绝() {
         when(toolRegistry.get("kb_search")).thenReturn(null);
         assertThatThrownBy(() -> invoke("executeForeach",
-                new Class<?>[]{JsonNode.class, CtxEvaluator.Ctx.class}, foreachNode(), ctxWithItems()))
+                new Class<?>[]{JsonNode.class, CtxEvaluator.Ctx.class,
+                        com.zzh.stock_calculator.orchestration.entity.TaskInstanceEntity.class},
+                foreachNode(), ctxWithItems(), plainInstance()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("未注册");
+    }
+
+    /** 普通非冒烟实例（executeForeach 签名带 instance：dry_run/冒烟标记随 params 传播） */
+    private com.zzh.stock_calculator.orchestration.entity.TaskInstanceEntity plainInstance() {
+        return com.zzh.stock_calculator.orchestration.entity.TaskInstanceEntity.builder()
+                .traceId("tid-1")
+                .build();
     }
 }

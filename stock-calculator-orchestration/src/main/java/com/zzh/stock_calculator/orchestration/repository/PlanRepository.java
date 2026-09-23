@@ -19,13 +19,15 @@ public interface PlanRepository extends JpaRepository<PlanEntity, Long> {
     /** HITL 待审核清单（draft+candidate） */
     java.util.List<PlanEntity> findByStatusInOrderByIdDesc(java.util.Collection<String> statuses);
 
-    /** 向量写入（规划落库后补列）；qv 为 "[a,b,...]" 字面量 */
+    /** 向量写入（规划落库后补列）；qv 为 "[a,b,...]" 字面量。@Transactional：调用点多在无事务上下文（MQ 监听器） */
     @Modifying
+    @org.springframework.transaction.annotation.Transactional
     @Query(value = "UPDATE plan SET intent_embedding = CAST(:qv AS vector) WHERE id = :id", nativeQuery = true)
     void updateEmbedding(@Param("id") Long id, @Param("qv") String queryVector);
 
-    /** 复用统计（§6.2 淘汰参考） */
+    /** 复用统计（§6.2 淘汰参考；P1-2 口径=实例 done 终态补记）。@Transactional：调用点在 MQ 监听器无事务上下文 */
     @Modifying
+    @org.springframework.transaction.annotation.Transactional
     @Query(value = "UPDATE plan SET use_count = use_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = :id", nativeQuery = true)
     void updateUseStats(@Param("id") Long id);
 
@@ -45,6 +47,38 @@ public interface PlanRepository extends JpaRepository<PlanEntity, Long> {
 
     /** few-shot 注入用：verified 池取 N 条 */
     List<PlanEntity> findTop3ByStatusOrderByLastUsedAtDesc(String status);
+
+    /** P4③ 能力卡片事实源：verified 池 TopN 封顶（copilot list_capabilities 按 intent_domains 聚合；防无界全量） */
+    List<PlanEntity> findTop200ByStatusOrderByIdAsc(String status);
+
+    /** P4③ 能力卡片池规模（截断告警判据） */
+    long countByStatus(String status);
+
+    /**
+     * P1-4 draft 孪生去重：落库前对 draft/candidate 池向量近邻查重——同义意图重复来时
+     * 更新原条目而非新建，防 HITL 待审核清单堆孪生 draft。domains 为 pg 数组字面量。
+     */
+    @Query(value = "SELECT p.id AS id, (p.intent_embedding <=> CAST(:qv AS vector)) AS distance "
+            + "FROM plan p WHERE p.status IN ('draft', 'candidate') "
+            + "AND p.intent_embedding IS NOT NULL "
+            + "AND p.intent_domains && CAST(:domains AS text[]) "
+            + "ORDER BY p.intent_embedding <=> CAST(:qv AS vector) LIMIT :k", nativeQuery = true)
+    List<PlanHit> searchReviewPoolNear(@Param("qv") String queryVector,
+                                       @Param("domains") String domains,
+                                       @Param("k") int k);
+
+    /**
+     * P2 负样本反哺：rejected plan 的意图向量即负样本——复用匹配前置规避，
+     * 防语义过近的已拒绝意图被 Planner 反复产出同烂 DAG 再被拒。domains 为 pg 数组字面量。
+     */
+    @Query(value = "SELECT p.id AS id, (p.intent_embedding <=> CAST(:qv AS vector)) AS distance "
+            + "FROM plan p WHERE p.status = 'rejected' "
+            + "AND p.intent_embedding IS NOT NULL "
+            + "AND p.intent_domains && CAST(:domains AS text[]) "
+            + "ORDER BY p.intent_embedding <=> CAST(:qv AS vector) LIMIT :k", nativeQuery = true)
+    List<PlanHit> searchRejectedNear(@Param("qv") String queryVector,
+                                     @Param("domains") String domains,
+                                     @Param("k") int k);
 
     /** registry 变更扫描（§八 惰性回归）：plan_dag 里引用指定 tool 的行 */
     @Query(value = "SELECT * FROM plan WHERE status = 'verified' AND plan_dag::text LIKE %:toolName%", nativeQuery = true)

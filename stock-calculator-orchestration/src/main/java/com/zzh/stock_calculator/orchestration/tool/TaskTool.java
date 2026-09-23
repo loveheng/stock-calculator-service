@@ -51,8 +51,13 @@ public class TaskTool {
             TaskInstanceEntity saved = taskInstanceRepository.save(instance);
             // 步 6-3a 真异步：存实例即发启动请求，即刻返回 RUNNING 契约（执行在 MQ 消费侧）
             taskMessageSender.sendRunRequest(saved.getId(), traceId);
+            // P4② 触达补全：feasible/gap 回传 copilot——partial 降级说明必须到用户（查漏二批④）
+            String gapField = decision.gap() == null || decision.gap().isEmpty()
+                    ? "" : ",\"gap\":\"" + decision.gap().replace("\"", "'") + "\"";
             return "{\"taskId\":" + saved.getId() + ",\"traceId\":\"" + traceId
                     + "\",\"status\":\"RUNNING\",\"plan\":" + (decision.reused() ? "\"reused\"" : "\"new\"")
+                    + ",\"feasible\":\"" + (decision.feasible() == null ? "yes" : decision.feasible()) + "\""
+                    + gapField
                     + "}（稍后用 query_task 按 traceId 查询结果）";
         } catch (IllegalArgumentException e) {
             // §七：宁可说不会，不可编错

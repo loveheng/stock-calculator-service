@@ -27,8 +27,8 @@ public class MqWaitTimeoutScanner {
     @Transactional
     public void scan() {
         LocalDateTime now = LocalDateTime.now();
-        taskInstanceRepository.findByStatus(TaskInstanceEntity.ST_WAITING).stream()
-                .filter(i -> i.getWaitDeadline() != null && i.getWaitDeadline().isBefore(now))
+        // SQL 级收口：waiting 且 wait_deadline 已过（替代全量捞后内存 filter）
+        taskInstanceRepository.findByStatusAndWaitDeadlineBefore(TaskInstanceEntity.ST_WAITING, now)
                 .forEach(instance -> {
                     instance.setStatus(TaskInstanceEntity.ST_TIMEOUT);
                     instance.setUpdatedAt(now);

@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class MqNodeValidateTest {
 
-    private final Executor executor = new Executor(null, null, null, null);
+    private final Executor executor = new Executor(null, null, null, null, null);
     private final ObjectMapper om = new ObjectMapper();
 
     private ObjectNode dag(ObjectNode... nodes) {

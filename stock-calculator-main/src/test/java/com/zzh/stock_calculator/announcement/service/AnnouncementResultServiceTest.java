@@ -70,7 +70,8 @@ class AnnouncementResultServiceTest {
         service = new AnnouncementResultService(
                 announcementRepository, subscriptionRepository, contentRepository,
                 new AnnouncementProperties(), new ObjectMapper(),
-                embeddingApiProvider, processPublisherProvider);
+                embeddingApiProvider, processPublisherProvider,
+                org.mockito.Mockito.mock(com.zzh.stock_calculator.common.DomainEventPublisher.class));
     }
 
     private AnnouncementCollectedPayload payload(Long sizeKb, String seDate, String orgId) {

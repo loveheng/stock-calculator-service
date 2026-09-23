@@ -1,6 +1,6 @@
 ---
-status: draft
-updated: 2026-09-22
+status: active
+updated: 2026-09-23
 ---
 
 # Agent 任务编排系统设计（orchestration）
@@ -142,15 +142,17 @@ sequenceDiagram
 |---|---|---|
 | id | bigserial PK | |
 | intent_text | text | 规范化意图（LLM 提炼，非用户原话） |
+| intent_template | text | 意图模板（P4①）：数字/实体 → `{slot}` 占位后的模板句——**向量复用锚的新事实源**，参数不入锚修复「茅台100年 vs 宁德5年」参数污染；NULL=存量行（锚仍为 intent_text） |
 | intent_domains | text[] | 规范化时 LLM 抽取的领域标签（可多值），向量检索的前置标量过滤器（§七） |
-| intent_embedding | vector(1024) | HNSW cosine 索引（沿用 bge-m3 惯例） |
-| param_schema | jsonb | 参数槽位定义（`stockId` / `keywords` …） |
+| intent_embedding | vector(1024) | HNSW cosine 索引（沿用 bge-m3 惯例）；P4① 后锚= intent_template |
+| param_schema | jsonb | 参数槽位定义（`stockId` / `keywords` …）——取 normalizeIntent 产出的 slots 落库（此前恒空导致复用填槽无 schema 可校验，已修） |
 | plan_dag | jsonb | DAG：节点（tool、input_mapping、depends_on、retry、timeout、成功判据），取值一律 **$ctx 寻址**（见 §八）：`$.params.*` / `$.nodes.<id>.output.*` / `$.env.*` |
-| status | text | `draft` → `candidate`（**自动冒烟执行通过**，D10）→ **`verified`（HITL 人工确认上架）** / `deprecated`。verified 一律人工确认，无自动通道——同时作为 pgvector 匹配阈值的校准样本池 |
-| use_count / last_used_at | | 复用统计（淘汰参考） |
+| status | text | `draft` → `candidate`（**自动冒烟执行通过**，D10，冒烟闭环已落地见 §八）→ **`verified`（HITL 人工确认上架）** / `rejected`（HITL 拒绝，P2 负样本终态）/ `deprecated`（过时）。verified 一律人工确认，无自动通道；rejected/deprecated 均不物理删除（零复用自然淘汰，量大再归档） |
+| reviewer_note | text | HITL 决策留档（拒绝理由落库可追溯） |
+| use_count / last_used_at | | 复用统计（淘汰参考）；**口径=实例 done 终态补记**（成功复用才计数，命中即计已废——失败的复用不失真淘汰信号） |
 | created_at / updated_at | | |
 
-> **阈值陷阱（pgvector）**：cosine 阈值过高→复用率归零，过低→异意图错配。缓解：① verified 人工上架保证复用池纯净；② 匹配日志落表（query 向量 → top-k → 是否被采纳/回退）供回溯调参；③ 前 N 条 plan 集中人工研判，反向校准阈值后再评估放宽。
+> **阈值陷阱（pgvector）**：cosine 阈值过高→复用率归零，过低→异意图错配。缓解：① verified 人工上架保证复用池纯净；② **匹配日志落表（match_log，已落地）**——query 向量 → top-k 明细 → 是否采纳/回退原因（no_hit / distance / needs_review / semantic_check / fill_failed / rejected_near），append-only 供回溯调参；③ 前 N 条 plan 集中人工研判，反向校准阈值后再评估放宽。
 
 ### 6.3 task_instance（执行实例）
 
@@ -173,11 +175,14 @@ sequenceDiagram
 
 ## 七、Planner 设计要点
 
-1. **意图规范化**：LLM 把用户话术提炼成 `intent_text`（做什么+触发条件+交付物）+ **领域标签（可多值，入 intent_domains）** + 参数槽位——复用键在这里生成；
-2. **匹配**：意图向量化 → **Filtered Vector Search**（`WHERE status='verified' AND intent_domains && 查询domain数组`——先收窄到同领域，防跨域向量噪声「指标计算 ≈ 订阅通知」）→ pgvector top-k（阈值）→ 命中后廉价 LLM yes/no 校验（几十 token，防止语义近但 DAG 不同）；plan 带「待复核」标记时跳过复用直接重规划（惰性回归，见 §八）；
-3. **完整规划 prompt**：注入 registry 的工具描述（含 risk/paramSchema）+ 2-3 条 verified plan 作 few-shot；输出 JSON 严格按固定 schema，解析失败重试一次后明确返回「无法编排」，**宁可说不会，不可编错**；
-4. **参数填充**：命中复用路径时由 LLM 填槽，executor 前置硬校验（类型/必填/白名单），不通过即回退重新规划；
-5. **简单意图快路径**：高频简单意图（如定时提醒类「明天 9:30 通知茅台形态」）规划产物天然是微小 DAG（触发 → 调用 → 触达，1-3 节点）；Planner 对此类意图走快路径——识别后直接套微小 DAG 模板、免向量匹配，规划成本趋近于零。快路径是规划器的**优化项**，不另立轻量系统（D12）。
+1. **意图规范化**：LLM 把用户话术提炼成 `intent_template`（数字/实体 → `{slot}` 占位的模板句，P4①）+ `intent_text`（做什么+触发条件+交付物）+ **领域标签（可多值，入 intent_domains）** + 参数槽位——复用键在这里生成；
+2. **匹配**：**向量锚=意图模板**（参数不入锚，修复「茅台100年 vs 宁德5年」参数污染）→ **Filtered Vector Search**（`WHERE status='verified' AND intent_domains && 查询domain数组`——先收窄到同领域，防跨域向量噪声「指标计算 ≈ 订阅通知」）→ pgvector top-k（阈值）→ 命中后廉价 LLM yes/no 校验（几十 token，防止语义近但 DAG 不同）；plan 带「待复核」标记时跳过复用直接重规划（惰性回归，见 §八）；**P2 负样本反哺前置**：检索前先查 `rejected` 池向量近邻，命中即判死不复用（防 Planner 对同一被拒意图反复产出同烂 DAG 再被拒）；每次匹配落 **match_log**（§6.2 阈值陷阱缓解②）；
+3. **完整规划 prompt**：注入 registry 的工具描述（含 risk/paramSchema）+ 2-3 条 verified plan 作 few-shot + **节点类型词表**（查漏二批③：tool / `mq_wait{event,filter,timeout_seconds}`——可等事件白名单 announcement.done、cls.daily.done，不在清单禁用 / `switch` 枚举路由 / `foreach` 数组展开；mq_send、hitl_wait 标注慎用；sleep 不教防 Dummy 攻击面）+ **能力判定 feasible**（P4②：覆盖不了输出 `feasible=no`+gap 显式报能力受限、部分覆盖 partial+降级说明随 create_task 响应回传用户）；输出 JSON 严格按固定 schema，解析失败重试一次后明确返回「无法编排」，**宁可说不会，不可编错**；事件词表与 contract `MqKey` event.* 契约三方同步（新增领域事件双侧更新）；
+4. **参数填充**：命中复用路径时由 LLM 填槽，填槽后经 **ParamGuardrail 兜底修正**（无感修正确定无歧义的形态：6 位裸代码按前缀补 `.SH`/`.SZ`、「N 年」超 20 年裁剪；修不了的保持原样交硬校验报错），executor 前置硬校验（类型/必填/白名单），不通过即回退重新规划；
+5. **draft 孪生去重（P1-4）**：完整规划落库前对 draft/candidate 池向量近邻查重——同义意图（换措辞再问）命中即**更新原条目**（意图/DAG/槽位刷新 + 回 draft 重过冒烟）而非新建，防 HITL 待审核清单堆孪生 draft；
+6. **draft 自动冒烟（P1-5，D10 第一环）**：draft 落库即刻经 TaskRunner 链路推冒烟实例（`params.purpose=smoke` + dry_run），冒烟终态回调升格/留痕（见 §八「自动冒烟闸门」）；
+7. **能力清单（P4③）**：verified plan 池即能力卡片事实源（不预存、不穷举组合）——copilot 挂 `list_capabilities` 查询工具按 intent_domains 聚合已验证意图（intent_template 优先），描述时先过清单再进规划，任务完成后按 domain 邻域实时生成推荐；
+8. **简单意图快路径**：高频简单意图（如定时提醒类「明天 9:30 通知茅台形态」）规划产物天然是微小 DAG（触发 → 调用 → 触达，1-3 节点）；Planner 对此类意图走快路径——识别后直接套微小 DAG 模板、免向量匹配，规划成本趋近于零。快路径是规划器的**优化项**，不另立轻量系统（D12）。
 
 ## 八、Executor 设计要点
 
@@ -187,17 +192,24 @@ sequenceDiagram
 - `input_mapping`：**统一执行上下文 $ctx**——所有取值表达式强制基于 $ctx 根节点，三个命名空间杜绝二义与越界：
   - `$.params.*`：task_instance.params（用户输入/填槽参数）；
   - `$.nodes.<node_id>.output.*`：指定上游节点的执行输出（内存中完整对象）；
-  - `$.env.*`：系统变量（user_id / trace_id / now / timestamp）；
+  - `$.env.*`：系统变量（user_id / trace_id / now / timestamp / last_execution_time——
+    同 plan 上次 done 实例的 updatedAt，无历史实例置 epoch，供 DAG 查询节点做 since 增量拉取）；
   - 落库快照里的表达式在重放时按同一 $ctx 语义求值；
   - **大输出传递与落库分离**：节点间 `input_mapping` 在 Executor 内存中传递完整对象（不经 Redis）；落库到 node_states 时按 registry 的 `output_policy` 瘦身——`keep_summary` / `keep_head(N)`（默认 2KB）/ `keep_ref`（完整体落临时存储 + TTL 引用），防止巨量 JSON（财报全文等）拖垮 task_instance 行；
 - **节点流转白盒化**：节点状态变更（进入 mq_wait、每节点 done/failed）即发流转事件，copilot 订阅并转发 SSE 给前端——长时任务的「已查资料，正在订阅队列」中间态让过程可感知，避免前端只有 Loading 被当成卡死；节点级耗时数据随之沉淀，供性能排查；
 - **版本漂移防护（工具接口变更 × 在跑实例）**：task_instance 创建时**冗余快照 plan_dag**（后续 plan 变更不影响在跑实例）；tool 的 paramSchema 变更时，Executor 在每个节点执行前比对快照与当前 registry 的 schema 摘要，不匹配则实例置 failed 并通知用户，不静默崩溃；
 - **工具 Schema 变更的惰性回归**：registry 变更时除标记存量 plan deprecated 外，对引用该工具的 verified plan 打「待复核」标记——此类 plan 下次被匹配命中时**强制完整重规划**而非直接复用（零测试基建，覆盖面等效主动回归套件）；
 - **失败节点重放**：`plan_dag_snapshot` + node_states 天然构成重放素材。失败任务可从失败节点起跑重放（注入落库的上游节点输出，不重调上游、不重新规划）。注意：失败节点的**直接上游**输出落库策略自动升级 `keep_ref`（keep_head 截断可能不够重放入参）；MQ 下发节点重放需防重复触发（幂等键随 traceId）；
+- **Dry-Run 影子运行**：`task_instance.params.dry_run=true` 时零外部副作用——ToolInvoker 对 `risk=high`（写操作）工具返回 mock 标记输出不真实调用，`mq_send` 节点一律拦截（MQ 下发属外部副作用，与高危工具同口径）；只读工具照常执行，node_states 照常落轨迹，产出模拟运行报告。用于新 DAG 验证与自动化规则的可信度预演；
+- **task_profiler 剖析工具**：只读 MCP 工具，按 traceId 读 node_states 的节点级 `cost_ms`，返回总耗时 + 按耗时降序节点明细，供 copilot 自然语言回答「任务跑了多久/卡在哪了」（节点耗时由 Executor 每节点落库，见「节点流转白盒化」）；
+- **多条件雷达（3① 落地形态）**：复合条件逻辑（AND/OR）在工具侧收敛——`:18081` 新增 `stock_radar_check` 工具（基于日线算 MA20 突破 + 量能倍数，输出**枚举信号** both/break_only/volume_only/none），DAG 用 `switch` 节点按枚举分流，命中分支走 `mq_send` 触达、不命中静默结束；switch 只做枚举路由不做表达式求值（§八底线不变）；
+- **财报/公告对比（2② 落地形态）**：`:18081` 无法读 scs 库公告正文（announcement_content 不存正文，唯一留存文本 = summary 蒸馏摘要），故数据源落 main 侧只读 REST `GET /api/announcement/summaries?ids=...`（1-20 个 announcementId，registry 登记 `main.announcement.summaries`，kind=rest）——DAG 由 `main.announcement.summaries` 批量取摘要 → foreach/LLM 汇总节点做跨期对比。registry 的 main REST 工具原「手工 SQL 登记」收编为同款启动自注册（REST_SEEDS，upsert 幂等）；ToolInvoker GET 传参支持数组展开为重复键（`ids=a&ids=b`，Spring MVC List 绑定）；
 - **全链路 traceId（D9）**：任务创建时生成 traceId，贯穿 Copilot 日志 → Planner → Executor → REST/MCP 调用头 → MQ 消息头 → data worker 回写。初期日志打点 + traceId 检索即可定位卡点（与 mq/ 子包 task_trace 工具互补），Jaeger/OTel 后台为可选项；
 - 可靠性：节点级重试 + 超时；实例状态落库，进程重启后可恢复未完成实例；
 - 长时等待（如等公告出台）：`mq_wait` 节点挂起实例，由 MQ 事件/回调唤醒，不轮询占线程；
 - **mq_wait 死锁防御**：`timeout_seconds` + `on_timeout`（超时后跳转的降级节点，如发 SSE 提醒「等待超 2 小时，已转入后台监控」）为**必填**——Executor 加载 DAG 时校验，无 timeout 的 mq_wait 直接拒载（硬约束，不靠 prompt 约束 LLM），杜绝悬挂实例（Zombie Task）；
+- **领域事件化唤醒（P3）**：业务侧事实发生后向 `stockcalc.events` 交换机发 `event.*` 领域事件（main 两源：`event.cls.daily.done` 财联社日报入库 / `event.announcement.done.<secCode>` 订阅公告完成，`common.DomainEventPublisher` 事务提交后发布），编排器 `DomainEventFaninListener` 一个 fan-in 队列消费——mq_wait 声明 `{event, filter, timeout_seconds}` 即按「事件类型 + filter 匹配」唤醒（filter 值支持 `$.params.xxx` 引用做个性化过滤；标量归一匹配：数字/字符串形态 + 股票代码市场后缀差）；事件无匹配实例即丢弃（不持久化不重放，missed event 由 timeout 兜底）；旧式 trace_id 精确回调路径（task.completed.*）保留兼容；**编排器除 MqWaitTimeoutScanner（超时兜底）外零轮询**；定时触发类场景仍走 notify reminder 事件体系；
+- **自动冒烟闸门（P1-5，D10 第一环闭环）**：draft 落库即经 TaskRunner 链路推冒烟实例（`params.purpose=smoke` + dry_run=true）——Executor 冒烟模式**只验结构**（工具注册存在 + schema 未漂移 + 节点类型合法），不真实调用任何工具、mq_wait/hitl_wait 不真挂起，冒烟 fail 只代表结构坏了不代表业务失败；终态统一经 `TaskTerminalHandler`（冒烟→SmokeGateService 升格状态机：done→candidate / failed→needs_review+reviewer_note 留痕；普通 done→use_count 终态补记；done/failed→终态事件回发）；`InstanceRecoveryRunner` 进程重启时捞 running 孤儿断点续跑并走同一终态处理（恢复与 MQ redelivery 的竞争窗口以 updatedAt 10 分钟阈值隔离）；
 - 产出：最终交付物（摘要+形态）写回 task_instance，并发任务完成事件给 copilot 推送。
 
 ## 九、与现有域的边界
@@ -231,6 +243,14 @@ sequenceDiagram
 > （main 侧 SSE task_result 推流 + 审计 RUNNING→DONE/FAILED CAS 回写），`SMOKE_E2E=true` 门控。
 > 运维注意：orchestration pom 须显式声明 spring-boot-starter-webmvc + spring-boot-starter-restclient
 > （Boot 4 拆模块，spring-ai 传递依赖不含 restclient 模块，缺则服务无法启动）。
+>
+> **实施记录（2026-09-23）**：复用链路 P1-P4 整体落地——①slots 落库修复 + match_log 表 + draft 孪生去重
+> + use_count 改 done 终态补记；②HITL 拒绝联动 plan `rejected` 终态 + 负样本规避；③领域事件化（MqKey
+> event.* 契约 + stockcalc.events 交换机 + main 两源发布 + DomainEventFaninListener fan-in 唤醒，
+> 编排器零轮询）；④Planner 三件套（intent_template 模板锚 / feasible 能力判定 / list_capabilities
+> 能力清单工具）；⑤自动冒烟闭环（SmokeGateService，D10 第一环）+ 节点类型词表入 prompt + 重启恢复器
+> （InstanceRecoveryRunner）。联动验证：`OrchestrationReuseChainE2ETest`（四场景全链：落库→冒烟→升格 /
+> 孪生去重 / verified 复用→补记 / 拒绝→负样本→事件唤醒，真 PG+LavinMQ，SMOKE_E2E=true 门控）。
 
 ## 十一、风险与未决项
 

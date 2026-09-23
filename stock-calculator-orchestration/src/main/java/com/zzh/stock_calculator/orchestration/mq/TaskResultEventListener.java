@@ -2,6 +2,7 @@ package com.zzh.stock_calculator.orchestration.mq;
 
 import com.zzh.stock_calculator.orchestration.entity.TaskInstanceEntity;
 import com.zzh.stock_calculator.orchestration.executor.Executor;
+import com.zzh.stock_calculator.orchestration.repository.PlanRepository;
 import com.zzh.stock_calculator.orchestration.repository.TaskInstanceRepository;
 import com.zzh.stockcalc.contract.MqKey;
 import com.zzh.stockcalc.contract.MessageEnvelope;
@@ -28,6 +29,7 @@ import java.util.Map;
 public class TaskResultEventListener {
 
     private final TaskInstanceRepository taskInstanceRepository;
+    private final PlanRepository planRepository;
     private final Executor executor;
     private final ObjectMapper om = new ObjectMapper();
 
@@ -79,6 +81,12 @@ public class TaskResultEventListener {
             log.info("[orchestration] 唤醒实例 {} node={} event={} traceId={}",
                     instance.getId(), waitNodeId, routing, correlationId);
             executor.run(instance);
+            // P1-2 use_count 终态补记（mq_wait 续跑完成的完成点在此而非 TaskRunnerListener）：
+            // done 才计数（口径=成功复用）；冒烟实例不计（非业务复用）
+            TaskInstanceEntity finished = taskInstanceRepository.findById(instance.getId()).orElse(instance);
+            if (TaskInstanceEntity.ST_DONE.equals(finished.getStatus()) && !finished.isSmokeRun()) {
+                planRepository.updateUseStats(finished.getPlanId());
+            }
         });
     }
 

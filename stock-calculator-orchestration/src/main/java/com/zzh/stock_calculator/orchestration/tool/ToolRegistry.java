@@ -55,6 +55,10 @@ public class ToolRegistry {
                             + "\"days\":{\"type\":\"int\",\"required\":false,\"desc\":\"根数\"}}")),
             Map.entry("stock_levels", new McpSeed("个股支撑/压力位与关键价位", "quote",
                     "{\"stock\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票代码或名称\"}}")),
+            Map.entry("stock_radar_check", new McpSeed("多条件雷达断言：是否突破N日均线和/或量能放大，返回枚举信号 both/break_only/volume_only/none（switch 节点按此分流，命中才触发提醒）", "quote",
+                    "{\"stock\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票代码或名称\"},"
+                            + "\"maWindow\":{\"type\":\"int\",\"required\":false,\"desc\":\"均线窗口（日），默认20，范围5-120\"},"
+                            + "\"volumeRatio\":{\"type\":\"number\",\"required\":false,\"desc\":\"量能倍数阈值，默认2.0\"}}")),
             Map.entry("kb_search", new McpSeed("本地书库知识检索（RAG），按语义查经典/博主观点并返回出处", "kb",
                     "{\"query\":{\"type\":\"string\",\"required\":true,\"desc\":\"检索问题\"},"
                             + "\"book\":{\"type\":\"string\",\"required\":false,\"desc\":\"限定书名\"},"
@@ -62,6 +66,17 @@ public class ToolRegistry {
             Map.entry("kb_book_list", new McpSeed("书库清单（书目元数据）", "kb", "{}")),
             Map.entry("kb_persona", new McpSeed("博主人格卡（语气/立场/金句 few-shot），数字人提示词层", "kb",
                     "{\"blogger\":{\"type\":\"string\",\"required\":true,\"desc\":\"博主名\"}}")));
+
+    /**
+     * main REST 工具种子（2② 财报对比链路数据源；原「手工 SQL 登记」收编为同款启动自注册，
+     * upsert 幂等不覆盖人工改过的 risk/output_policy 之外的列——人工调整请直接改 DB 后 reload）。
+     */
+    private static final List<RestSeed> REST_SEEDS = List.of(
+            new RestSeed("main.announcement.summaries", "GET /api/announcement/summaries",
+                    "announcement",
+                    "按公告 ID 集合批量取蒸馏摘要（财报/公告对比的数据源；配合 foreach 逐份抽取+LLM 汇总）",
+                    "{\"ids\":{\"type\":\"array\",\"required\":true,\"desc\":\"CNINFO announcementId 集合，1-20 个\"}}",
+                    "keep_summary", EM_SYNC));
 
     private final ToolRegistryRepository toolRegistryRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -90,6 +105,12 @@ public class ToolRegistry {
         for (var e : MCP_SEEDS.entrySet()) {
             upsert(e.getKey(), KIND_MCP, MCP_BROKER_ENDPOINT, e.getValue().domain(),
                     e.getValue().description(), parseParams(e.getValue().params()));
+        }
+        for (RestSeed seed : REST_SEEDS) {
+            upsert(seed.name(), KIND_REST, seed.endpoint(), seed.domain(),
+                    seed.description(), parseParams(seed.params()), seed.executionMode());
+            // REST 种子按列 upsert 不触 risk/outputPolicy（upsert 未覆盖这两列，人工值安全）；
+            // output_policy/risk 有内置默认（DB 列 default），首次插入即生效
         }
         reload();
     }
@@ -147,4 +168,9 @@ public class ToolRegistry {
 
     /** 启动自注册种子（内聚记录） */
     private record McpSeed(String description, String domain, String params) {}
+
+    /** REST 种子（main 只读接口白名单，启动自注册）：endpoint 形如 "GET /api/..." */
+    private record RestSeed(String name, String endpoint, String domain,
+                            String description, String params, String outputPolicy,
+                            String executionMode) {}
 }

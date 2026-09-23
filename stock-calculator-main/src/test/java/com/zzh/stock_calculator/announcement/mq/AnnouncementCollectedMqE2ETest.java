@@ -79,6 +79,7 @@ class AnnouncementCollectedMqE2ETest {
     @Test
     void ingestCollectedAndDedupOnDuplicate() throws Exception {
         cleanRows();
+        long deadBaseline = deadDepth(); // 共享 broker 死信基线（断言只看增量，防历史堆积误报）
         seedUserAndSubscription();
 
         publishCollected(payload(TEST_ORG_ID));
@@ -103,12 +104,14 @@ class AnnouncementCollectedMqE2ETest {
         assertEquals(TEST_STOCK_ID, saved.getSecCode());
         assertEquals(TEST_ORG_ID, orgIdOfSubscription(), "orgId 应回填订阅行（R3 对账）");
 
-        assertEquals(0L, deadDepth(), "正常消费不应产生死信");
+        assertTrue(deadDepth() <= deadBaseline,
+                "正常消费不应产生新死信（共享 broker 基线=" + deadBaseline + "）");
     }
 
     @Test
     void oversizeCollectedGoesTerminalFailed() throws Exception {
         cleanRows();
+        long deadBaseline = deadDepth(); // 共享 broker 死信基线（断言只看增量，防历史堆积误报）
         seedUserAndSubscription();
 
         publishCollected(payload(TEST_ORG_ID).toBuilder()
@@ -125,7 +128,8 @@ class AnnouncementCollectedMqE2ETest {
         assertEquals(AnnouncementStatus.FAILED, saved.getStatus(),
                 "超体积公告应直接终态 FAILED（DOWNLOAD_FAIL），不进处理队列");
 
-        assertEquals(0L, deadDepth(), "正常消费不应产生死信");
+        assertTrue(deadDepth() <= deadBaseline,
+                "正常消费不应产生新死信（共享 broker 基线=" + deadBaseline + "）");
     }
 
     // ==================== 辅助 ====================

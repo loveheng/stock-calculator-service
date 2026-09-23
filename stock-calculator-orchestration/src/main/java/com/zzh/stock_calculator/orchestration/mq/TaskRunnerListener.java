@@ -11,15 +11,13 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 任务启动请求消费者（步 6-3a 真异步核心）：dispatch/create_task 即刻返回 RUNNING 后，
  * 执行主体在此（MQ 消费侧）调 Executor.run——HTTP 请求线程彻底脱离长任务阻塞。
  * <p>幂等：实例非 running（done/failed/waiting/timeout）时忽略重复投递（messageId=traceId
  * 重放防重）；run() 内 advisory lock 同 plan 串行。
- * <p>终态事件（#3）：run() 返回后按实例终态回发 task.completed./task.failed.，
- * 供 mq_wait 唤醒与 main 侧 SSE/GC 消费。
+ * <p>终态处理统一委托 TaskTerminalHandler（P1-2 补记 / P1-5 冒烟升格 / 终态事件回发）。
  */
 @Slf4j
 @Component
@@ -28,7 +26,7 @@ public class TaskRunnerListener {
 
     private final TaskInstanceRepository taskInstanceRepository;
     private final Executor executor;
-    private final TaskMessageSender taskMessageSender;
+    private final TaskTerminalHandler terminalHandler;
     private final ObjectMapper om = new ObjectMapper();
 
     @RabbitListener(bindings = @org.springframework.amqp.rabbit.annotation.QueueBinding(
@@ -61,17 +59,8 @@ public class TaskRunnerListener {
         }
         executor.run(instance);
         TaskInstanceEntity after = taskInstanceRepository.findById(taskId).orElse(instance);
-        String finalStatus = after.getStatus();
-        // 终态事件回发（mq_wait 唤醒 + main SSE/GC 数据源）；waiting 不发（等 mq_wait 结果事件）
-        if (TaskInstanceEntity.ST_DONE.equals(finalStatus) || TaskInstanceEntity.ST_FAILED.equals(finalStatus)) {
-            String routing = (TaskInstanceEntity.ST_DONE.equals(finalStatus)
-                    ? MqKey.TASK_COMPLETED_PREFIX : MqKey.TASK_FAILED_PREFIX) + "orchestration";
-            ObjectNode out = om.createObjectNode()
-                    .put("correlation_id", after.getTraceId())
-                    .put("task_id", String.valueOf(taskId))
-                    .put("status", finalStatus);
-            taskMessageSender.send(routing, after.getTraceId(), out);
-        }
+        // 终态统一处理（P1-2 补记 / P1-5 冒烟升格 / 终态事件回发，恢复器同款复用）
+        terminalHandler.handleTerminal(after);
     }
 
     /** 仅取 exchange 常量（避免与 contract 类名混淆的局部引用） */

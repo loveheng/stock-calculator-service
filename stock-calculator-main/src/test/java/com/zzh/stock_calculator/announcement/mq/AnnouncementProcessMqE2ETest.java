@@ -89,12 +89,14 @@ class AnnouncementProcessMqE2ETest {
     void tearDown() {
         cleanRows();
         purgeWorkQueues();
+        long deadBaseline = deadDepth(); // 共享 broker 死信基线（断言只看增量，防历史堆积误报）
     }
 
     @Test
     void processTaskPublishedAndDoneChainCloses() throws Exception {
         cleanRows();
         purgeWorkQueues();
+        long deadBaseline = deadDepth(); // 共享 broker 死信基线（断言只看增量，防历史堆积误报）
         Announcement row = seedAnnouncement(TEST_ANN_ID);
 
         // ① 发布端：PENDING 扫描 → task.announcement.process 落队
@@ -143,18 +145,21 @@ class AnnouncementProcessMqE2ETest {
             Announcement fresh = announcementRepository.findById(row.getId()).orElse(null);
             return fresh != null && fresh.getStatus() == AnnouncementStatus.DONE;
         }), "15s 内向量结果未落账（status 未 DONE）");
+        // metadata.announcementId 键义 = CNINFO 标识（非内部自增 id，lessons 键义修复口径）
         Integer vectorRows = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM vector_store WHERE metadata->>'announcementId' = ?",
-                Integer.class, String.valueOf(row.getId()));
+                Integer.class, row.getAnnouncementId());
         assertEquals(1, vectorRows, "确定性 UUID 向量行应存在且唯一");
 
-        assertEquals(0L, deadDepth(), "正常链路不应产生死信");
+        assertTrue(deadDepth() <= deadBaseline,
+                "正常链路不应产生新死信（共享 broker 基线=" + deadBaseline + "）");
     }
 
     @Test
     void failedReportGoesTerminal() throws Exception {
         cleanRows();
         purgeWorkQueues();
+        long deadBaseline = deadDepth(); // 共享 broker 死信基线（断言只看增量，防历史堆积误报）
         seedAnnouncement(TEST_ANN_ID_FAILED);
 
         publishResult(MessageType.RESULT_ANNOUNCEMENT_FAILED, MqKey.RESULT_ANNOUNCEMENT_FAILED,
@@ -174,7 +179,8 @@ class AnnouncementProcessMqE2ETest {
                 .findByAnnouncementIdIn(List.of(TEST_ANN_ID_FAILED)).get(0);
         assertEquals(AnnouncementFailReason.SKIPPED_NO_TEXT, saved.getStatusReason());
 
-        assertEquals(0L, deadDepth(), "正常链路不应产生死信");
+        assertTrue(deadDepth() <= deadBaseline,
+                "正常链路不应产生新死信（共享 broker 基线=" + deadBaseline + "）");
     }
 
     // ==================== 辅助 ====================
@@ -282,14 +288,15 @@ class AnnouncementProcessMqE2ETest {
         amqpAdmin.purgeQueue(MqQueue.TASK_EMBEDDING_COMPUTE, false);
     }
 
-    /** 清理：公告行（content 行 FK 级联）+ 向量行 + 任务队列残留 */
+    /**
+     * 清理：向量行按 CNINFO 标识直删（确定性 UUID 以内部自增 id 生成，公告行删除重建后 id 漂移，
+     * metadata 键是唯一稳定锚——含公告行已被前轮删除的孤儿向量）+ 公告行（content 行 FK 级联）
+     */
     private void cleanRows() {
+        jdbcTemplate.update("DELETE FROM vector_store WHERE metadata->>'announcementId' IN (?, ?)",
+                TEST_ANN_ID, TEST_ANN_ID_FAILED);
         List<Announcement> rows = announcementRepository.findByAnnouncementIdIn(
                 List.of(TEST_ANN_ID, TEST_ANN_ID_FAILED));
-        for (Announcement row : rows) {
-            jdbcTemplate.update("DELETE FROM vector_store WHERE metadata->>'announcementId' = ?",
-                    String.valueOf(row.getId()));
-        }
         if (!rows.isEmpty()) {
             announcementRepository.deleteAll(rows);
         }

@@ -7,6 +7,7 @@ import com.zzh.stock_calculator.mcp.tool.PingTool;
 import com.zzh.stock_calculator.mcp.tool.StockAnalysisTool;
 import com.zzh.stock_calculator.mcp.tool.StockLevelsTool;
 import com.zzh.stock_calculator.mcp.tool.StockDailyTool;
+import com.zzh.stock_calculator.mcp.tool.StockRadarCheckTool;
 import com.zzh.stock_calculator.mcp.tool.TimeRangeTool;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
@@ -24,13 +25,14 @@ public class McpToolConfig {
                                                            StockAnalysisTool stockAnalysisTool,
                                                            StockDailyTool stockDailyTool,
                                                            StockLevelsTool stockLevelsTool,
+                                                           StockRadarCheckTool stockRadarCheckTool,
                                                            KbSearchTool kbSearchTool,
                                                            KbBookListTool kbBookListTool,
                                                            KbPersonaTool kbPersonaTool,
                                                            TimeRangeTool timeRangeTool) {
         return MethodToolCallbackProvider.builder()
                 .toolObjects(pingTool, stockAnalysisTool, stockDailyTool, stockLevelsTool,
-                        kbSearchTool, kbBookListTool, kbPersonaTool, timeRangeTool)
+                        stockRadarCheckTool, kbSearchTool, kbBookListTool, kbPersonaTool, timeRangeTool)
                 .build();
     }
 }

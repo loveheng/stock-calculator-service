@@ -98,6 +98,8 @@ class SubscriptionSnapshotMqE2ETest {
 
     @Test
     void snapshotLandsInCollectorQueueWithContractPayload() throws Exception {
+        QueueInformation deadBaselineInfo = amqpAdmin.getQueueInfo(MqQueue.DEAD);
+        long deadBaseline = deadBaselineInfo == null ? -1L : deadBaselineInfo.getMessageCount(); // 共享 broker 死信基线
         subscriptionRepository.save(AnnouncementSubscription.builder()
                 .userId(TEST_USER_ID).stockId(TEST_STOCK_ID).build());
 
@@ -119,7 +121,9 @@ class SubscriptionSnapshotMqE2ETest {
         assertNull(testStock.getSince());
 
         QueueInformation dead = amqpAdmin.getQueueInfo(MqQueue.DEAD);
-        assertEquals(0L, dead == null ? -1L : dead.getMessageCount(), "正常下发不应产生死信");
+        long deadDepth = dead == null ? -1L : dead.getMessageCount();
+        assertTrue(deadDepth <= deadBaseline,
+                "正常下发不应产生新死信（共享 broker 基线=" + deadBaseline + "）");
     }
 
     @Test

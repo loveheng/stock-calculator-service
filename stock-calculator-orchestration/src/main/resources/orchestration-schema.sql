@@ -39,6 +39,23 @@ CREATE INDEX IF NOT EXISTS idx_plan_status ON plan (status);
 -- HNSW cosine（§6.2：Filtered Vector Search 前置 status/domain 标量过滤，向量索引只加速排序段）
 CREATE INDEX IF NOT EXISTS idx_plan_hnsw ON plan USING hnsw (intent_embedding vector_cosine_ops);
 
+-- P4① 意图模板占位符：数字/实体 → {slot} 占位后的模板句（向量复用锚的新事实源，
+-- 修复「茅台100年 vs 宁德5年」参数污染）；P2 拒绝留痕：reviewer_note 落 plan 可追溯
+ALTER TABLE plan ADD COLUMN IF NOT EXISTS intent_template TEXT;
+ALTER TABLE plan ADD COLUMN IF NOT EXISTS reviewer_note TEXT;
+
+-- §6.2 阈值陷阱缓解②：匹配日志落表（query 向量 → top-k → 是否采纳/回退），pgvector 阈值调参可回溯。
+-- 保留策略：OrchestrationRetentionTask 每日滚动删除（默认 30 天，orchestration.retention.* 可调）
+CREATE TABLE IF NOT EXISTS match_log (
+    id BIGSERIAL PRIMARY KEY,
+    query_text TEXT NOT NULL,
+    query_vector vector(1024),
+    top_hits JSONB NOT NULL DEFAULT '[]',
+    adopted BOOLEAN NOT NULL DEFAULT FALSE,
+    fallback_reason VARCHAR(32),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 6.3 执行实例：plan_dag_snapshot 创建时冗余（版本漂移防护，§八），node_states 按 output_policy 瘦身
 CREATE TABLE IF NOT EXISTS task_instance (
     id BIGSERIAL PRIMARY KEY,
@@ -58,3 +75,13 @@ CREATE INDEX IF NOT EXISTS idx_task_instance_plan ON task_instance (plan_id);
 
 -- 步 6-2 mq_wait 挂起支撑：挂起截止时间（Zombie 防御，@Scheduled 扫描超时置 timeout）
 ALTER TABLE task_instance ADD COLUMN IF NOT EXISTS wait_deadline TIMESTAMP;
+
+-- P3+ 事件收件箱：领域事件先于 mq_wait 挂起到达时的缓冲（挂起落定即重放，替代「到达即丢」）；
+-- 同类型超 1000 条丢弃（防无界堆积）；过期行由 OrchestrationRetentionTask 清理（默认 7 天）
+CREATE TABLE IF NOT EXISTS domain_event_inbox (
+    id BIGSERIAL PRIMARY KEY,
+    event_type VARCHAR(128) NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_domain_event_inbox_type ON domain_event_inbox (event_type);

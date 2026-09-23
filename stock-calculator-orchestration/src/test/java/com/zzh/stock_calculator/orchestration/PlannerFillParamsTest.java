@@ -31,7 +31,10 @@ class PlannerFillParamsTest {
     private final Planner planner = new Planner(
             llmClient,
             Mockito.mock(com.zzh.stock_calculator.orchestration.planner.IntentEmbeddingClient.class),
-            Mockito.mock(PlanRepository.class), Mockito.mock(ToolRegistry.class));
+            Mockito.mock(PlanRepository.class),
+            Mockito.mock(com.zzh.stock_calculator.orchestration.repository.MatchLogRepository.class),
+            Mockito.mock(com.zzh.stock_calculator.orchestration.hitl.SmokeGateService.class),
+            Mockito.mock(ToolRegistry.class));
 
     /** 槽位定义：stock_name 必填 + limit 可选 */
     private PlanEntity plan() {

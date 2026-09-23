@@ -154,12 +154,38 @@ public class HitlReviewService {
             taskInstanceRepository.save(instance);
             log.info("[hitl] 实例 {} 人工批准续跑 node={} taskId", instance.getId(), hitlNodeId);
             executor.run(instance);
+            // P1-2 use_count 终态补记（hitl 续跑完成点在此，与其他 run 调用点同口径：done 且非冒烟）
+            TaskInstanceEntity finished = taskInstanceRepository.findById(instance.getId()).orElse(instance);
+            if (TaskInstanceEntity.ST_DONE.equals(finished.getStatus()) && !finished.isSmokeRun()) {
+                planRepository.updateUseStats(finished.getPlanId());
+            }
         } else {
             instance.setStatus(TaskInstanceEntity.ST_FAILED);
             instance.setWaitDeadline(null);
             taskInstanceRepository.save(instance);
+            rejectPlan(instance, note);
             log.info("[hitl] 实例 {} 人工拒绝（note={}）", instance.getId(), note);
         }
+    }
+
+    /**
+     * P2 拒绝状态机补档：实例拒绝联动 plan 置 rejected（终态）+ 理由落 reviewer_note 可追溯。
+     * <p>语义边界：rejected=人工判定不可用（HITL 拒绝，intent 向量即负样本供复用规避）；
+     * deprecated=过时被替代——语义不同不混用。不物理删除（零复用自然淘汰，量大再归档）。
+     * 期间已被人工 deprecated 的 plan 不改判（人工既有决策优先）。</p>
+     */
+    private void rejectPlan(TaskInstanceEntity instance, String note) {
+        planRepository.findById(instance.getPlanId()).ifPresent(plan -> {
+            if ("rejected".equals(plan.getStatus())) {
+                return;
+            }
+            plan.setStatus("rejected");
+            plan.setReviewerNote(note == null ? "" : note);
+            plan.setUpdatedAt(java.time.LocalDateTime.now());
+            planRepository.save(plan);
+            log.info("[hitl] plan {} 联动置 rejected（实例 {} 拒绝，负样本反哺复用规避）",
+                    plan.getId(), instance.getId());
+        });
     }
 
     /** 找 node_states 中尚无状态记录的 hitl_wait 节点（挂起断点定位，与 mq_wait 同款） */

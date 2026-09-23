@@ -103,3 +103,4 @@ MCP 探活把 tools/list 当会话首条消息：POST 返回 200/202 但 SSE 流
 新增 @Tool 工具 bean 后 MCP 层报 "Tool not found" → McpToolConfig.toolObjects 是显式列举注册，非自动扫描，漏挂即 bean 存在但工具不可见 → 新增工具类必须同步加进 toolObjects，且验收前先 tools/list 对账。(Ref: mcp-blogger-kb)
 
 ## 追加区
+- [公告向量化E2E] 确定性 UUID 向量行断言 expected 1 but was 0（改 metadata CNINFO 口径后变 5）➔ 确定性 UUID 以内部自增 id 生成，公告行删除重建后 id 漂移换新 UUID，而测试清理逻辑挂在「公告行存在」前提上，孤儿向量行跨轮累积无人删 ➔ 测试清理与断言必须用业务稳定锚（metadata CNINFO 标识）直删向量行，不依赖主行存在；确定性 UUID 锚选自增 id 天然抗不住行重建 (Ref: misc)

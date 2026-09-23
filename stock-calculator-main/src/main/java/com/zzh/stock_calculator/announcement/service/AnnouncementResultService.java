@@ -49,6 +49,8 @@ public class AnnouncementResultService implements AnnouncementIngestApi {
     private final ObjectProvider<AnnouncementEmbeddingApi> embeddingApiProvider;
     /** 发布端熔断（RATE_LIMITED 冷却窗口；MQ 关闭时不装配） */
     private final ObjectProvider<AnnouncementProcessPublisher> processPublisherProvider;
+    /** P3 领域事件发布器（announcement done 事实 → 编排器 mq_wait 唤醒） */
+    private final com.zzh.stock_calculator.common.DomainEventPublisher domainEventPublisher;
 
     @Override
     public boolean ingestCollected(AnnouncementCollectedPayload payload) {
@@ -115,6 +117,17 @@ public class AnnouncementResultService implements AnnouncementIngestApi {
         announcementRepository.save(announcement);
         log.info("announcement done ingested, announcementId={}, summaryLen={}",
                 payload.getAnnouncementId(), payload.getSummary().length());
+        // P3 领域事件化：订阅公告处理完成的事实发布——编排器 mq_wait
+        // {event:"announcement.done", filter:{...}} 挂起实例被唤醒（secCode 进 routing 后缀）；
+        // 本方法无事务（分步 save），publishAfterCommit 直发路径
+        java.util.Map<String, Object> eventData = new java.util.HashMap<>();
+        eventData.put("announcement_id", payload.getAnnouncementId());
+        eventData.put("sec_code", announcement.getSecCode() == null ? "" : announcement.getSecCode());
+        eventData.put("sec_name", announcement.getSecName() == null ? "" : announcement.getSecName());
+        domainEventPublisher.publishAfterCommit(
+                com.zzh.stockcalc.contract.MqKey.EVENT_ANNOUNCEMENT_DONE_PREFIX
+                        + (announcement.getSecCode() == null ? "" : announcement.getSecCode()),
+                eventData);
         // D7 两段式：向量经 task.embedding.compute 二段下发（DONE 判重/额度在端口内），
         // 失败/额度拒绝不重试——PENDING+summary 行由发布端扫描与回填对账兜底（D6）
         AnnouncementEmbeddingApi embeddingApi = embeddingApiProvider.getIfAvailable();

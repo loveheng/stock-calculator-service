@@ -60,6 +60,19 @@ public final class MqKey {
     /** orchestration 任务启动请求（dispatch/create_task 即刻返回后，消费侧取实例调 Executor 真异步） */
     public static final String TASK_ORCHESTRATION_RUN = "task.orchestration.run";
 
+    // ========== event.*（业务领域事件，agent-orchestration 领域事件化定案） ==========
+    // 业务侧（main）在事实发生后发布到 EVENTS 交换机，编排器 DomainEventFaninListener
+    // fan-in 消费，按「事件类型 + filter 匹配挂起实例」唤醒 mq_wait 节点——替代轮询。
+    // routing key 形如 event.<name>[.<filter 后缀>]，如 event.announcement.done.600519；
+    // 无匹配挂起实例的事件被丢弃（事件不持久化、不重放）。
+
+    /** 领域事件 routing key 前缀 */
+    public static final String EVENT_PREFIX = "event.";
+    /** 财联社日报（电报文章）批次入库完成：event.cls.daily.done，payload {article_count, article_id=末篇, ctime=末篇}（ClsDailyDoneBatcher 静默窗聚合发布） */
+    public static final String EVENT_CLS_DAILY_DONE = "event.cls.daily.done";
+    /** 用户订阅公告处理完成：event.announcement.done.<secCode>，payload {announcement_id, sec_code, sec_name} */
+    public static final String EVENT_ANNOUNCEMENT_DONE_PREFIX = "event.announcement.done.";
+
     // ========== result.*（数据服务 → 主服务） ==========
 
     /** CLS 电报：解析好的文章 + 字典 + 关联（阶段 1 链路） */

@@ -28,6 +28,7 @@ public class ClsArticleService {
     private final StockService stockService;
     private final ClsSubjectService clsSubjectService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ClsDailyDoneBatcher clsDailyDoneBatcher;
 
     @Transactional
     public boolean saveIfNotExists(ClsArticle article) {
@@ -78,6 +79,9 @@ public class ClsArticleService {
                 .articleId(article.getId())
                 .ctime(article.getCtime())
                 .build());
+        // P3 领域事件化：日报入库完成事实发布——批次粒度（ClsDailyDoneBatcher 静默窗聚合），
+        // 防逐条事件在批次第一篇即唤醒 mq_wait（「今天的日报好了」语义偏差）；事务回滚不计数
+        clsDailyDoneBatcher.record(article.getId(), article.getCtime());
         return true;
     }
 

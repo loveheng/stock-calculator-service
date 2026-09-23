@@ -17,6 +17,9 @@ public final class MqExchange {
     /** 需求定义：主服务 → collector（订阅快照等） */
     public static final String CONTROL = "stockcalc.control";
 
+    /** 业务领域事件（main 发布事实，编排器 fan-in 消费；agent-orchestration 领域事件化） */
+    public static final String EVENTS = "stockcalc.events";
+
     /** 死信交换机：各工作队列的 DLX；绑定原 routing key → 对应 retry 队列，dead.# → dead.q */
     public static final String DLX = "stockcalc.dlx";
 }

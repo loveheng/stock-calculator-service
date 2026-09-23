@@ -38,6 +38,10 @@ public class TaskInstanceEntity {
     public static final String ST_FAILED = "failed";
     public static final String ST_TIMEOUT = "timeout";
 
+    /** params.purpose=smoke：自动冒烟实例（P1-5）——Executor 只验结构不触外部系统，
+     *  终态回调走 SmokeGateService 状态机而非普通终态事件 */
+    public static final String PURPOSE_SMOKE = "smoke";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -82,4 +86,9 @@ public class TaskInstanceEntity {
 
     @Column(name = "updated_at", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
+
+    /** 是否冒烟实例（params.purpose=smoke，P1-5）：终态走 plan 升格状态机，不计 use_count */
+    public boolean isSmokeRun() {
+        return params != null && PURPOSE_SMOKE.equals(params.path("purpose").asText(""));
+    }
 }

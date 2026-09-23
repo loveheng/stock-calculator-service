@@ -29,18 +29,27 @@ public class CtxEvaluator {
         private final Map<String, String> env;
 
         public Ctx(JsonNode params, String userId, String traceId) {
+            this(params, userId, traceId, Map.of());
+        }
+
+        /**
+         * @param extraEnv 扩展系统变量（如 last_execution_time，§八 $.env 命名空间）；
+         *                 与内置变量合并，键冲突以扩展值为准
+         */
+        public Ctx(JsonNode params, String userId, String traceId, Map<String, String> extraEnv) {
             this.params = params;
             ObjectMapper om = new ObjectMapper();
             ObjectNode envNode = om.createObjectNode();
-            envNode.put("user_id", userId);
-            envNode.put("trace_id", traceId);
-            envNode.put("timestamp", System.currentTimeMillis());
-            envNode.put("now", java.time.LocalDateTime.now().toString());
-            this.env = Map.of(
-                    "user_id", userId,
-                    "trace_id", traceId,
-                    "timestamp", String.valueOf(System.currentTimeMillis()),
-                    "now", java.time.LocalDateTime.now().toString());
+            Map<String, String> envMap = new LinkedHashMap<>();
+            envMap.put("user_id", userId);
+            envMap.put("trace_id", traceId);
+            envMap.put("timestamp", String.valueOf(System.currentTimeMillis()));
+            envMap.put("now", java.time.LocalDateTime.now().toString());
+            envMap.putAll(extraEnv);
+            envMap.forEach((k, v) -> {
+                envNode.put(k, v);
+            });
+            this.env = java.util.Collections.unmodifiableMap(envMap);
             // envNode 保留对象形态供 JSON 化；env 为字符串视图
         }
 
