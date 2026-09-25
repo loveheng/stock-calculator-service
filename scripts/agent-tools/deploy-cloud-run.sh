@@ -10,6 +10,7 @@
 # summary: Cloud Run data 副本一键部署（secrets 同步 + 服务部署）
 # trigger: manual
 # params: RABBIT_USER,RABBIT_PASS,CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_API_TOKEN,LLM_BASE_URL,LLM_API_KEY,LLM_MODEL,INGEST_SECRET
+# cat: deploy
 # alias: depl
 # platform: unix
 

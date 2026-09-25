@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-03
+updated: 2026-09-24
 ---
 
 # Copilot AI 聊天接口文档 v1.0
@@ -484,20 +484,20 @@ ask() 主流程                    saveUserMessageInTxn()         persistAssista
 | Store | AiChatSessionStore | copilot.service.store（REQUIRES_NEW 隔离） |
 | Repository | AiChatSessionRepository / AiChatMessageRepository | copilot.repository |
 | Rate Limiter | AiChatRateLimiter | copilot.util（Redis 固定双窗口，决策 C7，fail-open） |
-| LLM Client | OpenAiChatModel | copilot.config.DeepSeekConfig（@Bean("deepSeekChatModel")，copilot 问答专用付费渠道，不进 llm 责任链） |
-| Properties | DeepSeekProperties | copilot.config（copilot.llm.deepseek.*） |
+| LLM Client | OpenAiChatModel | stock-calculator-llm `LlmRegistry`（ai.tiers.openai-max 档，copilot 问答专用付费渠道，不进 llm 责任链；带 MCP 工具经 runtimeOptions 封死运行时 options 三坑） |
+| Tier Properties | LlmTierProperties / LlmTiers | stock-calculator-llm（ai.tiers.* + ai.embeddings.*，2026-09-24 起 DeepSeekConfig/Properties 双轨退役） |
 
 ### 6.3 配置项
 
 ```yaml
-copilot:
-  llm:
-    deepseek:
-      enabled: true
-      base-url: "${DEEPSEEK_BASE_URL:}"   # DeepSeek API 地址
-      api-key: "${DEEPSEEK_API_KEY:}"      # DeepSeek API Key
-      model: "deepseek-chat"              # 模型名称
-      read-timeout: PT60S                 # 读取超时（毫秒）
+ai:
+  tiers:
+    openai-max:                          # copilot 聊天/问答档（规划强推理档同款语义）
+      base-url: "${OPENAI_MAX_BASE_URL:}"   # OpenAI 兼容端点地址
+      api-key: "${OPENAI_MAX_API_KEY:}"     # API Key
+      model: "${OPENAI_MAX_MODEL:deepseek-chat}"   # 模型名称
+      temperature: 0.0
+      timeout: 300s
 
 app:
   copilot:

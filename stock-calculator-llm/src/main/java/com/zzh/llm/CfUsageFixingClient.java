@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.crawler.embedding.config;
+package com.zzh.llm;
 
 import com.openai.client.OpenAIClient;
 import com.openai.client.OpenAIClientAsync;

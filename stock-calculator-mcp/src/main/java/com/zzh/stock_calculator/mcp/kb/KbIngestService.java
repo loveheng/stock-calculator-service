@@ -1,5 +1,6 @@
 package com.zzh.stock_calculator.mcp.kb;
 
+import com.zzh.llm.EmbeddingVectorLiteral;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -55,7 +56,7 @@ public class KbIngestService {
         KbBookEntity book = bookRepository.save(KbBookEntity.builder()
                 .title(title).author(author).category(category)
                 .readingOrder(readingOrder)
-                .embeddingModel(KbEmbeddingClient.MODEL)
+                .embeddingModel(embeddingClient.getModel())
                 .build());
 
         List<KbChunkEntity> entities = new ArrayList<>(drafts.size());
@@ -66,7 +67,7 @@ public class KbIngestService {
                     .chunkIndex(d.getChunkIndex())
                     .content(d.getContent())
                     .contentHash(d.getContentHash())
-                    .model(KbEmbeddingClient.MODEL)
+                    .model(embeddingClient.getModel())
                     .build());
         }
         embedAndWrite(entities, title);
@@ -114,7 +115,7 @@ public class KbIngestService {
                         .content(e.getContent())
                         .contentHash(KbChunker.sha256(e.getContent()))
                         .publishedAt(e.getPublishedAt())
-                        .model(KbEmbeddingClient.MODEL)
+                        .model(embeddingClient.getModel())
                         .build());
             }
         } else {
@@ -131,7 +132,7 @@ public class KbIngestService {
                         .chunkIndex(d.getChunkIndex())
                         .content(d.getContent())
                         .contentHash(d.getContentHash())
-                        .model(KbEmbeddingClient.MODEL)
+                        .model(embeddingClient.getModel())
                         .build());
             }
         }
@@ -181,7 +182,7 @@ public class KbIngestService {
                     .content(e.getContent())
                     .contentHash(hash)
                     .publishedAt(e.getPublishedAt())
-                    .model(KbEmbeddingClient.MODEL)
+                    .model(embeddingClient.getModel())
                     .build());
         }
 
@@ -202,7 +203,7 @@ public class KbIngestService {
     /** 博主伪书 upsert：同名即复用原行（source_id 关联不换 id） */
     private KbBookEntity upsertBloggerBook(KbSourceEntity source) {
         KbBookEntity book = bookRepository.findByTitle(source.getName()).orElseGet(() ->
-                KbBookEntity.builder().title(source.getName()).embeddingModel(KbEmbeddingClient.MODEL).build());
+                KbBookEntity.builder().title(source.getName()).embeddingModel(embeddingClient.getModel()).build());
         book.setAuthor(source.getName());
         book.setCategory(CATEGORY_BLOGGER);
         book.setSourceId(source.getId());
@@ -221,7 +222,7 @@ public class KbIngestService {
             List<KbChunkEntity> saved = chunkRepository.saveAll(batch);
             for (int i = 0; i < saved.size(); i++) {
                 chunkRepository.updateEmbedding(saved.get(i).getId(),
-                        KbEmbeddingClient.vectorLiteral(vectors.get(i)));
+                        EmbeddingVectorLiteral.of(vectors.get(i)));
             }
             done += batch.size();
             log.info("灌书进度 {}/{}: {}", done, total, title);

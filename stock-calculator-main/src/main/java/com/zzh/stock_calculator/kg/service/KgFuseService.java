@@ -1,6 +1,7 @@
 package com.zzh.stock_calculator.kg.service;
 
 import com.zzh.stock_calculator.crawler.ClsDictAnchorApi;
+import com.zzh.stock_calculator.kg.config.KgProperties;
 import com.zzh.stock_calculator.kg.entity.KgEntity;
 import com.zzh.stock_calculator.kg.entity.KgEvent;
 import com.zzh.stock_calculator.kg.entity.KgEventLink;
@@ -28,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 证据融合进图谱（docs/ai-pipeline/cls-news-kg.md §9，独立事务边界）：
@@ -46,6 +48,7 @@ public class KgFuseService {
     private final KgEventRepository eventRepository;
     private final KgEventLinkRepository eventLinkRepository;
     private final ClsDictAnchorApi anchorApi;
+    private final KgProperties kgProperties;
 
     /**
      * 融合单篇证据（articleId 溯源，articleCtime 为实体时间窗基准；epoch 秒可空）。
@@ -72,9 +75,10 @@ public class KgFuseService {
                 }
             }
         }
-        fuseRelations(articleId, extraction, entityIdByName);
+        int predicatesNormalized = fuseRelations(articleId, extraction, entityIdByName);
         fuseEvents(articleId, extraction, entityIdByName);
-        log.info("kg fused, articleId={}, knownNames={}", articleId, entityIdByName.size());
+        log.info("kg fused, articleId={}, knownNames={}, predicatesNormalized={}",
+                articleId, entityIdByName.size(), predicatesNormalized);
     }
 
     /** 实体锚定 + 首见/提及更新：锚点命中按 uq_kg_entity_anchor 定位，否则按类型+规范名 */
@@ -136,11 +140,21 @@ public class KgFuseService {
         return entity.getType() == null || entity.getType().isBlank() ? "OTHER" : entity.getType().trim();
     }
 
-    /** 关系落库：uq_kg_relation（含 evidence_article_id）前置判重；谓词缺失兜底「其他」 */
-    private void fuseRelations(Long articleId, KgExtraction extraction, Map<String, Long> entityIdByName) {
+    /**
+     * 关系落库：谓词先归一到受控词表，再按 uq_kg_relation（含 evidence_article_id）前置判重。
+     *
+     * <p>边界推演：归一必须发生在判重之前——模型自造谓词（出席/显示/推动…）会塌成同一个兜底值，
+     * 若先以原值判重、再以归一只落库，同主客体同文章的两条越界关系会因「判重键 ≠ 落库值」绕过
+     * UNIQUE 写成两行语义重复的关系。另：词表误配成空时不归一（等同改动前行为），宁可保留噪声，
+     * 也不静默把全量谓词打成一个值。</p>
+     *
+     * @return 被归一的越界谓词条数
+     */
+    private int fuseRelations(Long articleId, KgExtraction extraction, Map<String, Long> entityIdByName) {
         if (extraction.getRelations() == null) {
-            return;
+            return 0;
         }
+        int normalized = 0;
         for (KgExtraction.Relation relation : extraction.getRelations()) {
             if (relation == null) {
                 continue;
@@ -152,9 +166,12 @@ public class KgFuseService {
                         articleId, relation.getSubjectName(), relation.getObjectName());
                 continue;
             }
-            String predicate = relation.getPredicate() == null || relation.getPredicate().isBlank()
-                    ? "其他"
-                    : relation.getPredicate().trim();
+            String predicate = normalizePredicate(relation.getPredicate());
+            if (!predicate.equals(trimmed(relation.getPredicate()))) {
+                normalized++;
+                log.debug("kg predicate normalized, articleId={}, raw={}, kept={}",
+                        articleId, relation.getPredicate(), predicate);
+            }
             if (relationRepository.existsBySubjectEntityIdAndObjectEntityIdAndPredicateAndEvidenceArticleId(
                     subjectId, objectId, predicate, articleId)) {
                 continue;
@@ -168,6 +185,39 @@ public class KgFuseService {
                     .evidenceArticleId(articleId)
                     .build());
         }
+        return normalized;
+    }
+
+    /**
+     * 谓词归一（docs §8 prompt 规则 4）：空白取兜底值；表外值取兜底值，表内值原样放行（先 trim，
+     * 管道模型偶发尾随空白会误判越界）。
+     */
+    private String normalizePredicate(String raw) {
+        String fallback = fallback();
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        String trimmed = raw.trim();
+        return predicateWhitelist().contains(trimmed) ? trimmed : fallback;
+    }
+
+    private Set<String> predicateWhitelist() {
+        List<String> whitelist = kgProperties.getFuse().getPredicateWhitelist();
+        if (whitelist == null || whitelist.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> set = new LinkedHashSet<>();
+        for (String item : whitelist) {
+            if (item != null && !item.isBlank()) {
+                set.add(item.trim());
+            }
+        }
+        return set;
+    }
+
+    private String fallback() {
+        String fallback = kgProperties.getFuse().getPredicateFallback();
+        return fallback == null || fallback.isBlank() ? "其他" : fallback.trim();
     }
 
     /** 事件落库：sha256(title|time|detail) 指纹判重 + 实体关联；时间解析失败留原文表述兜底 */

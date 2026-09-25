@@ -61,10 +61,10 @@ import static org.mockito.Mockito.when;
 @TestPropertySource(properties = {
         "datasvc.worker.enabled=true",
         "datasvc.collector.enabled=false",
-        "datasvc.worker.embedding.account-id=test-account",
-        "datasvc.worker.embedding.api-token=test-token",
-        "datasvc.llm.api-key=test-key",
-        "datasvc.llm.model=test-model"
+        "ai.embeddings.embed.account-id=test-account",
+        "ai.embeddings.embed.api-token=test-token",
+        "ai.tiers.openai-mini.api-key=test-key",
+        "ai.tiers.openai-mini.model=test-model"
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class AnnouncementWorkerE2ETest {
@@ -127,10 +127,10 @@ class AnnouncementWorkerE2ETest {
         }
     }
 
-    /** 动态端口回填 datasvc.llm.base-url（supplier 惰性求值，晚于 @BeforeAll） */
+    /** 动态端口回填 ai.tiers.openai-mini.base-url（supplier 惰性求值，晚于 @BeforeAll） */
     @DynamicPropertySource
     static void llmStubProps(DynamicPropertyRegistry registry) {
-        registry.add("datasvc.llm.base-url", () -> "http://127.0.0.1:" + llmPort);
+        registry.add("ai.tiers.openai-mini.base-url", () -> "http://127.0.0.1:" + llmPort);
     }
 
     /** pdfbox 生成 ASCII 单页 PDF：正文 >100 码点且不命中任何标题模式 → 建树空 → root 兜底覆盖全文 */

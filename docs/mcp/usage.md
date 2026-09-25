@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-22
+updated: 2026-09-24
 ---
 
 # MCP 服务使用手册（stock-calculator-mcp）
@@ -13,7 +13,7 @@ updated: 2026-09-22
 
 把两类日常刚需做成 LLM 客户端可调用的工具：
 
-1. **股票技术指标**：报股票名/代码 → MA/MACD/RSI/BOLL/KDJ、支撑压力位带（东财日线按需落库 + ta4j 现算）；
+1. **股票技术指标**：报股票名/代码 → MA/MACD/RSI/BOLL/KDJ、支撑压力位带（腾讯日线按需落库 + ta4j 现算，与前端图表同源）；
 2. **本地知识库**：经典投资书籍原文 + 博主观点（微博备份）+ 政策条目（RSS）的语义检索，全部带出处。
 
 ```mermaid
@@ -22,7 +22,7 @@ flowchart LR
     C -->|"SSE :18081/sse"| M["stock-calculator-mcp"]
     M --> T["6 个工具<br/>（指标 / 检索）"]
     M --> A["/admin/source 等管理口"]
-    T --> Q["东财日线 → quote_daily 落库 → ta4j"]
+    T --> Q["腾讯日线 → quote_daily 落库 → ta4j"]
     T --> K[("stock_mcp 库<br/>书 · 博主观点 · 政策条目")]
 ```
 
@@ -63,7 +63,7 @@ kill <pid>
 | 工具 | 入参 | 返回 | 背后 |
 |---|---|---|---|
 | stock_analysis | stockId（或名称） | MA5/10/20/60、MACD、RSI、BOLL、KDJ 最新值 + 趋势摘要 | 增量同步 + ta4j |
-| stock_daily | stockId（或名称）, days | 原始日线序列（东财 11 字段） | quote_daily 读库 |
+| stock_daily | stockId（或名称）, days | 原始日线序列（腾讯 6 元素行；额/换手腾讯不提供，新拉数据为 0） | quote_daily 读库 |
 | stock_levels | stockId（或名称） | 支撑/压力位带各 ≤5 档（带触及次数等依据） | 枢轴+摆动聚类+量密集三法 |
 | kb_search | query, topK(默认5) | 相关段落 + 出处（书名/章节、博主/微博时间、政策标题+链接） | 向量+关键词双路 |
 | kb_persona | blogger（订阅源名） | 人格卡（语气/比喻/立场/句式画像）+ 10-20 段原文金句 | persona 伪书首块 |
@@ -167,7 +167,7 @@ KB_INGEST_TITLE=聪明的投资者 KB_INGEST_AUTHOR=格雷厄姆 \
 | kb_search 报「检索失败」且带 CF/网络字样 | Cloudflare embedding 不可用：查 `.env` 的 CLOUDFLARE_* 与额度 |
 | 检索结果里没有某博主/某源 | 该源已被移除（停更保数据语义，见 §五）或源未注册；GET /admin/source 核对 |
 | 政策条目只有标题没有正文 | 标题型 feed 本身无正文，块=标题+链接；需要全文再评估正文抓取 |
-| 指标值与行情软件略有出入 | 口径为东财日线（前复权 qfq）+ ta4j 标准算法；除权后远端漂移用 resync 修复 |
+| 指标值与行情软件略有出入 | 口径为腾讯日线（前复权 qfq，与前端图表同源）+ ta4j 标准算法；除权后远端漂移用 resync 修复 |
 
 ## 九、关联文档
 

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.zzh</groupId>
+        <artifactId>stock-calculator-service</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>stock-calculator-llm</artifactId>
+    <name>stock-calculator-llm</name>
+    <description>
+        LLM 客户端共享设施（chat tier 注册表 + 运行时 options 工厂）。
+        依赖红线：仅 spring-ai-openai / spring-boot-autoconfigure / spring-context，
+        严禁引入 web/JPA/JDBC 等重依赖——main/data/mcp/orchestration 的 native 变体均依赖本模块，
+        任何依赖污染会传染全仓 native 构建（教训：JPA 泄漏 native 变体）。
+        定位：只收 OpenAI 兼容 chat 客户端装配；embedding（CF 直调）与 vision 多模态不入本模块。
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <!-- RestClient（EmbeddingClient 两实现共用），Boot BOM 管版本 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- spring-boot-configuration-processor：为 ai.tiers.* 生成 IDE 提示与 native 元数据 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

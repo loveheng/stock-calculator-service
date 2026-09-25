@@ -38,6 +38,8 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 | kg | 《新闻联播》要闻时序知识图谱：任务发布（最新 3 条未处理扫描）/结果摄取（证据先行+DONE 判重）/字典锚点融合（实体/关系/事件时间线） | 基包 · config · entity · mq · repository · service · task — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/kg -name '*.java'` | docs/ai-pipeline/（cls-news-kg、kg-api） |
 | monitor | 拉取循环心跳记录/看门狗/管道巡检告警（pull_heartbeat） | 基包(PullLoopWatchdogTask 等) · entity · repository — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/monitor -name '*.java'` | — |
 | search | 资讯搜索（news-search，:18080） | config · controller · dto · service · task · util — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/search -name '*.java'` | docs/news-search/ |
+| broker | 自由画布后端代理（K线读穿/指标计算/ask SSE/画布监控 + BrokerDispatchClient 确定性调工具） | config · controller · dto · entity · mq · repository · service · task · util — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/broker -name '*.java'` | docs/architecture/（free-canvas） |
+| guide | 选股引导（消息→候选股→个股档案两步向导：字典锚定+LLM 实体抽取+题材两跳） | controller · dto · service — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/guide -name '*.java'` | docs/guide/ |
 | common | 统一响应/全局异常 | 基包，无子包 — `find stock-calculator-main/src/main/java/com/zzh/stock_calculator/common -name '*.java'` | — |
 | config · util · 根 | RestClient 配置 / HttpUtil / 应用入口 | 固定 3 文件，直接引用：`config/RestClientConfig.java`、`util/HttpUtil.java`、`StockCalculatorApplication.java`（相对 base 包） | — |
 
@@ -57,6 +59,8 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 - **announcement**：公告、announcement、订阅、快照、溯源、AnnouncementQueryApi
 - **monitor**：心跳、heartbeat、看门狗、watchdog、巡检、pull_heartbeat、PullLoop
 - **search**：搜索、search、资讯、news
+- **guide**：选股、引导、听到消息、候选股、个股档案、stock-brief
+- **broker**：画布、free-canvas、klines、ask、监控启动、dispatch 代调
 - **config · util · 根**：RestClient、HttpUtil、Application、启动类
 
 ## 变更落点顺序

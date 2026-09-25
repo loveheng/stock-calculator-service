@@ -37,6 +37,9 @@ public interface AppTaskHandler {
     /** 《新闻联播》要闻知识图谱历史回填（最旧优先分批补发 task.kg.extract，二期） */
     String TASK_KG_BACKFILL = "job.kg.backfill";
 
+    /** 画布经纪监控判定循环（free-canvas §3.5·B 调度路径，broker 域 MonitorCheckTask 承接） */
+    String TASK_BROKER_MONITOR_CHECK = "job.broker.monitor.check";
+
     /** 任务码（pull_task_config.task_code，job. 前缀） */
     String taskCode();
 

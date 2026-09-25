@@ -16,6 +16,9 @@ public interface QuoteDailyRepository extends JpaRepository<QuoteDailyEntity, Lo
     @Query(value = "SELECT max(trade_date) FROM quote_daily WHERE stock_id = :sid", nativeQuery = true)
     LocalDate findMaxTradeDate(@Param("sid") String stockId);
 
+    @Query(value = "SELECT min(trade_date) FROM quote_daily WHERE stock_id = :sid", nativeQuery = true)
+    LocalDate findMinTradeDate(@Param("sid") String stockId);
+
     /** 交易日历事实源：全表去重成交日（time 模块交易日历用） */
     @Query(value = "SELECT DISTINCT trade_date FROM quote_daily ORDER BY trade_date", nativeQuery = true)
     List<java.sql.Date> findDistinctTradeDates();

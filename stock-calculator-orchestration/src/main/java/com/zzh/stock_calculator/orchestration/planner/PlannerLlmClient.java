@@ -1,7 +1,6 @@
 package com.zzh.stock_calculator.orchestration.planner;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -9,9 +8,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Planner 自带 LLM 客户端（agent-orchestration D6 代价：不复用 main llm 域 fallback 链）。
- * OpenAI 兼容 /chat/completions 原生 REST，连接三键复用 .env 的 DEEPSEEK_*（mcp KbLlmClient
- * 同款套路：显式 HTTP/1.1 工厂 + byte[] 收包 UTF-8 自解码 + finish_reason=length 显式检测）。
+ * Planner 自带 LLM 客户端（agent-orchestration D6 代价：不复用 main llm 域 fallback 链——
+ * 该决策不变，仅装配设施换轨 stock-calculator-llm）。
+ * OpenAI 兼容 /chat/completions 原生 REST，连接三键读 ai.tiers.openai-max（env 用 OPENAI_MAX_* 三键；
+ * mcp KbLlmClient 同款套路：显式 HTTP/1.1 工厂 + byte[] 收包 UTF-8 自解码 + finish_reason=length
+ * 显式检测）。未配置宽松不阻启动（沿旧），调用时报错。
  */
 @Slf4j
 @Component
@@ -19,26 +20,31 @@ public class PlannerLlmClient {
 
     private static final int MAX_ATTEMPTS = 3;
 
+    /** Planner 规划 = openai-max 强推理档 */
+    private static final String TIER = com.zzh.llm.LlmTiers.MAX;
+
     private final RestClient restClient;
     private final String baseUrl;
     private final String model;
     private final String apiToken;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public PlannerLlmClient(RestClient.Builder builder,
-                            @Value("${orchestration.llm.base-url:}") String baseUrl,
-                            @Value("${orchestration.llm.api-key:}") String apiKey,
-                            @Value("${orchestration.llm.model:deepseek-chat}") String model) {
+    public PlannerLlmClient(RestClient.Builder builder, com.zzh.llm.LlmRegistry llmRegistry) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10_000);
         factory.setReadTimeout(120_000);
         this.restClient = builder.requestFactory(factory).build();
-        this.model = model;
-        this.apiToken = apiKey;
-        if (baseUrl == null || baseUrl.isBlank() || apiKey == null || apiKey.isBlank()) {
-            log.warn("DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY 未配置：Planner 规划不可用（create_task 将报错）");
+        if (llmRegistry.isReady(TIER)) {
+            com.zzh.llm.TierSpec spec = llmRegistry.spec(TIER);
+            this.baseUrl = spec.getBaseUrl().replaceAll("/+$", "");
+            this.model = spec.getModel();
+            this.apiToken = spec.getApiKey();
+        } else {
+            log.warn("ai.tiers.openai-max 三键未配齐：Planner 规划不可用（create_task 将报错）");
+            this.baseUrl = "";
+            this.model = "";
+            this.apiToken = "";
         }
-        this.baseUrl = baseUrl == null ? "" : baseUrl.replaceAll("/+$", "");
     }
 
     /**
@@ -47,7 +53,7 @@ public class PlannerLlmClient {
      */
     public String chat(String systemPrompt, String userMessage, boolean jsonMode) {
         if (baseUrl.isBlank() || apiToken == null || apiToken.isBlank()) {
-            throw new IllegalStateException("Planner LLM 未配置（DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY）");
+            throw new IllegalStateException("Planner LLM 未配置（ai.tiers.openai-max 三键，env 用 OPENAI_MAX_* 三键）");
         }
         String rf = jsonMode ? ",\"response_format\":{\"type\":\"json_object\"}" : "";
         String body = "{\"model\":\"" + model + "\",\"stream\":false,\"max_tokens\":4096" + rf

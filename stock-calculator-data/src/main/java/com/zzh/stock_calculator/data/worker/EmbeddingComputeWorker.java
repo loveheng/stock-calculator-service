@@ -54,6 +54,7 @@ public class EmbeddingComputeWorker {
     private final ObjectMapper objectMapper;
     private final EmbeddingRateLimiter rateLimiter;
     private final WorkerProperties properties;
+    private final com.zzh.llm.LlmRegistry llmRegistry;
     private final RabbitTemplate rabbitTemplate;
 
     @RabbitListener(queues = MqQueue.TASK_EMBEDDING_COMPUTE,
@@ -117,7 +118,7 @@ public class EmbeddingComputeWorker {
         EmbeddingComputeResult result = EmbeddingComputeResult.builder()
                 .kind(task.getKind())
                 .refId(task.getRefId())
-                .model(properties.getEmbedding().getModel())
+                .model(llmRegistry.embedModel(com.zzh.llm.LlmTiers.EMBED))
                 .dims(output.length)
                 .vector(toVector(output))
                 .tokensUsed(totalTokens(response))

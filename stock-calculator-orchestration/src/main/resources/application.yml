@@ -21,11 +21,28 @@ spring:
     hibernate:
       # 库表以 sql.init 为准，validate 保持实体↔DDL 账实对齐（mcp/notify 同款审计口径）
       ddl-auto: validate
+    properties:
+      hibernate:
+        # JSON 列格式映射器显式选 jackson3：本模块实体 JSONB 字段全部是
+        # tools.jackson.databind.JsonNode（Jackson 3 类型），而 Hibernate 7.4 默认
+        # 优先选 fasterxml jackson2 mapper（SessionFactoryOptionsBuilder：jackson2 →
+        # jackson3 → jsonb），jackson2 构造不了 Jackson 3 的 JsonNode——表内有行
+        # 触发反序列化即启动失败（ToolRegistry 种子 upsert 踩中）
+        type:
+          json_format_mapper: jackson3
+  mvc:
+    async:
+      # SSE 服务端（WebMvcSseServerTransportProvider）永不超时：Tomcat 异步请求默认 30s 绝对计时，
+      # 到点掐断 SSE 并移除会话，客户端（main）下次调用即 404 Session not found，
+      # 且 MCP SDK 客户端无自动重连（2026-09-24 实证）
+      request-timeout: 0
   ai:
     mcp:
       server:
         name: stock-mcp-orchestration
         version: 0.0.1
+        # SSE 心跳：默认 null 不发保活，空闲连接易被中间层/容器回收
+        keep-alive-interval: 15s
       client:
         common:
           # 超时梯队第 1 层（步 5 定案 3）：ToolInvoker 8s < dispatch 10s < copilot HTTP 15s
@@ -40,17 +57,26 @@ spring:
 server:
   port: 18083
 
-# Planner 自带 LLM provider（D6 代价：不复用 main llm 域 fallback 链，配置独立一份；
-# 连接三键复用 .env 已有 DEEPSEEK_* 三键，客户端套路照 mcp KbLlmClient）
+# LLM chat tier（stock-calculator-llm 组件）：Planner 规划模型（D6 代价：不复用 main llm
+# 域 fallback 链的决策不变，仅配置换轨）；openai-max 档；env 用 OPENAI_MAX_* 三键
+ai:
+  tiers:
+    openai-max:
+      base-url: ${OPENAI_MAX_BASE_URL:}
+      api-key: ${OPENAI_MAX_API_KEY:}
+      model: ${OPENAI_MAX_MODEL:deepseek-chat}
+  # embedding tier：供应商可切换（provider: cloudflare | openai）。现状 cloudflare
+  # （Workers AI 原生直调）；换供应商只需 provider: openai + base-url/api-key/model。
+  # 维度换型须全量重嵌并同步 plan.intent_embedding 列宽。
+  embeddings:
+    embed:
+      provider: cloudflare
+      account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+      api-token: ${CLOUDFLARE_API_TOKEN:}
+      model: ${CLOUDFLARE_MODEL:@cf/baai/bge-m3}
+      dimensions: 1024
+
 orchestration:
-  llm:
-    base-url: ${DEEPSEEK_BASE_URL:}
-    api-key: ${DEEPSEEK_API_KEY:}
-    model: ${DEEPSEEK_MODEL:deepseek-chat}
-  # 意图向量（bge-m3 1024 维，沿用 mcp kb 惯例；Cloudflare Workers AI 直调）
-  embedding:
-    cf-account-id: ${CLOUDFLARE_ACCOUNT_ID:}
-    cf-api-token: ${CLOUDFLARE_API_TOKEN:}
   # 向量匹配阈值（cosine distance，§6.2 阈值陷阱：verified 人工上架后依匹配日志校准）
   plan-match:
     max-distance: 0.25

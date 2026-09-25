@@ -10,15 +10,14 @@ import java.time.Duration;
  * 向量化配置（embedding.* 前缀，设计文档 §7.1）。
  * 未配置本块时 enabled 默认 false，整体关闭；enabled=true 但凭据缺失时同样关闭并
  * WARN 一次（运行期 EmbeddingGate 判定，native/JVM 行为一致，R1）。
+ * 供应商连接规格已迁 ai.embeddings.openai-embed（stock-calculator-llm 组件，不绑 CF）。
  */
 @Data
 @ConfigurationProperties(prefix = "embedding")
 public class EmbeddingProperties {
 
-    /** 功能总开关；配合 account-id/api-token 非空三重门控（EmbeddingGate，运行期判定） */
+    /** 功能总开关；配合 embed tier 三键齐备双门控（EmbeddingGate，运行期判定） */
     private boolean enabled = false;
-
-    private final Cloudflare cloudflare = new Cloudflare();
 
     /** 单日下发上限（保险丝；发布端统一记账——增量下发与对账扫缺都经 tryAcquireBackfill）。
      *  60000 条 ≈ 免费额度 10000 Neurons 的 75%~84%（bge-m3 计价 1075 Neurons/M tokens
@@ -33,26 +32,6 @@ public class EmbeddingProperties {
     private final Report report = new Report();
 
     private final Search search = new Search();
-
-    @Data
-    public static class Cloudflare {
-
-        /** CF 账户 ID，拼接 OpenAI 兼容端点 base-url */
-        private String accountId;
-
-        /** CF API Token（日志脱敏） */
-        @ToString.Exclude
-        private String apiToken;
-
-        /** Workers AI embedding 模型 */
-        private String model = "@cf/baai/bge-m3";
-
-        /** 向量维度（bge-m3 固定 1024） */
-        private int dimensions = 1024;
-
-        /** 单次 HTTP 请求超时 */
-        private Duration readTimeout = Duration.ofSeconds(30);
-    }
 
     @Data
     public static class Backfill {

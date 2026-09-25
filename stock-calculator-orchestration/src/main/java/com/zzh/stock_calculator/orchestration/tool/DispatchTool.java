@@ -46,7 +46,9 @@ public class DispatchTool {
 
     @Tool(name = "dispatch", description = "编排统一入口：把用户意图递进编排器。同步小请求直接代调下游"
             + "工具秒回；长任务/多步请求创建任务并返回 taskId（status=RUNNING，稍后用 query_task 查）;"
-            + "意图不明时返回候选工具清单（copilot 应向用户澄清后重试）。")
+            + "意图不明时返回候选工具清单（copilot 应向用户澄清后重试）。"
+            + "当用户需要任何真实数据（行情/K线/价格/资讯等）时必须先调用本工具获取，"
+            + "严禁编造数据，也严禁在未调用本工具的情况下向用户索要数据。")
     public String dispatch(
             @ToolParam(description = "用户意图或结构化请求描述（自然语言；包含目标工具名/领域可提高路由命中）") String intentText,
             @ToolParam(description = "调用方类型：copilot（可反问用户）/ service（后端服务，程序化调用）",
@@ -65,6 +67,14 @@ public class DispatchTool {
                     return "低置信路由，请向用户澄清。候选工具：" + candidates.stream()
                             .map(t -> t.getToolName() + "（" + t.getDescription() + "）")
                             .reduce((a, b) -> a + "；" + b).orElse("");
+                }
+                if (copilot) {
+                    // 零命中自纠（联调实测 2026-09-25）：copilot 侧模型只见 dispatch 一个入口、
+                    // 不知道注册工具名，自然语言意图零分被拒后只能向用户要数据。回全量能力菜单
+                    // （注册表动态生成），模型可在同一轮 advisor 循环内带工具名/结构化参数重发自纠
+                    return "意图未命中任何工具。可用能力菜单（重发 dispatch 时把目标工具名写进 intentText、"
+                            + "已知参数用 paramsJson 直传即可精准命中）：" + capabilityMenu()
+                            + " traceId=" + tid;
                 }
                 // 调用方适配：程序化调用方无法反问，降级为确定性错误返回
                 return "无法路由该请求（无匹配工具" + (candidates.isEmpty() ? "" : "，存在并列候选") + "）"
@@ -116,5 +126,13 @@ public class DispatchTool {
         } catch (RuntimeException e) {
             return om.createObjectNode();
         }
+    }
+
+    /** 全量能力菜单（copilot 零命中自纠用）：从注册表动态生成——注册表加工具菜单自动更新，零维护 */
+    private String capabilityMenu() {
+        return toolRegistry.plannable().stream()
+                .map(t -> t.getToolName() + "（" + t.getDescription() + "）")
+                .reduce((a, b) -> a + "；" + b)
+                .orElse("（注册表为空）");
     }
 }

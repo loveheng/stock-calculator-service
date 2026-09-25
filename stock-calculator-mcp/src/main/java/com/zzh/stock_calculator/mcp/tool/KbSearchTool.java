@@ -1,5 +1,6 @@
 package com.zzh.stock_calculator.mcp.tool;
 
+import com.zzh.llm.EmbeddingVectorLiteral;
 import com.zzh.stock_calculator.mcp.kb.KbBookEntity;
 import com.zzh.stock_calculator.mcp.kb.KbBookRepository;
 import com.zzh.stock_calculator.mcp.kb.KbChunkEntity;
@@ -50,7 +51,7 @@ public class KbSearchTool {
         try {
             float[] queryVec = embeddingClient.embed(List.of(query)).get(0);
             List<KbChunkRepository.KbChunkHit> hits =
-                    new ArrayList<>(chunkRepository.searchTopK(KbEmbeddingClient.vectorLiteral(queryVec), k));
+                    new ArrayList<>(chunkRepository.searchTopK(EmbeddingVectorLiteral.of(queryVec), k));
             if (query.trim().length() >= 2) {
                 hits.addAll(chunkRepository.searchKeyword(likePattern(query), k));
             }

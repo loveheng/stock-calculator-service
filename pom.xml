@@ -18,6 +18,7 @@
     </properties>
     <modules>
         <module>stock-calculator-contract</module>
+        <module>stock-calculator-llm</module>
         <module>stock-calculator-main</module>
         <module>stock-calculator-data</module>
         <module>stock-calculator-mcp</module>
@@ -78,6 +79,12 @@
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                             <version>${lombok.version}</version>
+                        </path>
+                        <!-- stock-calculator-llm 的 ai.tiers.* 配置元数据（IDE 提示 + native hints） -->
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                            <version>4.1.1</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

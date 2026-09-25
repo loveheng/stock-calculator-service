@@ -1,6 +1,7 @@
 package com.zzh.stock_calculator.data.worker;
 
 import com.openai.errors.InternalServerException;
+import com.openai.errors.OpenAIInvalidDataException;
 import com.openai.errors.OpenAIIoException;
 import com.openai.errors.RateLimitException;
 import com.openai.errors.UnexpectedStatusCodeException;
@@ -38,6 +39,13 @@ public final class EmbeddingErrorClassifier {
         }
         if (error instanceof UnexpectedStatusCodeException e) {
             return e.statusCode() >= 500 ? ErrorType.TRANSIENT : ErrorType.PERMANENT;
+        }
+        // openai-java JsonHandler/SseMessage 读响应体 IO 失败统一包装为本异常（message 恒为
+        // "Error reading response"，cause 才是真实 IOException）——网络级故障，进重试环自愈；
+        // 其余 OpenAIInvalidDataException（JSON 结构不符等）仍按确定性失败兜底 PERMANENT
+        if (error instanceof OpenAIInvalidDataException e
+                && "Error reading response".equals(e.getMessage())) {
+            return ErrorType.TRANSIENT;
         }
         return ErrorType.PERMANENT;
     }

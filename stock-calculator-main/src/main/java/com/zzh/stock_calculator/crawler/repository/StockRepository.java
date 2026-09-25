@@ -20,4 +20,7 @@ public interface StockRepository extends JpaRepository<Stock, String> {
 
     /** 曾用名含指定子串（更名股票的短查询实体判定） */
     List<Stock> findByOldNameContaining(String oldName);
+
+    /** 6 位码双形态匹配（字典形态混杂：沪深 sh600745 前缀尾部 / 北交所 920000.BJ 后缀头部 "920000."） */
+    boolean existsByStockIdEndingWithOrStockIdStartingWith(String endingSuffix, String startingPrefix);
 }

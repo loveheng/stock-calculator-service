@@ -53,10 +53,8 @@ class EmbeddingBackfillTaskTest {
         properties.getBackfill().setEnabled(true);
         // 门控开启态（R1）：enabled=true + 凭据齐备，等价生产配置
         properties.setEnabled(true);
-        properties.getCloudflare().setAccountId("acc-test");
-        properties.getCloudflare().setApiToken("tok-test");
         task = new EmbeddingBackfillTask(embeddingRepository, quotaGuard, properties,
-                new EmbeddingGate(properties), dispatcher);
+                new EmbeddingGate(properties, readyRegistry()), dispatcher);
 
         lenient().when(quotaGuard.isFatal()).thenReturn(false);
         lenient().when(quotaGuard.isRateLimited()).thenReturn(false);
@@ -124,5 +122,14 @@ class EmbeddingBackfillTaskTest {
 
         verify(embeddingRepository, never()).findPendingArticleIds(anyInt(), anyLong());
         verify(dispatcher, never()).dispatchForArticle(anyLong());
+    }
+
+    private static com.zzh.llm.LlmRegistry readyRegistry() {
+        com.zzh.llm.EmbedSpec spec = new com.zzh.llm.EmbedSpec();
+        spec.setAccountId("acc-test");
+        spec.setApiToken("tok-test");
+        com.zzh.llm.LlmTierProperties tierProps = new com.zzh.llm.LlmTierProperties();
+        tierProps.getEmbeddings().put(com.zzh.llm.LlmTiers.EMBED, spec);
+        return new com.zzh.llm.LlmRegistry(tierProps);
     }
 }

@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-15
+updated: 2026-09-24
 ---
 
 # cls_article 向量化（语义检索基座）· 后端设计文档
@@ -160,6 +160,8 @@ public OpenAiEmbeddingModel embeddingModel(EmbeddingProperties props) {
 
 - 与 `DeepSeekConfig` 手动装配同法；`spring.ai.openai.*` 自动装配因无 api-key 配置而退避，互不干扰
 - CF OpenAI 兼容端点已实测可用（附录 A.1）；`usage` 字段缺省（None）对 Spring AI 解析的兼容性列入实证清单 S5
+
+> **现状注记（2026-09-24）**：装配已迁 stock-calculator-llm `LlmRegistry`（`ai.embeddings.embed`，provider 可切换 cloudflare | openai，CF 垫片与 `CfUsageFixingClient` 由 registry 内封装），见 `docs/architecture/llm-module.md`；`CfUsageFixingClient`/`EmbeddingProperties.Cloudflare` 本地副本已删除。
 
 ### 4.2 PgVectorStore 装配（D2）
 

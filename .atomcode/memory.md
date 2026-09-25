@@ -2,3 +2,6 @@
 - MCP/编排器全链路不接触用户信息本体：后端把用户需求转成自包含任务描述或参数化请求下发，MCP 只按描述满足请求；身份透传字段方案已废弃。
 - 异步通道可靠性五项定案：①main 侧 user_async_task_log 映射审计表（恢复+审计）；②MQ 队列 x-expires+终态事件+定时扫描 GC，禁 auto-delete；③用户限流全卡 main，orchestration 只做全局并发上限；④私有资源 Scoped Token 暂不做；⑤W3C trace_id 全链路透传，TaskTool 需改为优先接受外部 traceId。
 - 步6执行序已定案并落盘 todos.md：6-0 TraceId透传 → 6-1 通道映射块(审计表DDL+correlationId双写+pg_advisory_xact_lock按plan_id串行，同PR) → 6-2 mq_send/mq_wait → 6-3a/b 真异步(orchestration侧/main侧拆步验收) → 6-4 限流先GC后 → 🚧冒烟Gate(Dummy 30s五场景转E2E) → 步7-1 HITL(mq_wait复用+审核API主体) → 7-2 可观测工具面 → 单测收口。多实例并发定案用 advisory lock「真同步」。
+- AI 写码遇不确定点统一用 `// UNCERTAIN: <说明>` 标记（区别于 TODO=计划做）；收集评估用全局工具 `toolbox run uncertainty-scan`（任意 git 仓库根自动探测，--md 导出报告，白名单=内置+仓库根 .uncertainty-whitelist），高危项转 context/todos.md 风险类。
+- AI 写码「失败时兜底而非上报」且属未核实猜测的，兜底处写 `// DEGRADE: <为何兜底+待核实>`（区别于 UNCERTAIN=实现不确定）；收集用全局工具 `toolbox run degrade-scan`（标记+空catch/吞异常形状）与 `toolbox run code-hygiene-scan`（调试残留/注释代码/依赖 --deps），高危转 context/todos.md 风险类；机制见 ~/.agents/README.md §1.8/§1.9。
+- AI 副作用收集全家桶（机制 ~/.agents/README.md §1.8-§1.10）：uscan=UNCERTAIN/TODO 隐患；dscan=DEGRADE 静默降级形状；hyg=调试/注释/依赖残留；dtrig=grep 运行日志 [DEGRADE] 实际触发（默认 /tmp/logs，grep 非 watch）；Diff 收尾 devlog 追加 [验证] 账本行（@audit 第 12 项核缺口）；todos 风险类条目标 [once]（完成自动转 done）/[long]（每 @done 强制重评）。

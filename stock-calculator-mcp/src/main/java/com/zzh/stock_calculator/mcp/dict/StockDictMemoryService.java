@@ -93,6 +93,19 @@ public class StockDictMemoryService {
         if (id != null) {
             return Optional.ofNullable(byId.get(id));
         }
+        // 裸 6 位码兜底：字典键形态混杂（sh600745 前缀形态含尾部 / 920000.BJ 后缀形态含前缀），唯一匹配
+        if (lower.matches("\\d{6}")) {
+            List<StockDictEntry> byTail = byId.values().stream()
+                    .filter(e -> e.getStockId() != null && matchesSixDigit(e.getStockId(), lower))
+                    .toList();
+            if (byTail.size() == 1) {
+                return Optional.of(byTail.get(0));
+            }
+            if (byTail.size() > 1) {
+                log.debug("裸 6 位码多命中不猜：{} -> {} 条", key, byTail.size());
+                return Optional.empty();
+            }
+        }
         List<StockDictEntry> hits = byId.values().stream()
                 .filter(e -> contains(e.getName(), lower) || contains(e.getOldName(), lower))
                 .toList();
@@ -117,5 +130,11 @@ public class StockDictMemoryService {
 
     private boolean contains(String text, String lower) {
         return text != null && text.toLowerCase().contains(lower);
+    }
+
+    /** 裸 6 位码对字典键的匹配：前缀形态（sh600745）尾匹配，后缀形态（920000.BJ）按 "920000." 头匹配 */
+    private static boolean matchesSixDigit(String stockId, String sixDigit) {
+        String lower = stockId.toLowerCase();
+        return lower.endsWith(sixDigit) || lower.startsWith(sixDigit + ".");
     }
 }

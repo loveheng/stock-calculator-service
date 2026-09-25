@@ -48,7 +48,7 @@ public class PlanEmbeddingRecomputeRunner implements ApplicationRunner {
             String anchor = p.getIntentTemplate() != null && !p.getIntentTemplate().isBlank()
                     ? p.getIntentTemplate() : p.getIntentText();
             try {
-                String qv = IntentEmbeddingClient.vectorLiteral(embeddingClient.embed(anchor));
+                String qv = com.zzh.llm.EmbeddingVectorLiteral.of(embeddingClient.embed(anchor));
                 planRepository.updateEmbedding(p.getId(), qv);
                 ok++;
             } catch (RuntimeException e) {

@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-13
+updated: 2026-09-24
 ---
 
 # 数据服务拆分与 MQ 通信 · 后端设计文档
@@ -78,7 +78,8 @@ updated: 2026-09-13
 > AnnouncementDistillService/GroundingValidator 平移至 data/announcement，
 > AnnouncementParseProperties（announcement.parse.*，默认与主服务同口径）随迁；
 > LLM 精简为单渠道 LlmGateway（AnnouncementWorkerConfig 内部类，OpenAI 兼容
-> /chat/completions，datasvc.llm.* 配置，baseUrl/apiKey/model 非空 fail-fast，
+> /chat/completions，原 datasvc.llm.* 配置【2026-09-24 注：已迁 ai.embeddings.embed，
+> 见 docs/architecture/llm-module.md】，baseUrl/apiKey/model 非空 fail-fast，
 > maxAttempts=1；不做 main 侧多渠道路由——数据侧只需蒸馏单能力）；
 > AnnouncementProcessWorker @RabbitListener(task.announcement.process.q，prefetch=2
 > 独立 factory 手动 ack)：pdfCache 断点续传（同 URL 重发免重复下载，进程生命周期内）→

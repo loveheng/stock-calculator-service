@@ -200,7 +200,7 @@ class OrchestrationReuseChainE2ETest {
                 .planDag(dagOf(SLEEP_NODE))
                 .status("verified").build());
         planRepository.updateEmbedding(plan.getId(),
-                IntentEmbeddingClient.vectorLiteral(embeddingClient.embed(anchor)));
+                com.zzh.llm.EmbeddingVectorLiteral.of(embeddingClient.embed(anchor)));
 
         anchorRef.set(anchor);
         fillRef.set("{\"stock\":\"某股\"}");
@@ -234,7 +234,7 @@ class OrchestrationReuseChainE2ETest {
                 .paramSchema(om.createObjectNode().set("slots", om.createArrayNode()))
                 .planDag(dagOf(SLEEP_NODE)).status("verified").build());
         planRepository.updateEmbedding(plan.getId(),
-                IntentEmbeddingClient.vectorLiteral(embeddingClient.embed(anchor)));
+                com.zzh.llm.EmbeddingVectorLiteral.of(embeddingClient.embed(anchor)));
 
         // P2：hitl_wait 挂起实例被人工拒绝 → plan 联动 rejected + note 留痕
         TaskInstanceEntity hitl = taskInstanceRepository.save(TaskInstanceEntity.builder()

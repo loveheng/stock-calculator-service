@@ -20,4 +20,32 @@ public interface ClsArticleStockRepository extends JpaRepository<ClsArticleStock
             + "WHERE cas.stock_id = :stockId AND a.ctime >= :sinceCtime", nativeQuery = true)
     long countDistinctArticleIdByStockIdSince(@Param("stockId") String stockId,
                                               @Param("sinceCtime") long sinceCtime);
+
+    /** 指定股票近窗口被提及的文章 id（ctime 倒序截断；guide 引导依据/档案，docs/guide/design.md §五） */
+    @Query(value = "SELECT cas.article_id FROM cls_article_stock cas "
+            + "JOIN cls_article a ON a.id = cas.article_id "
+            + "WHERE cas.stock_id = :stockId AND a.ctime >= :sinceCtime "
+            + "ORDER BY a.ctime DESC LIMIT :limit", nativeQuery = true)
+    List<Long> findArticleIdsByStockIdSince(@Param("stockId") String stockId,
+                                            @Param("sinceCtime") long sinceCtime,
+                                            @Param("limit") int limit);
+
+    /** 指定股票近期提及的题材聚合（反向两跳：文章同源带出题材；guide 引导档案标签） */
+    @Query(value = "SELECT s.subject_id AS subjectId, COUNT(DISTINCT s.article_id) AS articleCount "
+            + "FROM cls_article_stock cas "
+            + "JOIN cls_article a ON a.id = cas.article_id "
+            + "JOIN cls_article_subject s ON s.article_id = cas.article_id "
+            + "WHERE cas.stock_id = :stockId AND a.ctime >= :sinceCtime "
+            + "GROUP BY s.subject_id "
+            + "ORDER BY articleCount DESC LIMIT :limit", nativeQuery = true)
+    List<SubjectArticleCountView> aggregateSubjectsByStockIdSince(@Param("stockId") String stockId,
+                                                                  @Param("sinceCtime") long sinceCtime,
+                                                                  @Param("limit") int limit);
+
+    /** native 聚合投影（Spring Data 接口投影，列别名对齐 getter） */
+    interface SubjectArticleCountView {
+        Long getSubjectId();
+
+        long getArticleCount();
+    }
 }

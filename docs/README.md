@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-20
+updated: 2026-09-25
 ---
 
 # 文档索引
@@ -40,6 +40,10 @@ updated: 2026-09-20
 - [implementation](news-search/implementation.md) · 后端技术实现（Spring Boot :18080）
 - [api](news-search/api.md) · 接口文档（后端开发对接）
 
+## guide/ — 选股引导
+
+- [design](guide/design.md) · 选股引导设计（消息→候选股→个股档案两步向导 + copilot 聊天入口，评审定案待实施）
+
 ## ai-pipeline/ — AI 管道（四条独立管道）
 
 - [announcement-rag](ai-pipeline/announcement-rag.md) · 公告提取与蒸馏管道（announcement 域）设计
@@ -69,6 +73,8 @@ updated: 2026-09-20
 - [agent-orchestration](architecture/agent-orchestration.md) · Agent 任务编排系统设计（LLM 规划 DAG + 确定性执行 + 意图复用，评审稿）
 - [agent-orchestration-implementation](architecture/agent-orchestration-implementation.md) · Agent 编排实现技术文档（代码落点 / 执行流程 / 链路边界口径 / 进度）
 - [agent-orchestration-possibilities](architecture/agent-orchestration-possibilities.md) · Agent 编排的可能性功能展望与演进路线
+- [free-canvas](architecture/free-canvas.md) · 自由画布后端对接方案 v3 Master（后端代理模式 / 读穿代理与出口防护 / 本地计算代理 / 多实例裁决）
+- [llm-module](architecture/llm-module.md) · stock-calculator-llm 共享装配模块（chat 三档 tier + embedding 供应商抽象 / 运行时 options 三坑 / AOT 设计取舍）
 
 ## deploy/ — 部署与运维
 

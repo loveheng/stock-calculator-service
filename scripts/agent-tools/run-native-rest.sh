@@ -8,6 +8,7 @@
 # summary: main native REST 门禁冒烟（admin token 门禁 + ApiResponse 信封）
 # trigger: manual
 # params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER,CRAWLER_ADMIN_TOKEN
+# cat: test
 # alias: nr
 # platform: unix
 

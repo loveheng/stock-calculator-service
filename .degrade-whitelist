@@ -40,3 +40,5 @@ ComputeIndicatorsTool\.java
 FetchKlineTool\.java
 Planner\.java
 ProfileService\.java
+# 有意降级（设计内兜底，非猜测）：fail-open 红线，依据 docs/custom-stats/support.md §6
+CopilotStatActionExtractor

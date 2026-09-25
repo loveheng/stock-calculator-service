@@ -53,6 +53,15 @@ public class ToolRegistry {
             Map.entry("stock_daily", new McpSeed("个股日线序列（前复权 OHLCV），入参代码或名称", "quote",
                     "{\"stock\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票代码或名称\"},"
                             + "\"days\":{\"type\":\"int\",\"required\":false,\"desc\":\"根数\"}}")),
+            Map.entry("fetch_kline", new McpSeed("画布 K 线读穿代理：查库覆盖，不足自动拉取入库，返回升序日线切片（qfq 入库/raw 读穿）", "quote",
+                    "{\"stock\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票代码或名称\"},"
+                            + "\"adjustType\":{\"type\":\"string\",\"required\":false,\"desc\":\"qfq（默认，入库）| raw（读穿不入库）\"},"
+                            + "\"from\":{\"type\":\"string\",\"required\":false,\"desc\":\"起始日期 YYYY-MM-DD\"},"
+                            + "\"to\":{\"type\":\"string\",\"required\":false,\"desc\":\"截止日期 YYYY-MM-DD，默认最新\"},"
+                            + "\"snapshotId\":{\"type\":\"string\",\"required\":false,\"desc\":\"调用方追踪 ID\"}}")),
+            Map.entry("compute_indicators", new McpSeed("画布无状态指标计算：对给定 K 线切片逐根算 macd/kdj/boll 序列，纯计算无外部 IO", "quote",
+                    "{\"klines\":{\"type\":\"string\",\"required\":true,\"desc\":\"K 线切片 JSON 数组（date/open/close/high/low/volume，升序 ≤120）\"},"
+                            + "\"indicators\":{\"type\":\"string\",\"required\":true,\"desc\":\"指标名 JSON 数组，如 [macd,kdj,boll]\"}}")),
             Map.entry("stock_levels", new McpSeed("个股支撑/压力位与关键价位", "quote",
                     "{\"stock\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票代码或名称\"}}")),
             Map.entry("stock_radar_check", new McpSeed("多条件雷达断言：是否突破N日均线和/或量能放大，返回枚举信号 both/break_only/volume_only/none（switch 节点按此分流，命中才触发提醒）", "quote",
@@ -76,7 +85,21 @@ public class ToolRegistry {
                     "announcement",
                     "按公告 ID 集合批量取蒸馏摘要（财报/公告对比的数据源；配合 foreach 逐份抽取+LLM 汇总）",
                     "{\"ids\":{\"type\":\"array\",\"required\":true,\"desc\":\"CNINFO announcementId 集合，1-20 个\"}}",
-                    "keep_summary", EM_SYNC));
+                    "keep_summary", EM_SYNC),
+            new RestSeed("main.guide.analyze_message", "POST /api/guide/analyze-message",
+                    "guide",
+                    "选股引导 Step1：从用户听到的一条消息找相关股票（词典快路径+LLM 抽实体，返回候选清单+依据+nextStep 指令）。"
+                            + "用户表达「听到一个消息/新闻，想看看有什么股票机会」时先调本工具，拿到候选后向用户澄清选定",
+                    "{\"message\":{\"type\":\"string\",\"required\":true,\"desc\":\"消息原文（≤500 字口语转述）\"},"
+                            + "\"days\":{\"type\":\"int\",\"required\":false,\"desc\":\"时间窗（天），默认 7，范围 1-30\"}}",
+                    "keep_head", EM_SYNC),
+            new RestSeed("main.guide.stock_brief", "GET /api/guide/stock-brief",
+                    "guide",
+                    "选股引导 Step2：个股引导档案（近期电报提及+题材归属+公告摘要+nextSteps 建议）。"
+                            + "用户从 analyze_message 候选中选定某只后调用，stockId 必须用 Step1 返回的 stockId",
+                    "{\"stockId\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票 ID（Step1 候选的 stockId）\"},"
+                            + "\"days\":{\"type\":\"int\",\"required\":false,\"desc\":\"时间窗（天），默认 7\"}}",
+                    "keep_head", EM_SYNC));
 
     private final ToolRegistryRepository toolRegistryRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();

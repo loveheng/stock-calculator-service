@@ -14,6 +14,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,7 +33,7 @@ import static org.mockito.Mockito.when;
 class QuoteSyncServiceTest {
 
     @Mock
-    private EastmoneyDailyClient client;
+    private TencentDailyClient client;
 
     @Mock
     private QuoteDailyRepository repository;
@@ -93,6 +95,49 @@ class QuoteSyncServiceTest {
 
         verify(jdbcTemplate).batchUpdate(contains("pct_chg=EXCLUDED.pct_chg"),
                 any(List.class), org.mockito.ArgumentMatchers.anyInt(), any(ParameterizedPreparedStatementSetter.class));
+    }
+
+    @Test
+    void qfqDriftTriggersAutoResync() {
+        LocalDate last = LocalDate.now().minusDays(5);
+        when(repository.findMaxTradeDate("sh600519")).thenReturn(last);
+        when(repository.countByStockId("sh600519")).thenReturn(300L);
+        when(client.fetchWindow(anyString(), any())).thenReturn(threeBars());
+        when(repository.findRecentN(anyString(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of());
+        // 库内重叠行与接口值偏离超阈（除权漂移：close 9 vs 接口 11）
+        QuoteDailyEntity stale = QuoteDailyEntity.builder()
+                .stockId("sh600519").tradeDate(LocalDate.of(2024, 1, 2))
+                .open(BigDecimal.valueOf(9)).high(BigDecimal.valueOf(9)).low(BigDecimal.valueOf(9))
+                .close(BigDecimal.valueOf(9)).volume(BigDecimal.valueOf(100))
+                .build();
+        when(repository.findRange(anyString(), any(), any())).thenReturn(List.of(stale));
+
+        service.ensureBars("sh600519", 100);
+
+        // 漂移命中：删库重灌（第二次拉取为全量回看窗）
+        verify(jdbcTemplate).update("DELETE FROM quote_daily WHERE stock_id = ?", "sh600519");
+        verify(client, times(2)).fetchWindow(anyString(), any());
+    }
+
+    @Test
+    void overlapWithoutDriftSkipsResync() {
+        LocalDate last = LocalDate.now().minusDays(5);
+        when(repository.findMaxTradeDate("sh600519")).thenReturn(last);
+        when(repository.countByStockId("sh600519")).thenReturn(300L);
+        when(client.fetchWindow(anyString(), any())).thenReturn(threeBars());
+        when(repository.findRecentN(anyString(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of());
+        // 重叠行与接口一致：仅盘中正常增量，不触发重灌
+        QuoteDailyEntity aligned = QuoteDailyEntity.builder()
+                .stockId("sh600519").tradeDate(LocalDate.of(2024, 1, 2))
+                .open(BigDecimal.TEN).high(BigDecimal.valueOf(11.5)).low(BigDecimal.valueOf(9.5))
+                .close(BigDecimal.valueOf(11)).volume(BigDecimal.valueOf(100))
+                .build();
+        when(repository.findRange(anyString(), any(), any())).thenReturn(List.of(aligned));
+
+        service.ensureBars("sh600519", 100);
+
+        verify(client, times(1)).fetchWindow(anyString(), any());
+        verify(jdbcTemplate, never()).update(anyString(), eq("sh600519"));
     }
 
 }

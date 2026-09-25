@@ -9,6 +9,7 @@
 # summary: 全量回归入口（本地库口令单键红线口径）
 # trigger: manual
 # params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER
+# cat: test
 # alias: reg
 # platform: unix
 

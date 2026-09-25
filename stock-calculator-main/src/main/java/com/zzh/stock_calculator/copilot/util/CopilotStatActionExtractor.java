@@ -27,6 +27,21 @@ public final class CopilotStatActionExtractor {
     /** 动作块闭标签（与 data.sql 播种模文保持一致） */
     public static final String CLOSE_TAG = "</copilot-actions>";
 
+    /**
+     * 全局动作输出规范（由编排服务注入 system prompt 非任务分支末尾）：外壳协议宣讲与解析器同源——
+     * 标签以 {@link #OPEN_TAG}/{@link #CLOSE_TAG} 常量拼接，改标签自动同步，杜绝提示词↔解析器漂移。
+     * 措辞 scope 无关（「客户端」而非「画布」）：本契约对所有 scope 无条件生效，动作类型语义与
+     * 图纸 schema 由前端 promptHints 承载（free-canvas §2.8 修订：外壳归后端全局提示词，业务载荷归前端）。
+     * 任务型模版分支不叠加（custom_stat 模板自带外壳教学，与记忆/语气卡同口径）。
+     */
+    public static final String ACTION_OUTPUT_CONTRACT =
+            "\n\n【动作输出规范】当你的回答包含需要客户端执行的结构化动作时，"
+            + "必须在回复正文全部结束后、于最末尾原样输出动作块（严禁使用代码围栏包裹）：\n"
+            + OPEN_TAG + "\n{\"actions\":[{\"type\":\"动作类型\",\"payload\":{...}}]}\n" + CLOSE_TAG + "\n"
+            + "规则：①块内必须是合法 JSON（{\"actions\":[...]} 或动作数组），type 必填，payload 必须为对象；"
+            + "②动作块必须完整闭合且置于回复最末；③正文只输出给用户看的自然语言说明，"
+            + "严禁在正文中书写【行动】等动作描述；④动作数量保持精简（上限 10）。";
+
     /** 单次响应动作数上限（前端白名单上限 5，此处放宽做防御） */
     private static final int MAX_ACTIONS = 10;
 
@@ -100,6 +115,8 @@ public final class CopilotStatActionExtractor {
             }
             return out.isEmpty() ? null : out;
         } catch (Exception e) {
+            // 有意降级（非猜测）：fail-open 红线——解析失败返回 null，聊天文本原样保留，
+            // 依据 docs/custom-stats/support.md §6「前端守卫静默丢弃是设计内兜底」，故不打 [DEGRADE] 日志
             return null;
         }
     }

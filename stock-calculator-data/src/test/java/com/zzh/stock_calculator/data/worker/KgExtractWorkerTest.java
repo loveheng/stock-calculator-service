@@ -11,8 +11,11 @@ import com.zzh.stockcalc.contract.MqKey;
 import com.zzh.stockcalc.contract.MqPolicy;
 import com.zzh.stockcalc.contract.message.KgExtractDonePayload;
 import com.zzh.stockcalc.contract.message.KgExtractFailedPayload;
+import com.zzh.stockcalc.contract.KgControlledVocabulary;
 import com.zzh.stockcalc.contract.message.KgExtractTask;
-import com.zzh.stock_calculator.data.llm.LlmGatewayProperties;
+import com.zzh.llm.LlmRegistry;
+import com.zzh.llm.LlmTierProperties;
+import com.zzh.llm.TierSpec;
 import com.zzh.stock_calculator.data.mq.ResultPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -34,6 +38,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -69,16 +74,22 @@ class KgExtractWorkerTest {
     private RabbitTemplate rabbitTemplate;
 
     private ObjectMapper objectMapper;
-    private LlmGatewayProperties llmProperties;
+    private LlmRegistry llmRegistry;
     private KgExtractWorker worker;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        llmProperties = new LlmGatewayProperties();
-        llmProperties.setModel("gemini-2.5-flash");
+        TierSpec kgSpec = new TierSpec();
+        // 三键齐备：LlmRegistry.requireSpec 缺 base-url/api-key 会 fail-fast（成功路径要落 model 名）
+        kgSpec.setModel("gemini-2.5-flash");
+        kgSpec.setBaseUrl("http://localhost/v1");
+        kgSpec.setApiKey("test-key");
+        LlmTierProperties tierProps = new LlmTierProperties();
+        tierProps.getTiers().put("openai-mini", kgSpec);
+        llmRegistry = new LlmRegistry(tierProps);
         worker = new KgExtractWorker(chatModel, resultPublisher, objectMapper,
-                rabbitTemplate, llmProperties);
+                rabbitTemplate, llmRegistry);
     }
 
     @Test
@@ -162,6 +173,24 @@ class KgExtractWorkerTest {
         verifyNoInteractions(resultPublisher);
         verify(channel).basicAck(1L, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("system prompt 的受控谓词取自 contract 常量（防 prompt 与入库两侧词表漂移）")
+    void systemPromptUsesSharedVocabulary() throws Exception {
+        String body = envelopeJson(taskPayload(VALID_EXTRACTION_JSON));
+        when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse(VALID_EXTRACTION_JSON));
+
+        worker.onMessage(taskMessage(body), channel, 1L);
+
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        String systemText = promptCaptor.getValue().getSystemMessages().stream()
+                .map(SystemMessage::getText)
+                .collect(Collectors.joining());
+        assertThat(systemText)
+                .contains("4. 谓词限受控词表：" + KgControlledVocabulary.PREDICATES_PROMPT)
+                .doesNotContain(KgControlledVocabulary.PREDICATE_FALLBACK + "/");
     }
 
     @Test

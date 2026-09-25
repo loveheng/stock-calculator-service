@@ -7,6 +7,7 @@
 # name: docs-index-lint
 # summary: docs 收集视图与 README 覆盖双向校验（docs skill §八 补充）
 # trigger: manual
+# cat: docs
 # alias: dl
 # platform: unix
 

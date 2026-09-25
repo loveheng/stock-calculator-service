@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-20
+updated: 2026-09-24
 ---
 
 # MCP 服务设计（stock-calculator-mcp）
@@ -62,7 +62,7 @@ stock-calculator-mcp/            新 Maven 模块（父 POM 挂载，packaging j
 └─ com.zzh.stock_calculator.mcp  包名跟随 data 惯例
    ├─ tool/       MCP 工具层（@Tool bean，4 个）
    ├─ kb/         entity · repository · service · ingest（离线灌书入口）
-   ├─ quote/      东财/腾讯日线 RestClient 客户端 + 缓存
+   ├─ quote/      腾讯/东财日线 RestClient 客户端（2026-09-24 起腾讯为主）+ 缓存
    └─ indicator/  ta4j 封装（MA/MACD/RSI/BOLL/KDJ）
 ```
 
@@ -207,7 +207,7 @@ main 现状：stock 表仅 crawler 域使用，Redis 中无字典镜像（Redis 
 | 风险 | 对策 |
 |---|---|
 | Cloudflare embedding 不可用 | 灌书离线可重跑；查询侧报错由 LLM 客户端稍后重试 |
-| 行情接口波动/限频 | Caffeine TTL 缓存 + 重试；接口切换预留（东财/腾讯双实现位） |
+| 行情接口波动/限频 | Caffeine TTL 缓存 + 重试；接口切换预留（腾讯/东财双实现位，2026-09-24 起腾讯为主、东财退役备用） |
 | bge-m3 术语召回飘（译名不统一） | ILIKE 精确匹配兜底两路合并 |
 | 向量模型不一致静默劣化 | 启动时校验模型与维度（kb_book.embedding_model 留档） |
 | 书籍翻译质量差导致切块破碎 | 首批只灌 2-3 本最常翻的书，调顺管线再批量 |

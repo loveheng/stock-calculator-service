@@ -33,6 +33,11 @@ public final class CopilotDtos {
         /** 博主名（订阅源名）：非空时经 dispatch 调 kb_persona 取语气卡注入 system prompt
          *  （mcp-blogger-kb 拼装口径）；无卡/源停用/不可达宽松降级为 null，行为零变化 */
         private String blogger;
+        /** 客户端能力提示（free-canvas §2.8）：画布等富客户端 scope 携带的「公共段+模板专属段」
+         *  能力说明文本（含动作图纸 schema）。按不可信输入处理：UTF-8 8192 字节硬顶（超长截断
+         *  不报错），原样拼接进系统提示固定区段（基础提示之后、历史消息之前）；ephemeral——
+         *  不落库、不打日志；后端不解析内容、不维护任何片段文本 */
+        private String promptHints;
     }
 
     @Data

@@ -25,24 +25,41 @@ spring:
     hibernate:
       # 库表以 sql.init 为准，validate 保持实体↔DDL 账实对齐（main 同款审计口径）
       ddl-auto: validate
+  mvc:
+    async:
+      # SSE 服务端（WebMvcSseServerTransportProvider）永不超时：Tomcat 异步请求默认 30s 绝对计时，
+      # 到点掐断 SSE 并移除会话，客户端（orchestration）下次调用即 404 Session not found，
+      # 且 MCP SDK 客户端无自动重连（2026-09-24 实证）
+      request-timeout: 0
   ai:
     mcp:
       server:
         name: stock-mcp
         version: 0.0.1
+        # SSE 心跳：默认 null 不发保活，空闲连接易被中间层/容器回收
+        keep-alive-interval: 15s
 
 server:
   port: 18081
 
 # 本地书库知识检索（kb RAG，design.md §八）
-cf:
-  account-id: ${CLOUDFLARE_ACCOUNT_ID:}
-  api-token: ${CLOUDFLARE_API_TOKEN:}
-deepseek:
-  # persona 提炼离线调用（M2）：OpenAI 兼容原生 REST，三键复用 .env 既有变量
-  base-url: ${DEEPSEEK_BASE_URL:}
-  api-key: ${DEEPSEEK_API_KEY:}
-  model: ${DEEPSEEK_MODEL:deepseek-chat}
+# embedding tier：供应商可切换（provider: cloudflare | openai），kb 灌书/检索经此取凭据
+ai:
+  embeddings:
+    embed:
+      provider: cloudflare
+      account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+      api-token: ${CLOUDFLARE_API_TOKEN:}
+      model: ${CLOUDFLARE_MODEL:@cf/baai/bge-m3}
+      dimensions: 1024
+# LLM chat tier（stock-calculator-llm 组件）：persona 提炼离线调用（M2），
+# 提炼属廉价批量 = openai-mini 档；KbLlmClient 原生 REST 三键从该 tier 读
+# （env 用 OPENAI_MINI_* 三键）
+  tiers:
+    openai-mini:
+      base-url: ${OPENAI_MINI_BASE_URL:}
+      api-key: ${OPENAI_MINI_API_KEY:}
+      model: ${OPENAI_MINI_MODEL:deepseek-chat}
 kb:
   rss:
     # RSS 订阅源轮询（M1b）：默认 6h 一轮、启动 1min 后首拉；本地自用无更密需求

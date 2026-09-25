@@ -10,6 +10,7 @@
 # summary: 分模块 E2E 执行（RABBIT_E2E 门控，main|data 二选一）
 # trigger: manual
 # params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER,RABBIT_E2E
+# cat: test
 # alias: e2e
 # platform: unix
 

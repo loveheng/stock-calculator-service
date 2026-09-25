@@ -92,6 +92,8 @@ public class ReminderFireWatchdog {
             JsonNode spec = objectMapper.readTree(reminder.getTriggerSpec());
             return Instant.parse(spec.path("nextFireAt").asText()).atOffset(ZoneOffset.UTC);
         } catch (Exception e) {
+            // DEGRADE: nextFireAt 解析失败返回 null（调用方跳过该提醒），是否应告警/落失败态待确认
+            log.warn("[DEGRADE] reminder-nextfireat-parse-failed fallback to null: {}", e.toString());
             return null;
         }
     }

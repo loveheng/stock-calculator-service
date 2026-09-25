@@ -1,7 +1,6 @@
 package com.zzh.stock_calculator.mcp.kb;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -9,9 +8,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * DeepSeek OpenAI 兼容 /chat/completions 原生 REST 客户端（persona 提炼离线一次性调用，
- * 照 KbEmbeddingClient 直调先例：mcp 模块不引 Spring AI OpenAI starter，零新依赖）。
- * 连接三键复用 .env 已有 DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY / DEEPSEEK_MODEL。
+ * OpenAI 兼容 /chat/completions 原生 REST 客户端（persona 提炼离线一次性调用，
+ * 照 KbEmbeddingClient 直调先例：HTTP 逻辑手搓不换 Spring AI，仅配置换轨）。
+ * 连接三键读 ai.tiers.openai-mini（stock-calculator-llm 组件，env 用 OPENAI_MINI_* 三键）。
  * 429/5xx 重试 2 次退避 2s；response_format=json_object 由 DeepSeek 侧保证 JSON 输出。
  */
 @Slf4j
@@ -20,16 +19,16 @@ public class KbLlmClient {
 
     private static final int MAX_ATTEMPTS = 3;
 
+    /** persona 提炼属廉价离线批量 = openai-mini 档 */
+    private static final String TIER = com.zzh.llm.LlmTiers.MINI;
+
     private final RestClient restClient;
     private final String baseUrl;
     private final String model;
     private final String apiToken;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public KbLlmClient(RestClient.Builder builder,
-                       @Value("${deepseek.base-url:}") String baseUrl,
-                       @Value("${deepseek.api-key:}") String apiKey,
-                       @Value("${deepseek.model:deepseek-chat}") String model) {
+    public KbLlmClient(RestClient.Builder builder, com.zzh.llm.LlmRegistry llmRegistry) {
         // 显式 HTTP/1.1 工厂 + 长读超时：默认 JDK HttpClient 走 HTTP/2 时对部分
         // OpenAI 兼容网关（SiliconFlow 实测）抛 "Request cancelled"，且 persona
         // 长语料生成本身需要分钟级读超时，不能吃默认值
@@ -37,18 +36,24 @@ public class KbLlmClient {
         factory.setConnectTimeout(10_000);
         factory.setReadTimeout(600_000);
         this.restClient = builder.requestFactory(factory).build();
-        this.model = model;
-        this.apiToken = apiKey;
-        if (baseUrl == null || baseUrl.isBlank() || apiKey == null || apiKey.isBlank()) {
-            log.warn("DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY 未配置：persona 提炼不可用（admin 端点将报错）");
+        // 宽松语义（沿旧）：未配置不阻启动，调用时报错
+        if (llmRegistry.isReady(TIER)) {
+            com.zzh.llm.TierSpec spec = llmRegistry.spec(TIER);
+            this.baseUrl = spec.getBaseUrl().replaceAll("/+$", "");
+            this.model = spec.getModel();
+            this.apiToken = spec.getApiKey();
+        } else {
+            log.warn("ai.tiers.openai-mini 三键未配齐：persona 提炼不可用（admin 端点将报错）");
+            this.baseUrl = "";
+            this.model = "";
+            this.apiToken = "";
         }
-        this.baseUrl = baseUrl == null ? "" : baseUrl.replaceAll("/+$", "");
     }
 
     /** 单轮对话（system + user），返回 choices[0].message.content 文本 */
     public String chat(String systemPrompt, String userMessage) {
         if (baseUrl.isBlank() || apiToken == null || apiToken.isBlank()) {
-            throw new IllegalStateException("DeepSeek 未配置（DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY）");
+            throw new IllegalStateException("LLM 未配置（ai.tiers.openai-mini 三键，env 用 OPENAI_MINI_* 三键）");
         }
         String body = "{\"model\":\"" + model + "\",\"stream\":false,"
                 // 部分网关/模型默认 max_tokens 很小，长卡 JSON 会被静默截断成非法 JSON；

@@ -200,4 +200,20 @@ class CopilotStatActionExtractorTest {
         assertEquals(10, parsed.actions().size());
         assertFalse(parsed.actions().stream().anyMatch(i -> "t11".equals(i.getType())));
     }
+
+    // ==================== 动作输出规范与解析器同源 ====================
+
+    @Test
+    void actionOutputContract_staysInSyncWithTags_andExampleParses() {
+        // 契约文本以 OPEN/CLOSE 常量拼接（改标签自动同步）；此处锁定同步关系 + 契约示例可被本解析器消费
+        String contract = CopilotStatActionExtractor.ACTION_OUTPUT_CONTRACT;
+        assertTrue(contract.contains(CopilotStatActionExtractor.OPEN_TAG));
+        assertTrue(contract.contains(CopilotStatActionExtractor.CLOSE_TAG));
+        String example = CopilotStatActionExtractor.OPEN_TAG
+                + "{\"actions\":[{\"type\":\"canvas_add_widget\",\"payload\":{\"k\":\"v\"}}]}"
+                + CopilotStatActionExtractor.CLOSE_TAG;
+        CopilotStatActionExtractor.Parsed parsed = CopilotStatActionExtractor.parse(example);
+        assertNotNull(parsed);
+        assertEquals("canvas_add_widget", parsed.actions().get(0).getType());
+    }
 }

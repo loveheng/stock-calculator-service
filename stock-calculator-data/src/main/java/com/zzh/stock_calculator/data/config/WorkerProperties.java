@@ -1,6 +1,5 @@
 package com.zzh.stock_calculator.data.config;
 
-import java.time.Duration;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -42,22 +41,10 @@ public class WorkerProperties {
     @Data
     public static class Embedding {
 
-        /** CF 账户 ID，拼接 OpenAI 兼容端点 base-url */
-        private String accountId;
-
-        /** CF API Token（日志脱敏） */
-        private String apiToken;
-
-        /** Workers AI embedding 模型（与主服务发布端/额度口径同款） */
-        private String model = "@cf/baai/bge-m3";
-
-        /** 向量维度（bge-m3 固定 1024，主服务落库前置校验同值） */
-        private int dimensions = 1024;
-
         /** 每实例请求节流（次/分钟）：~3.3 req/s，与原进程内回填 64 条/300ms 批节奏同量级 */
         private int rateLimitPerMinute = 200;
 
-        /** 单次 CF HTTP 请求超时（支持 30s/500ms 等写法） */
-        private Duration readTimeout = Duration.ofSeconds(30);
+        // 供应商连接规格（凭据/model/dimensions/timeout）已迁 ai.embeddings.embed
+        // （stock-calculator-llm 组件，provider 可切换，不再绑定 CF）
     }
 }

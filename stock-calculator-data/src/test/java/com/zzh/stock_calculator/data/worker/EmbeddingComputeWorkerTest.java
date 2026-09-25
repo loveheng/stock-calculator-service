@@ -73,9 +73,13 @@ class EmbeddingComputeWorkerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         properties = new WorkerProperties();
-        properties.getEmbedding().setModel("@cf/baai/bge-m3");
+        com.zzh.llm.EmbedSpec embedSpec = new com.zzh.llm.EmbedSpec();
+        embedSpec.setModel("@cf/baai/bge-m3");
+        com.zzh.llm.LlmTierProperties tierProps = new com.zzh.llm.LlmTierProperties();
+        tierProps.getEmbeddings().put(com.zzh.llm.LlmTiers.EMBED, embedSpec);
         worker = new EmbeddingComputeWorker(embeddingModel, resultPublisher, objectMapper,
-                new EmbeddingRateLimiter(1_000_000), properties, rabbitTemplate);
+                new EmbeddingRateLimiter(1_000_000), properties, new com.zzh.llm.LlmRegistry(tierProps),
+                rabbitTemplate);
     }
 
     @Test

@@ -1,7 +1,6 @@
 package com.zzh.stock_calculator.data.worker;
 
 import com.rabbitmq.client.Channel;
-import com.zzh.stock_calculator.data.llm.LlmGatewayProperties;
 import com.zzh.stock_calculator.data.mq.ResultPublisher;
 import com.zzh.stockcalc.contract.MessageEnvelope;
 import com.zzh.stockcalc.contract.MessageType;
@@ -61,22 +60,27 @@ import java.util.Map;
 )
 public class KgExtractWorker {
 
-    /** 抽取规则（设计文档 §8 prompt 骨架；时间归一化基准由任务 payload 的 ctime 注入 user 消息） */
+    /**
+     * 抽取规则（设计文档 §8 prompt 骨架；时间归一化基准由任务 payload 的 ctime 注入 user 消息）。
+     * 受控谓词由 contract 的 {@code KgControlledVocabulary} 注入——词表是跨模块契约：
+     * 这里声明「允许输出」，main 侧 KgFuseService 用它判定「允许入库」，两边取同一份常量，
+     * 否则会出现 prompt 放行、落库却被归一成兜底值的隐性不一致。
+     */
     private static final String SYSTEM_PROMPT = """
             你是财经新闻知识图谱抽取器，从《新闻联播》要闻汇编稿中抽取结构化知识。规则：
             1. 只抽正文明确提及的实体，禁止发明；实体类型限 STOCK/SUBJECT/ORG/PERSON/PLACE/POLICY/EVENT/OTHER
             2. 时间归一化：正文绝对日期优先；相对表述（昨日/上周）以文章发布时间为基准换算为 ISO-8601；
                无法确定时间时 time 留空且必须给 timeText 原文表述
             3. 标题日期仅作参考，不直接作为事件日期（汇编稿标题日期与联播播出日可能差一天）
-            4. 谓词限受控词表：出台/发布/召开/签署/合作/任命/增长/下降/投资/扩大/禁止/推进/其他
+            4. 谓词限受控词表：%s
             5. 收集实体别名（机构全称/简称/英文缩写/上市主体名），供下游字典对齐
-            """;
+            """.formatted(com.zzh.stockcalc.contract.KgControlledVocabulary.PREDICATES_PROMPT);
 
     private final OpenAiChatModel chatModel;
     private final ResultPublisher resultPublisher;
     private final ObjectMapper objectMapper;
     private final RabbitTemplate rabbitTemplate;
-    private final LlmGatewayProperties llmProperties;
+    private final com.zzh.llm.LlmRegistry llmRegistry;
 
     @RabbitListener(queues = MqQueue.TASK_KG_EXTRACT,
             containerFactory = "kgWorkerListenerFactory")
@@ -144,6 +148,17 @@ public class KgExtractWorker {
             response.getResult().getOutput() == null
                 ? null
                 : response.getResult().getOutput().getText();
+        if (text == null || text.isBlank()) {
+            // 模型空响应属网关瞬时故障（区别于返回了坏 JSON 的内容缺陷），按 TRANSIENT
+            // 回报交主服务 fail_count 计次重发；若按 PERMANENT 处理会把文章烧成终态
+            reportFailure(
+                envelope,
+                task,
+                "empty llm response",
+                KgExtractFailedPayload.ERROR_KIND_TRANSIENT
+            );
+            return;
+        }
         KgExtraction extraction;
         try {
             extraction = converter.convert(text);
@@ -171,7 +186,7 @@ public class KgExtractWorker {
             .articleId(task.getArticleId())
             .contentHash(task.getContentHash())
             .ctime(task.getCtime())
-            .model(llmProperties.getModel())
+            .model(llmRegistry.model(com.zzh.llm.LlmTiers.MINI))
             .extraction(extraction)
             .build();
         resultPublisher.publish(

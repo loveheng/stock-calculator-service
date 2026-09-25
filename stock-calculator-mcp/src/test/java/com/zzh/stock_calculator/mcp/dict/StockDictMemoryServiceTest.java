@@ -65,6 +65,22 @@ class StockDictMemoryServiceTest {
     }
 
     @Test
+    void bareSixDigitResolvesViaTailAcrossMixedKeyForms() {
+        // 真实字典键形态混杂：沪深 sh/sz 前缀、北交 .BJ 后缀
+        Map<Object, Object> entries = new HashMap<>();
+        entries.put("sh600745", "{\"name\":\"*ST闻泰\",\"oldName\":\"闻泰科技\",\"isStib\":false}");
+        entries.put("sz000001", "{\"name\":\"平安银行\",\"oldName\":\"\",\"isStib\":false}");
+        entries.put("920000.BJ", "{\"name\":\"安徽凤凰\",\"oldName\":\"\",\"isStib\":false}");
+        when(hashOperations.entries(StockDictMemoryService.KEY)).thenReturn(entries);
+        service.refresh();
+
+        // 裸 6 位按尾部唯一匹配；字典原键精确命中
+        assertEquals("sh600745", service.resolve("600745").orElseThrow().getStockId());
+        assertEquals("920000.BJ", service.resolve("920000").orElseThrow().getStockId());
+        assertEquals("sh600745", service.resolve("sh600745").orElseThrow().getStockId());
+    }
+
+    @Test
     void loadFailOpenWhenRedisDown() {
         when(hashOperations.entries(StockDictMemoryService.KEY))
                 .thenThrow(new RuntimeException("connection refused"));

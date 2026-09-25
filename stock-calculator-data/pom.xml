@@ -56,6 +56,12 @@
             <artifactId>stock-calculator-contract</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <!-- LLM chat tier 设施（ai.tiers.kg + LlmRegistry），依赖红线见模块描述 -->
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-llm</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

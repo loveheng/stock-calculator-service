@@ -36,7 +36,7 @@ class ArticleEmbeddingListenerTest {
     @BeforeEach
     void setUp() {
         properties = new EmbeddingProperties();
-        listener = new ArticleEmbeddingListener(dispatcher, new EmbeddingGate(properties));
+        listener = new ArticleEmbeddingListener(dispatcher, new EmbeddingGate(properties, readyRegistry()));
     }
 
     private ArticleSavedEvent event() {
@@ -61,5 +61,14 @@ class ArticleEmbeddingListenerTest {
         listener.onArticleSaved(event());
 
         verify(dispatcher, never()).dispatchForArticle(anyLong());
+    }
+
+    private static com.zzh.llm.LlmRegistry readyRegistry() {
+        com.zzh.llm.EmbedSpec spec = new com.zzh.llm.EmbedSpec();
+        spec.setAccountId("acc-test");
+        spec.setApiToken("tok-test");
+        com.zzh.llm.LlmTierProperties tierProps = new com.zzh.llm.LlmTierProperties();
+        tierProps.getEmbeddings().put(com.zzh.llm.LlmTiers.EMBED, spec);
+        return new com.zzh.llm.LlmRegistry(tierProps);
     }
 }

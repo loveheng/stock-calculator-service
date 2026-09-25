@@ -12,7 +12,7 @@
 services:
   # MCP 经纪人（CI 推送的 GraalVM Native 镜像，镜像名 = 主镜像 + -mcp 后缀）。
   # 连 stock_mcp 独立库（POSTGRES_URL_MCP）+ redis（REDIS_HOST）；
-  # CLOUDFLARE_* / DEEPSEEK_*（kb RAG 与 persona 提炼）经 env_file 从 .env 注入。
+  # CLOUDFLARE_* / OPENAI_MINI_*（persona 提炼）经 env_file 从 .env 注入。
   mcp:
     image: ghcr.io/loveheng/stock-calculator-service-mcp:${MCP_IMAGE_TAG:-latest}
     ports:
@@ -52,7 +52,7 @@ services:
 
   # Orchestration 编排服务（镜像名 = 主镜像 + -orchestration 后缀）。
   # 三表复用 stock_mcp 独立库（D6），依赖 postgres + lavinmq；
-  # Planner 的 DEEPSEEK_* 三键、意图向量 CLOUDFLARE_* 两键、
+  # Planner 的 OPENAI_MAX_* 三键、意图向量 CLOUDFLARE_* 两键、
   # 服务级通行证 ORCH_PASSPORT_TOKEN 均经 env_file 从 .env 注入。
   # Executor 的 mcp 经纪人地址：容器内走 scs-net 服务名 mcp（非 .env 的 localhost），
   # 如经纪人不在本机 scs-net 上，在 .env 里覆盖 MCP_BROKER_URL 即可。

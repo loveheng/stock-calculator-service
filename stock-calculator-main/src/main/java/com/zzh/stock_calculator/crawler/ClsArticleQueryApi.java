@@ -4,6 +4,7 @@ import com.zzh.stock_calculator.crawler.entity.ClsArticle;
 import com.zzh.stock_calculator.crawler.entity.ClsArticleStock;
 import com.zzh.stock_calculator.crawler.repository.ClsArticleRepository;
 import com.zzh.stock_calculator.crawler.repository.ClsArticleStockRepository;
+import com.zzh.stock_calculator.crawler.repository.ClsArticleSubjectRepository;
 import com.zzh.stock_calculator.crawler.repository.ClsSubjectRepository;
 import com.zzh.stock_calculator.crawler.repository.StockRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -30,6 +32,7 @@ import java.util.Set;
 public class ClsArticleQueryApi {
 
     private final ClsArticleStockRepository stockLinkRepository;
+    private final ClsArticleSubjectRepository articleSubjectRepository;
     private final StockRepository stockRepository;
     private final ClsSubjectRepository clsSubjectRepository;
     private final ClsArticleRepository articleRepository;
@@ -149,6 +152,83 @@ public class ClsArticleQueryApi {
         return result;
     }
 
+    /**
+     * 指定股票近窗口被提及的文章头（ctime 倒序，guide 引导 Step1 依据与 Step2 档案共用）：
+     * id 列表由 native 查询按 ctime 倒序截断，头组装复用 {@link #articleHeadsByIds}（按 id 原序重排，
+     * 撤稿缺头静默跳过）。未知/空入参返回空列表。
+     */
+    public List<ArticleHead> recentArticlesByStock(String stockId, long sinceCtime, int limit) {
+        if (stockId == null || stockId.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        List<Long> ids = stockLinkRepository.findArticleIdsByStockIdSince(stockId.trim(), sinceCtime, limit);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, ArticleHead> heads = articleHeadsByIds(ids);
+        return ids.stream().map(heads::get).filter(Objects::nonNull).toList();
+    }
+
+    /** 指定股票近期提及的题材归属（反向两跳聚合，articleCount 降序；guide 引导档案标签） */
+    public List<SubjectTag> subjectsByStockSince(String stockId, long sinceCtime, int limit) {
+        if (stockId == null || stockId.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        List<ClsArticleStockRepository.SubjectArticleCountView> rows =
+                stockLinkRepository.aggregateSubjectsByStockIdSince(stockId.trim(), sinceCtime, limit);
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> subjectIds = new HashSet<>();
+        for (ClsArticleStockRepository.SubjectArticleCountView row : rows) {
+            if (row.getSubjectId() != null) {
+                subjectIds.add(row.getSubjectId());
+            }
+        }
+        Map<Long, String> nameById = new HashMap<>();
+        clsSubjectRepository.findAllById(subjectIds).forEach(
+                s -> nameById.put(s.getSubjectId(), s.getSubjectName()));
+        List<SubjectTag> result = new ArrayList<>();
+        for (ClsArticleStockRepository.SubjectArticleCountView row : rows) {
+            if (row.getSubjectId() == null) {
+                continue;
+            }
+            result.add(new SubjectTag(row.getSubjectId(),
+                    nameById.getOrDefault(row.getSubjectId(), ""), row.getArticleCount()));
+        }
+        return result;
+    }
+
+    /** 题材近窗口活跃股票（两跳聚合，articleCount 降序；guide 引导题材锚点扩展候选） */
+    public List<ActiveStock> activeStocksBySubject(long subjectId, long sinceCtime, int limit) {
+        if (subjectId <= 0 || limit <= 0) {
+            return List.of();
+        }
+        List<ClsArticleSubjectRepository.StockMentionCountView> rows =
+                articleSubjectRepository.aggregateActiveStocksBySubjectIdSince(subjectId, sinceCtime, limit);
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Set<String> codes = new HashSet<>();
+        for (ClsArticleSubjectRepository.StockMentionCountView row : rows) {
+            if (row.getStockId() != null) {
+                codes.add(row.getStockId());
+            }
+        }
+        Map<String, String> nameByCode = new HashMap<>();
+        stockRepository.findAllById(codes).forEach(
+                stock -> nameByCode.put(stock.getStockId(), stock.getName()));
+        List<ActiveStock> result = new ArrayList<>();
+        for (ClsArticleSubjectRepository.StockMentionCountView row : rows) {
+            if (row.getStockId() == null) {
+                continue;
+            }
+            result.add(new ActiveStock(row.getStockId(),
+                    nameByCode.getOrDefault(row.getStockId(), ""), row.getArticleCount()));
+        }
+        return result;
+    }
+
     private static ArticleHit toArticleHit(ClsArticle article) {
         return new ArticleHit(article.getId(), article.getTitle(), article.getBrief(),
                 article.getContent(), article.getLevel(), article.getCtime());
@@ -169,5 +249,13 @@ public class ClsArticleQueryApi {
 
     /** 电报头载体（news-kg 时间轴日头；仅标题与发布时间，不含正文） */
     public record ArticleHead(Long articleId, String title, Long ctime) {
+    }
+
+    /** 股票近期题材归属载体（guide 引导档案；subjectName 字典兜底空串） */
+    public record SubjectTag(Long subjectId, String subjectName, long articleCount) {
+    }
+
+    /** 题材活跃股票载体（guide 引导候选；stockName 字典兜底空串） */
+    public record ActiveStock(String stockId, String stockName, long articleCount) {
     }
 }

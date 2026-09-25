@@ -27,6 +27,16 @@ public class StockDirectoryApi {
         return stockCode != null && stockRepository.existsById(stockCode);
     }
 
+    /**
+     * 字典是否存在该 6 位码。
+     * <p>防坑：字典键形态混杂——沪深为 sh600745 前缀形态、北交所为 920000.BJ 后缀形态，
+     * 裸 6 位码直接 existsById 永远落空（broker klines 全量误 400 的实证根因），统一按尾部匹配。</p>
+     */
+    public boolean existsBySixDigit(String sixDigit) {
+        return sixDigit != null && sixDigit.length() == 6
+                && stockRepository.existsByStockIdEndingWithOrStockIdStartingWith(sixDigit, sixDigit + ".");
+    }
+
     /** 字典名称；未收录返回 null（调用方自行兜底） */
     public String nameByCode(String stockCode) {
         return stockCode == null ? null

@@ -136,3 +136,19 @@ ON CONFLICT (task_code) DO NOTHING;
 INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone) VALUES
     ('job.kg.backfill', true, 0, 'CALENDAR', '0 */30 * * * *', 'Asia/Shanghai')
 ON CONFLICT (task_code) DO NOTHING;
+
+-- free-canvas §3.5：画布经纪监控判定循环（每分钟一轮，任务内再做 per-task 节流与告警冷却）
+INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone) VALUES
+    ('job.broker.monitor.check', true, 0, 'CALENDAR', '0 * * * * *', 'Asia/Shanghai')
+ON CONFLICT (task_code) DO NOTHING;
+
+-- =====================================================================
+-- Guide 选股引导：LLM 实体抽取契约（LlmChainRouter 免费链路 system prompt，
+-- 代码常量同名兜底 GuideAnalyzeService.DEFAULT_EXTRACT_PROMPT）。
+-- 输出 JSON {entities:[],keywords:[]}；entities 经 ClsDictAnchorApi.resolveEach
+-- 词典校验，未锚定丢弃（不编造）。热调走 copilot prompt 管理口。
+-- =====================================================================
+
+INSERT INTO copilot_prompt_template (tag, content, ctime, mtime) VALUES
+    ('guide:entity_extract', '你是 A 股选股引导助手。用户会给你一条他听到的消息，请从中抽取可能相关的公司名、股票名、题材名或口语别称。只输出 JSON，格式：{"entities":["名称1","名称2"],"keywords":["关键词1"]}。entities 放具体公司/股票/题材名称候选（允许别称与简称，词典会校验）；keywords 放事件或行业关键词（候选为空时用于兜底搜索）。无可靠候选时输出空数组。禁止输出 JSON 以外的任何内容。', (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT)
+ON CONFLICT (tag) DO NOTHING;

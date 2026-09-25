@@ -89,6 +89,26 @@ spring:
       simple:
         # 手动 ack（设计文档 §4.4）：业务成功/失败分流后由消费端显式确认
         acknowledge-mode: manual
+  ai:
+    # MCP client：只挂 :18083 orchestration dispatch 单连接（步 5 定案：统一入口，main 不直连
+    # :18081/:18082 工具池）；服务未起时失败快速暴露。
+    # 2026-09-24 修复：本段原本错挂在 vision.ai 下（YAML 缩进归属错误），spring.ai.mcp 从未
+    # 生效——MCP client 每次启动零连接、dispatch 工具清单恒空（500「编排通道缺少 dispatch 工具」）。
+    # transport 必须为 SSE：orchestration MCP server 只开 /sse（streamable-http 打 /mcp 404，
+    # 2026-09-23 冒烟定案，与 orchestration 侧 client 连 :18081 同款取舍）
+    mcp:
+      client:
+        enabled: ${MCP_CLIENT_ENABLED:true}
+        type: SYNC
+        toolcallback:
+          enabled: true
+        sse:
+          connections:
+            orchestration-dispatch:
+              url: ${MCP_ORCH_URL:http://localhost:18083}
+        common:
+          # 超时梯队第 3 层（步 5 定案 3）：copilot HTTP 15s > dispatch 10s > ToolInvoker 8s
+          request-timeout: 15s
 
 crawler:
   # /api/admin/sync 管理端点令牌；未配置时端点拒绝所有请求
@@ -123,21 +143,6 @@ vision:
       connect-timeout: 5s
       read-timeout: 30s
   ai:
-    # MCP client：只挂 :18083 orchestration dispatch 单连接（步 5 定案：统一入口，main 不直连
-    # :18081/:18082 工具池）；服务未起时失败快速暴露
-    mcp:
-      client:
-        enabled: ${MCP_CLIENT_ENABLED:true}
-        type: SYNC
-        toolcallback:
-          enabled: true
-        streamable-http:
-          connections:
-            orchestration-dispatch:
-              url: ${MCP_ORCH_URL:http://localhost:18083}
-        common:
-          # 超时梯队第 3 层（步 5 定案 3）：copilot HTTP 15s > dispatch 10s > ToolInvoker 8s
-          request-timeout: 15s
     # 智能图片分析门面：图片哈希 -> 交易草稿 AI 结果缓存（Redis，key=vision:ai:draft:<MD5>；命中零 OCR/LLM 消耗，useCache=false 时淘汰）
     result-cache-ttl: 30m
 
@@ -164,6 +169,47 @@ llm:
     enabled: ${LLM_FALLBACK_ENABLED:true}
     response: "[降级响应] AI 渠道暂不可用，本次结果未经模型处理，请稍后重试。"
 
+# LLM chat tier 全局配置（stock-calculator-llm 组件，唯一模型装配事实源）；
+# copilot 走 openai-max 档（env 用 OPENAI_MAX_* 三键）；embedding/vision 协议不同不入本组件。
+# 档位语义：openai-max=规划/复杂问答（强推理、贵、可慢）、openai-chat=常规聊天、
+# openai-mini=提取摘要等廉价批量。调用侧：llmRegistry.chatModel("<tier>") / runtimeOptions("<tier>", tools...)。
+ai:
+  tiers:
+    openai-max:
+      base-url: ${OPENAI_MAX_BASE_URL:https://api.deepseek.com}
+      api-key: ${OPENAI_MAX_API_KEY:}
+      model: ${OPENAI_MAX_MODEL:deepseek-chat}
+      temperature: 0.0
+      # 与 copilot 渠道 callTimeout 对齐：中转渠道网关 60s 掐非流式，长文生成实测可达 253s
+      timeout: 300s
+    openai-chat:
+      # 常规聊天档：暂与 openai-max 同渠道同模型，仅温度区分；后续可整体换廉价渠道
+      base-url: ${OPENAI_CHAT_BASE_URL:https://api.deepseek.com}
+      api-key: ${OPENAI_CHAT_API_KEY:}
+      model: ${OPENAI_CHAT_MODEL:deepseek-chat}
+      temperature: 0.7
+    openai-mini:
+      # 提取摘要/记忆提炼廉价档：三键暂留空（未配置时 isReady=false，调用侧 503 兜底）；
+      # 定了模型后在 .env 填 OPENAI_MINI_* 三键即启用
+      base-url: ${OPENAI_MINI_BASE_URL:}
+      api-key: ${OPENAI_MINI_API_KEY:}
+      model: ${OPENAI_MINI_MODEL:}
+      temperature: 0.2
+      max-tokens: 1024
+      max-retries: 0
+  # embedding tier：供应商可切换（provider: cloudflare | openai）。
+  # 现状 cloudflare（Workers AI 原生直调 + Spring AI 路径走 CF OpenAI 垫片 + usage 修复）；
+  # 换供应商只需 provider: openai + base-url/api-key/model 三键（如 SiliconFlow BAAI/bge-m3，
+  # 1024 维同规格）。维度换型须全量重嵌并同步 vector_store/kb_chunk/plan.intent_embedding 列宽。
+  embeddings:
+    embed:
+      provider: cloudflare
+      account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+      api-token: ${CLOUDFLARE_API_TOKEN:}
+      model: ${CLOUDFLARE_MODEL:@cf/baai/bge-m3}
+      dimensions: 1024
+      timeout: 30s
+
 copilot:
   enabled: true   # Copilot AI 功能总开关
   async-task:
@@ -171,16 +217,6 @@ copilot:
       max-concurrent: 2          # 在途 RUNNING 任务并发上限
       frequency-window-seconds: 60
       max-per-window: 60         # 频控窗口内创建次数上限
-  llm:
-    deepseek:
-      # Copilot 专用 DeepSeek 渠道；base-url 未配置时模型 Bean 不装配，ask 接口返回 503
-      enabled: ${DEEPSEEK_ENABLED:true}
-      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
-      api-key: ${DEEPSEEK_API_KEY:}
-      model: ${DEEPSEEK_MODEL:deepseek-chat}
-      # read-timeout 经 OpenAiChatOptions.timeout 映射为 OkHttp callTimeout（整次请求上限，含流式全程）；
-      # callLlm 底层走 SSE 流式（中转渠道网关 60s 掐非流式），实测该渠道长文生成可达 253s，故放宽到 300s
-      read-timeout: 300s
   memory:
     # 记忆固化链路（docs/copilot/memory-profile.md §十一 5）：enabled=false 时种子不发布、tick 丢弃，
     # 既有聊天行为零变化
@@ -215,16 +251,9 @@ app:
 
 embedding:
   # 向量化功能总开关（cls_article 语义检索基座，docs/ai-pipeline/cls-article-vector.md）
-  # 运行期门控（EmbeddingGate，R1）：enabled=true 且 CF 凭据齐备才实例化重 Bean；
+  # 运行期门控（EmbeddingGate，R1）：enabled=true 且 embed tier 凭据齐备才实例化重 Bean；
   # 未配置凭据时整体关闭并 WARN 一次（native/JVM 行为一致）
   enabled: ${EMBEDDING_ENABLED:true}
-  cloudflare:
-    # CF 账户 ID + Workers AI 专用 token（仅 Workers AI Edit 权限，须为轮换后新 token，§8.1）
-    # 口令不落库，同 POSTGRES_PASS 模式经环境变量注入
-    account-id: ${CLOUDFLARE_ACCOUNT_ID:}
-    api-token: ${CLOUDFLARE_API_TOKEN:}
-    model: ${CLOUDFLARE_MODEL:@cf/baai/bge-m3}
-    dimensions: 1024
   # 单日回填上限（免费额度 10000 Neurons/日，00:00 UTC 刷新；bge-m3 计价实测 1075 Neurons/M tokens，
   # 均值 ~115 tokens/条 → 60000 条/天 ≈ 75%~84% 额度；留 ~20% 防回填打爆当日额度
   # 导致增量监听/聊天查询向量化连坐 429，§5.3）
@@ -283,6 +312,14 @@ kg:
     scan-multiplier: 3
     # 启动后延迟触发首轮回填（与 DB 调度互补，单飞守卫防重叠）
     startup-delay: 15s
+  fuse:
+    # 关系谓词受控词表（§8 prompt 规则 4）：LLM 自造谓词（出席/显示/推动…）不归一会让同一语义裂成
+    # 多种写法、按谓词聚合即失真，表外一律归一为兜底值。
+    # SSOT = contract 模块 KgControlledVocabulary.PREDICATES（data 侧 SYSTEM_PROMPT 同源注入），
+    # 此处默认不覆盖——显式配置会切断「prompt 放行」与「允许入库」的一致性；
+    # 仅单环境需临时收窄词表时才打开下面两行。
+    # predicate-whitelist: 出台, 发布, 召开, 签署, 合作, 任命, 增长, 下降, 投资, 扩大, 禁止, 推进, 其他
+    # predicate-fallback: 其他
 
 # ======================= search 域（docs/news-search/implementation.md §9） =======================
 # 默认值 = 拍板值（B6 限流 10 次/10s + 综合 3 次/10s；C11 threshold=0.3/topK=10），显式落配置便于调参
@@ -341,3 +378,43 @@ push:
   public-key: ${PUSH_VAPID_PUBLIC_KEY:}
   # VAPID 私钥（base64url，PKCS#8）
   private-key: ${PUSH_VAPID_PRIVATE_KEY:}
+
+# ======================= broker 画布端点族（docs/architecture/free-canvas.md v3） =======================
+# K 线读穿代理 §3.4 / 能力端点 §3.6；限流矩阵 §4.2（klines 桶 30/min），main 层 5s 请求合并
+broker:
+  rate-limit:
+    klines-window-seconds: 60
+    klines-max-per-window: 30
+    # compute 桶（≈30/s 承载 §4.2 矩阵 20/s+burst30 语义）
+    compute-window-seconds: 1
+    compute-max-per-window: 30
+    # 带体端点请求体硬上限（§三统一约定）
+    payload-limit-bytes: 262144
+  merge-cache:
+    klines-ttl-seconds: 5
+    klines-max-entries: 256
+  monitor:
+    # §3.5·B 调度路径：单用户并发上限（DB 在途计数为准）
+    max-concurrent-per-user: 5
+    # 单任务判定节流（秒）与告警冷却（秒）：调度每分钟一轮，任务内再按此节流
+    min-check-interval-seconds: 60
+    alert-cooldown-seconds: 1800
+    # 判定用 K 线回看日历日（fetch_kline from 参数）
+    check-lookback-days: 7
+  indicators:
+    # version 数字自增（前端只比对相等）；M2 compute 白名单与该清单同源；
+    # min-bars 与 mcp IndicatorSeriesService 暖机口径对齐（macd 33/kdj 10/boll 20）
+    version: 1
+    items:
+      - name: macd
+        label: MACD
+        min-bars: 33
+        applicable-blocks: [ metric, chart, kline ]
+      - name: kdj
+        label: KDJ
+        min-bars: 10
+        applicable-blocks: [ metric, chart, kline ]
+      - name: boll
+        label: BOLL
+        min-bars: 20
+        applicable-blocks: [ metric, chart, kline ]

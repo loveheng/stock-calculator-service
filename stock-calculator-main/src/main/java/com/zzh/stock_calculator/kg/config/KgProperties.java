@@ -1,9 +1,11 @@
 package com.zzh.stock_calculator.kg.config;
 
+import com.zzh.stockcalc.contract.KgControlledVocabulary;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * kg.* 配置（docs/ai-pipeline/cls-news-kg.md §7）：
@@ -17,6 +19,7 @@ public class KgProperties {
     private final Digest digest = new Digest();
     private final Process process = new Process();
     private final Backfill backfill = new Backfill();
+    private final Fuse fuse = new Fuse();
 
     @Data
     public static class Digest {
@@ -46,5 +49,20 @@ public class KgProperties {
         private int scanMultiplier = 3;
         /** 启动后延迟触发首轮回填（与 DB 调度互补，单飞守卫防重叠） */
         private Duration startupDelay = Duration.ofSeconds(15);
+    }
+
+    @Data
+    public static class Fuse {
+        /**
+         * 关系谓词受控词表（docs §8 prompt 规则 4 / 契约 KgExtraction.Relation.predicate）：
+         * 表外谓词一律归一为兜底值——模型偶发自造谓词（出席/显示/推动…），入库不归一会让同一
+         * 语义裂成多种写法、按谓词聚合即失真。
+         *
+         * <p>默认值取自 contract 的 {@code KgControlledVocabulary}（与 data 侧 SYSTEM_PROMPT
+         * 同一份 SSOT）；yml 默认不覆盖此项，确需单环境收窄词表时才显式配置。</p>
+         */
+        private List<String> predicateWhitelist = KgControlledVocabulary.PREDICATES;
+        /** 表外谓词的归一目标值（必须属于上表，否则归一后仍会被判为越界） */
+        private String predicateFallback = KgControlledVocabulary.PREDICATE_FALLBACK;
     }
 }

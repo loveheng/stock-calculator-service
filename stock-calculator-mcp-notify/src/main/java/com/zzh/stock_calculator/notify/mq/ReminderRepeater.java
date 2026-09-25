@@ -86,6 +86,8 @@ public class ReminderRepeater {
             return "capability".equals(objectMapper.readTree(reminder.getAction())
                     .path("kind").asText());
         } catch (Exception e) {
+            // DEGRADE: action.kind 解析失败按「非 capability」处理，是否应拒绝触发而非静默降级待确认
+            log.warn("[DEGRADE] reminder-action-kind-parse-failed fallback to false: {}", e.toString());
             return false;
         }
     }

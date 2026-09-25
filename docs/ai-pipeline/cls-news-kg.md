@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-19
+updated: 2026-09-25
 ---
 
 # 财联社《新闻联播》要闻时序知识图谱（kg 域）· 后端设计文档
@@ -22,7 +22,7 @@ updated: 2026-09-19
 | D6 | 任务粒度与对账 | 1 篇文章 = 1 任务；发布器每轮扫「最新 3 条未处理」（LIMIT 可配 kg.dispatch-limit，默认 3）逐条下发；未终态每轮重发（at-least-once + 幂等摄取） | 每天产 1 条，3 条 = 3 天追赶窗口，覆盖断档（实测 2026-09-02~07 六天断档）；「最新 3 条**未处理**」比「当天有数据才下发」在补跑/漏发场景不丢数据 | 整体判断「今天有没有新数据」；独立任务队列表 |
 | D7 | 落库两段式 | 先落 kg_evidence 证据行（content_hash 判重，一篇文章一版，改稿覆盖），再融合进图谱；融合失败不回退任务状态 | 证据是可重放的重建源（抽取噪声可自愈）；融合依赖字典查询与多表事务，失败应可单独重放 | 抽取结果直接写图谱 |
 | D8 | 实体锚点 | 优先挂现有字典：name/alias 命中 stock → anchor STOCK，命中 cls_subject → anchor SUBJECT；未命中进自由实体（kg_entity status=ACTIVE），MERGED + canonical_id 机制预留（一期不做自动归并） | cls_article_stock / cls_article_subject 已积累现成锚点，实体对齐的大头白拿；开放域别名归并是 KG 传统难点，一期明确不做 | 一期自建别名归并 |
-| D9 | 抽取技术 | Spring AI 2.0.1（项目 BOM 锁定版本）ChatClient structured output，复用 data 侧 LlmGatewayProperties 的 OpenAI 兼容网关配置 | 用户拍板直上 Spring AI；structured output 由框架注入 JSON schema 并解析；base-url 兼容 gemini/groq 端点，模型换用不改代码 | 手写 JSON 解析（LlmGateway 老路）；引入新依赖 |
+| D9 | 抽取技术 | Spring AI 2.0.1（项目 BOM 锁定版本）ChatClient structured output，复用 data 侧 LlmGatewayProperties 的 OpenAI 兼容网关配置（2026-09-24 注：装配已迁 ai.tiers.openai-mini，LlmRegistry，见 docs/architecture/llm-module.md） | 用户拍板直上 Spring AI；structured output 由框架注入 JSON schema 并解析；base-url 兼容 gemini/groq 端点，模型换用不改代码 | 手写 JSON 解析（LlmGateway 老路）；引入新依赖 |
 | D10 | 错误分类 | 三分类：解析失败/内容不合法 → PERMANENT；网络/超时 → TRANSIENT（留 PENDING 对账重发）；429 → RATE_LIMITED（发布端熔断窗口） | 坏稿子靠对账无限重发是毒丸；照抄 EmbeddingErrorClassifier 思路 | 不分类一律重试 |
 | D11 | 时序建模分期 | 一期只做事件时间线（kg_event.event_time 归一化）；kg_relation.valid_from/valid_to 列预留不启用 | 边有效期抽取难度高、错误率高，先让图谱有价值再演进 | 一期上边有效期 |
 
@@ -194,6 +194,7 @@ stateDiagram-v2
 - ingestDone 仅处理 PENDING 行计次与状态流转，终态不回退、不重复计次
 - DONE 行 hash 与源表不符（源站改稿）→ 发布端置回 PENDING 并刷新 hash
 - RATE_LIMITED 触发发布端熔断窗口（markRateLimited 先例）
+- **空 content 归 TRANSIENT**（KgExtractWorker 判 `empty llm response`）：配额不足类失败以固定形态反复出现，每篇只按 fail_count 推进；扫描窗口（dispatch-limit × scan-multiplier）被反复重抽的旧稿占满时，表现为**新数据长期不前滑**。区分「配额/超时」与「稿子坏」的判据：前者 failReason 同相位且队列持续有消息往来，后者多为 PERMANENT。配额类修复后，已落 FAILED 的行靠 FAILED 治愈回 PENDING 与 backfill 最旧优先逐步追平（见 §8.1）
 
 ## 7. 调度与发布扫描
 
@@ -238,9 +239,50 @@ Prompt 规则（system 骨架，实现随断点迭代）：
 1. 只抽正文明确提及的实体，禁止发明；实体类型限 §5 枚举
 2. 时间归一化：正文绝对日期优先；相对表述（昨日/上周）以文章发布时间（payload 提供，ISO）为基准换算；无法确定时间留空但必须给 timeText 原文表述
 3. 标题日期仅作参考，不直接作为事件日期（汇编稿标题日期与播出日可能差一天）
-4. 谓词受控词表：出台/发布/召开/签署/合作/任命/增长/下降/投资/扩大/禁止/推进/其他
+4. 谓词限受控词表：出台/发布/召开/签署/合作/任命/增长/下降/投资/扩大/禁止/推进/其他
+   （**SSOT = contract 模块 `KgControlledVocabulary.PREDICATES`**；data 侧 SYSTEM_PROMPT 由此注入、
+   main 侧 §9 归一取同一份常量——两侧各写一份会出现「prompt 放行、入库却被改成兜底值」的隐性不一致。
+   `main/application.yml` 的 `kg.fuse.predicate-whitelist` 默认不设值，留空即走常量；显式配置会切断这一致性，
+   只在单环境需临时收窄词表时才打开。改词表即改契约：存量 `kg_relation.predicate` 不再同口径，按 §9 决定是否回改）
 5. 别名收集：机构全称/简称/英文缩写/上市主体名，供锚点匹配
-6. 输出恒显式 max_tokens（沿用 LlmGatewayProperties），解析失败按 PERMANENT 上报
+6. 输出恒显式 max_tokens（现经 ai.tiers.openai-mini 的 max-tokens），解析失败按 PERMANENT 上报
+
+### 8.1 LLM 档位配额口径（2026-09-25 实测标定）
+
+#### 8.1.1 踩过的坑：thinking 模型（2026-09-25 排障）
+
+openai-mini 档（`.env` 的 OPENAI_MINI_* 三键）若选用**带 thinking 的模型**（曾用 step-3.7-flash），
+「max-tokens / timeout 两项配额」直接决定抽取成败：
+
+| 配额配置 | 现象 | 实测证据 |
+|---|---|---|
+| max-tokens=8096 | 思考过程吃光预算 → `finish_reason=length`、`content=""` 空串 | worker 报 TRANSIENT `empty llm response` |
+| timeout=60s | 放大 token 后单次 ~13k completion tokens，长生成被客户端掐断 | worker 报 TRANSIENT `Request failed`，且**失败间隔恰好 60s** |
+
+该渠道 `thinking: {type: disabled}` 实测不生效（仍返回 reasoning_content），关不掉思考这条路走不通。
+判别口诀：**「content 为空 + finish_reason=length」= 配额不足，不是提示词问题；「等间隔 Request failed」= 超时在掐，不是渠道抖动。**
+
+#### 8.1.2 现行口径（2026-09-25 换挡后）
+
+**换模型 = 换档**：openai-mini 已切到 SiliconFlow 的 `Qwen/Qwen2.5-14B-Instruct`（非 thinking），配额同步回落：
+
+- `OPENAI_MINI_BASE_URL=https://api.siliconflow.cn/v1`（沿用已配好的 SiliconFlow 凭据）
+- `OPENAI_MINI_MODEL=Qwen/Qwen2.5-14B-Instruct`
+- `OPENAI_MINI_MAX_TOKENS=8192`、`OPENAI_MINI_TIMEOUT=120s`（实测 ~41s / ~2k completion tokens，留 2 倍以上余量）
+
+选型口径（同一份汇编稿实测横评，见下表）：**批抽取只选「非 thinking + 低温 + JSON 稳」的 chat 模型**，
+且以「别名覆盖率 / 事件时间有值率」两项为验收硬指标——它们直接决定 §9 锚点解析命中率与 §13 时间轴能否用。
+
+| 模型 | thinking | 耗时 | 输出 token | 别名覆盖 | 事件时间有值 | 实体/关系 | 判定 |
+|---|---|---|---|---|---|---|---|
+| Qwen2.5-7B-Instruct | 否 | 29.5s | 1.3k | **0/20** ❌ | **0/11** ❌ | 20/13 | 不合格：别名与时间双缺，最便宜但抽了没法用 |
+| **Qwen2.5-14B-Instruct（现用）** | 否 | 41.3s | 2.0k | 23/23 ✔ | 11/11 ✔ | 23/14 | 合格且划算 |
+| Qwen3-30B-A3B-Instruct-2507 | 否 | 126.6s | 3.6k | 29/29 ✔ | 11/11 ✔ | 29/28 | 质量更好但慢 3 倍，性价比不及 V4-Flash |
+| DeepSeek-V4-Flash | 否 | 37.6s | 7.4k | 有 ✔ | 有 ✔ | **32/14** | 实体最多；注意它返回 `\`\`\`json` 围栏（已验证 `BeanOutputConverter` 能剥，见 §8 注） |
+| step-3.7-flash / step-3.5-flash / step-router-v1 | 是 | 60s~>90s | 11~13k | 有 | 有 | 24/12 | 见 §8.1.1，不要用 |
+| XingChenAGI/Xing4.0-29B | 是 | >400s 未完成 | — | — | — | — | 思考且慢，不要用 |
+
+注：同一份输入下 7B 与 14B 出现**断崖式差异**（不是线性降级），选型时不要以「差不多凑合用」推断小模型表现，必须实测两项硬指标。
 
 ## 9. 融合规则（KgFuseService，main 侧）
 
@@ -270,7 +312,7 @@ Prompt 规则（system 骨架，实现随断点迭代）：
 | contract | MqKey/MqQueue/MessageType 增 task.kg.extract、result.kg.done/failed 常量；message/ 增 3 个 payload + KgExtractionDto 结构；ContractRuntimeHints 登记（CoverageTest 守卫自动覆盖） |
 | main 新域 kg/ | task/KgExtractTask（进程内 handler）、mq/KgExtractPublisher、service/KgResultService（摄取）、service/KgFuseService（融合）、entity×6、repository×6；基包出 KgIngestApi 端口（供 crawler 消费中枢回调） |
 | main crawler | 基包增汇编查询 API（按标题模式取最新候选）与字典锚点查询 API；mq/ClsArticleMqConsumer 分发增 kg 分支；data.sql 播种 job.kg.extract 行 |
-| data | worker/KgExtractWorker（Spring AI ChatClient structured output）、config/KgWorkerConfig（复用 LlmGatewayProperties 网关配置）、错误三分类上报 |
+| data | worker/KgExtractWorker（Spring AI ChatClient structured output）、config/KgWorkerConfig（ai.tiers.openai-mini tier 装配，LlmRegistry）、错误三分类上报 |
 | schema | postgres/schema.sql 增 6 张表（§5）；postgres/data.sql 增 1 行播种 |
 | 配置 | main application.yml：kg.digest.*、kg.process.*、kg.backfill.*（enabled/batch-size/scan-multiplier/startup-delay） |
 | 监控 | monitor/PipelineWatchTask 队列清单 + PENDING_AGE 纳入 |

@@ -119,7 +119,7 @@ public class Planner {
         ArrayNode topHits = objectMapper.createArrayNode();
         try {
             float[] vec = embeddingClient.embed(anchor);
-            String qv = IntentEmbeddingClient.vectorLiteral(vec);
+            String qv = com.zzh.llm.EmbeddingVectorLiteral.of(vec);
             String domainLiteral = toPgArrayLiteral(domains);
             List<PlanRepository.PlanHit> rejectedNear =
                     planRepository.searchRejectedNear(qv, domainLiteral, 1);
@@ -263,7 +263,7 @@ public class Planner {
         // 向量先算（去重与补列共用）：锚=意图模板（P4①）
         String qv = null;
         try {
-            qv = IntentEmbeddingClient.vectorLiteral(embeddingClient.embed(anchor));
+            qv = com.zzh.llm.EmbeddingVectorLiteral.of(embeddingClient.embed(anchor));
         } catch (RuntimeException e) {
             log.warn("[orchestration] embedding 不可用（本 plan 复用不可用，规划不受影响）: {}", e.getMessage());
         }

@@ -54,8 +54,8 @@ echo "════════════════════════�
 
 # 构建期 dummy 凭据（process-aot 实例化全部单例；运行期值仍从环境变量取）
 export SPRING_APPLICATION_JSON='{
-  "cf": {"account-id": "build-time-dummy", "api-token": "build-time-dummy"},
-  "deepseek": {"base-url": "http://build-time.invalid", "api-key": "build-time-dummy", "model": "build-time-dummy"}
+  "ai": {"tiers": {"openai-mini": {"base-url": "http://build-time.invalid", "api-key": "build-time-dummy", "model": "build-time-dummy"}},
+         "embeddings": {"embed": {"provider": "cloudflare", "account-id": "build-time-dummy", "api-token": "build-time-dummy", "model": "build-time-dummy"}}}
 }'
 
 SKIP_PKG=${1:-}
@@ -63,7 +63,7 @@ SKIP_PKG=${1:-}
 if [ "$SKIP_PKG" != "--no-pkg" ]; then
   echo "█████ 步骤 0/4: install 父 POM + contract + main（mcp 单独编译的解析前提）..."
   ../mvnw -f .. install -N -q -DskipTests
-  ../mvnw -f .. install -pl stock-calculator-contract,stock-calculator-main -q -DskipTests
+  ../mvnw -f .. install -pl stock-calculator-contract,stock-calculator-llm,stock-calculator-main -q -DskipTests
 
   echo "█████ 步骤 1/4: Maven compile + AOT 处理..."
   ../mvnw -DskipTests compile spring-boot:process-aot -q -Dfile.encoding=UTF-8 \

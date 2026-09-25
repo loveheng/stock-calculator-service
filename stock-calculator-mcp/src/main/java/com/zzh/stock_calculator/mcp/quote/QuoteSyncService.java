@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 行情同步编排（D9，2026-09-20）：库为事实源，东财只补差。
+ * 行情同步编排（D9，2026-09-20）：库为事实源，腾讯只补差（2026-09-24 起数据源切腾讯，与前端同源）。
  *
  * <p>同步规则：新书/存量不足 → 全窗口（days×2+30 日历日冗余覆盖停牌）；
  * 存量足够 → 增量窗口 last_date-10 天（重叠兜近期 qfq 微调）。
@@ -27,6 +27,15 @@ import java.util.Map;
 public class QuoteSyncService {
 
     private static final int OVERLAP_DAYS = 10;
+
+    /** 复权因子漂移判定容差（free-canvas 生死线#1，§3.8-3 口径：相对 Epsilon 1e-6） */
+    private static final double QFQ_DRIFT_EPSILON = 1e-6;
+
+    /** 自动重灌回看窗（交易日）——替代人工 /admin/quote/resync 的自动修复窗口 */
+    private static final int AUTO_RESYNC_DAYS = 400;
+
+    /** 区间读穿时 from 前再冗余的日历日（覆盖停牌与指标暖机） */
+    private static final int RANGE_HEAD_BUFFER_DAYS = 30;
 
     private final DailyQuoteClient quoteClient;
     private final QuoteDailyRepository repository;
@@ -67,10 +76,75 @@ public class QuoteSyncService {
         return repository.findRange(stockId, from, to).stream().map(QuoteSyncService::toBar).toList();
     }
 
+    /**
+     * 区间读穿（画布 K 线主通道 fetch_kline 底座）：确保库内覆盖 [from, to] 后返回升序切片。
+     * <p>缺库判定：无数据 / 库首晚于 from → 全量拉取（from 前冗余 {@value RANGE_HEAD_BUFFER_DAYS} 日历日）；
+     * 库末落后于 to 或请求区间含今日 → 增量拉取（last-10 重叠，幂等 upsert 吸收盘中同根演进）；
+     * 纯历史区间且库已覆盖 → 零出口请求（库即缓存）。</p>
+     */
+    public List<DailyBar> ensureRange(String stockId, LocalDate from, LocalDate to) {
+        LocalDate last = repository.findMaxTradeDate(stockId);
+        LocalDate first = repository.findMinTradeDate(stockId);
+        if (last == null || first == null || first.isAfter(from)) {
+            syncWindow(stockId, from.minusDays(RANGE_HEAD_BUFFER_DAYS), first == null ? "全量" : "全量补前段");
+        } else if (last.isBefore(to) || !to.isBefore(LocalDate.now())) {
+            syncWindow(stockId, last.minusDays(OVERLAP_DAYS), "增量");
+        }
+        return readRange(stockId, from, to);
+    }
+
     private void syncWindow(String stockId, LocalDate beg, String mode) {
         List<DailyBar> bars = quoteClient.fetchWindow(stockId, beg);
+        // 生死线#1（画布共享库增强）：增量重叠段 Epsilon 比对，qfq 基准漂移超阈 → 自动全量重灌（替代人工 resync）
+        if ("增量".equals(mode) && detectQfqDrift(stockId, bars)) {
+            log.warn("检测到 qfq 复权基准漂移（重叠段比对超阈），自动全量重灌: {}", stockId);
+            jdbcTemplate.update("DELETE FROM quote_daily WHERE stock_id = ?", stockId);
+            bars = quoteClient.fetchWindow(stockId,
+                    LocalDate.now().minusDays((long) AUTO_RESYNC_DAYS * 2 + 30));
+        }
         int written = upsertBatch(stockId, bars);
         log.info("行情同步完成[{}]: {} -> 接口 {} 根 / upsert {} 行", mode, stockId, bars.size(), written);
+    }
+
+    /**
+     * 重叠段复权漂移检测：fresh 与库内同日 OHLC 相对偏差超 {@value QFQ_DRIFT_EPSILON} 即判漂移。
+     * <p>防坑：只比对库末日期之前的已收盘历史——盘中当日同一根会随盘中值演进（价格/量未定型），
+     * 纳入比对会把盘中正常刷新误判为除权漂移，触发无谓全量重灌。</p>
+     */
+    private boolean detectQfqDrift(String stockId, List<DailyBar> fresh) {
+        if (fresh.isEmpty()) {
+            return false;
+        }
+        LocalDate lastStored = repository.findMaxTradeDate(stockId);
+        if (lastStored == null) {
+            return false;
+        }
+        Map<LocalDate, QuoteDailyEntity> byDate = repository
+                .findRange(stockId, fresh.get(0).getDate(), fresh.get(fresh.size() - 1).getDate())
+                .stream()
+                .filter(e -> e.getTradeDate().isBefore(lastStored))
+                .collect(java.util.stream.Collectors.toMap(QuoteDailyEntity::getTradeDate, e -> e));
+        for (DailyBar bar : fresh) {
+            QuoteDailyEntity old = byDate.get(bar.getDate());
+            if (old == null) {
+                continue;
+            }
+            if (drifted(bar.getOpen(), old.getOpen()) || drifted(bar.getClose(), old.getClose())
+                    || drifted(bar.getHigh(), old.getHigh()) || drifted(bar.getLow(), old.getLow())) {
+                log.warn("qfq 漂移命中: {} @{} 库close={} 接口close={}", stockId, bar.getDate(),
+                        old.getClose(), bar.getClose());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean drifted(double fresh, BigDecimal stored) {
+        if (stored == null) {
+            return false;
+        }
+        double old = stored.doubleValue();
+        return Math.abs(fresh - old) / Math.max(Math.abs(old), 1e-9) > QFQ_DRIFT_EPSILON;
     }
 
     int upsertBatch(String stockId, List<DailyBar> bars) {

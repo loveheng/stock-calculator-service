@@ -38,6 +38,12 @@
             <artifactId>stock-calculator-contract</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <!-- LLM chat tier 设施（注册表 + 运行时 options 工厂），依赖红线见模块描述 -->
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-llm</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <!-- Jackson 3（Boot 4 默认）：vision 的 JSON 反序列化；
              注解包 com.fasterxml.jackson.annotation 与 2.x 同名，两代兼容 -->
         <dependency>

@@ -8,6 +8,7 @@
 # name: index-lint
 # summary: 归属表与代码目录双向校验（project-index guardrail）
 # trigger: manual
+# cat: docs
 # alias: il
 # platform: unix
 

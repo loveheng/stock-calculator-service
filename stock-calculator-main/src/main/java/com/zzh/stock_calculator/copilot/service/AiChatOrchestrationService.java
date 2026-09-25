@@ -2,7 +2,6 @@ package com.zzh.stock_calculator.copilot.service;
 
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
-import com.zzh.stock_calculator.copilot.config.DeepSeekProperties;
 import com.zzh.stock_calculator.copilot.dto.CopilotDtos.AskRequest;
 import com.zzh.stock_calculator.copilot.dto.CopilotDtos.AskResponse;
 import com.zzh.stock_calculator.copilot.dto.CopilotDtos.CopilotActionItem;
@@ -15,6 +14,7 @@ import com.zzh.stock_calculator.copilot.repository.AiChatSessionRepository;
 import com.zzh.stock_calculator.copilot.service.store.AiChatSessionStore;
 import com.zzh.stock_calculator.copilot.util.CopilotStatActionExtractor;
 import com.zzh.stock_calculator.copilot.util.CopilotTaskPromptRenderer;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -24,6 +24,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -31,9 +32,7 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -57,22 +56,22 @@ public class AiChatOrchestrationService {
     private final AiChatSessionRepository sessionRepository;
     private final CopilotPromptResolver promptResolver;
     private final com.zzh.stock_calculator.copilot.util.AiChatRateLimiter rateLimiter;
-    private final DeepSeekProperties deepSeekProps;
     private final PlatformTransactionManager txnMgr;
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryService memoryService;
     private final com.zzh.stock_calculator.copilot.service.CopilotMemoryRecallService memoryRecall;
     private final com.zzh.stock_calculator.copilot.service.PersonaPromptInjectionService personaInjection;
-    private final ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider;
     /** MCP 工具池（:18083 orchestration dispatch 单连接，spring.ai.mcp.client 自动装配）；
      *  ObjectProvider 容错——MCP_CLIENT_ENABLED=false 或服务未起时不挂工具，聊天不阻塞 */
     private final ObjectProvider<org.springframework.ai.tool.ToolCallbackProvider>
         mcpToolCallbacksProvider;
+    /** LLM tier 注册表（stock-calculator-llm）：chat 模型与运行时 options 统一经此获取，
+     *  封死 spring-ai 2.0.1 运行时 options 三坑（cast/缺 model/采样参数丢失） */
+    private final com.zzh.llm.LlmRegistry llmRegistry;
 
     /**
      * 显式构造器（项目无 lombok.config，@RequiredArgsConstructor 不会复制 @Qualifier）。
-     * deepSeekChatModel 为条件 Bean（base-url 未配置时不装配），ObjectProvider 容错；
-     * 不加 @Qualifier 会因 geminiChatModel 的 @Primary 静默注入错误渠道。
-     * 仅直连 DeepSeek，不经 LlmChainRouter（问答付费渠道与引流免费渠道隔离）。
+     * 模型走 LlmRegistry（ai.tiers.openai-max），不经 LlmChainRouter
+     * （问答付费渠道与引流免费渠道隔离的架构决策不变，仅装配设施换轨）。
      */
     public AiChatOrchestrationService(
         AiChatSessionStore sessionStore,
@@ -80,28 +79,24 @@ public class AiChatOrchestrationService {
         AiChatSessionRepository sessionRepository,
         CopilotPromptResolver promptResolver,
         com.zzh.stock_calculator.copilot.util.AiChatRateLimiter rateLimiter,
-        DeepSeekProperties deepSeekProps,
         PlatformTransactionManager txnMgr,
         com.zzh.stock_calculator.copilot.service.CopilotMemoryService memoryService,
         com.zzh.stock_calculator.copilot.service.CopilotMemoryRecallService memoryRecall,
         com.zzh.stock_calculator.copilot.service.PersonaPromptInjectionService personaInjection,
-        @Qualifier(
-            "deepSeekChatModel"
-        ) ObjectProvider<OpenAiChatModel> deepSeekChatModelProvider,
-        ObjectProvider<org.springframework.ai.tool.ToolCallbackProvider> mcpToolCallbacksProvider
+        ObjectProvider<org.springframework.ai.tool.ToolCallbackProvider> mcpToolCallbacksProvider,
+        com.zzh.llm.LlmRegistry llmRegistry
     ) {
         this.sessionStore = sessionStore;
         this.messageRepository = messageRepository;
         this.sessionRepository = sessionRepository;
         this.promptResolver = promptResolver;
         this.rateLimiter = rateLimiter;
-        this.deepSeekProps = deepSeekProps;
         this.txnMgr = txnMgr;
         this.memoryService = memoryService;
         this.memoryRecall = memoryRecall;
         this.personaInjection = personaInjection;
-        this.deepSeekChatModelProvider = deepSeekChatModelProvider;
         this.mcpToolCallbacksProvider = mcpToolCallbacksProvider;
+        this.llmRegistry = llmRegistry;
     }
 
     /** LLM 超时窗口（秒）：pending 状态下同一 cid 在窗内视为「请求正在处理中」 */
@@ -109,6 +104,9 @@ public class AiChatOrchestrationService {
 
     /** SSE 响应超时（ms）：与 LLM 客户端 callTimeout=300s 对齐，避免容器默认 30s 掐断长流 */
     private static final long SSE_TIMEOUT_MS = 300_000L;
+
+    /** promptHints 硬顶（free-canvas §2.8 不可信输入防线）：UTF-8 8192 字节，超长截断不报错 */
+    private static final int PROMPT_HINTS_MAX_BYTES = 8192;
 
     // ==================== Ask（主方法）====================
 
@@ -135,6 +133,7 @@ public class AiChatOrchestrationService {
         String rawText = textOf(response);
         CopilotStatActionExtractor.Parsed output =
             CopilotStatActionExtractor.parse(rawText);
+        logActionBlockAnomaly(rawText, output);
         return persistAssistant(
             userId,
             pending.userMsg(),
@@ -154,10 +153,7 @@ public class AiChatOrchestrationService {
      */
     public SseEmitter askStream(String userId, String scopeId, AskRequest req) {
         PendingAsk pending = beginAsk(userId, scopeId, req);
-        OpenAiChatModel chatModel = deepSeekChatModelProvider.getIfAvailable();
-        if (chatModel == null) {
-            throw new BusinessException(503, "AI 服务未配置");
-        }
+        ChatClient chatClient = newChatClient();
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         StringBuilder fullText = new StringBuilder();
@@ -166,7 +162,10 @@ public class AiChatOrchestrationService {
         AtomicBoolean archivedRef = new AtomicBoolean(); // 归档成功后置位，防止断开回调把 ok 改写为 failed
         AtomicBoolean suppressRef = new AtomicBoolean(); // 动作块直传抑制位（见 chunk 回调）
 
-        Disposable disposable = chatModel.stream(pending.prompt()).subscribe(
+        Disposable disposable = chatClient.prompt(pending.prompt())
+            .stream()
+            .chatResponse()
+            .subscribe(
             chunk -> {
                 if (
                     chunk.getMetadata() != null &&
@@ -227,6 +226,7 @@ public class AiChatOrchestrationService {
                     // 阶段二：动作块提取 + 归档 assistant + userMsg.status→ok（新事务），content 以剔除动作块后的全文为权威
                     CopilotStatActionExtractor.Parsed output =
                         CopilotStatActionExtractor.parse(fullText.toString());
+                    logActionBlockAnomaly(fullText.toString(), output);
                     String authoritative =
                         output != null
                             ? output.cleanedText()
@@ -303,10 +303,7 @@ public class AiChatOrchestrationService {
      * 异常 advice 的 JSON 会因协商 406，不能靠 @ExceptionHandler 回落）。
      */
     private PendingAsk beginAsk(String userId, String scopeId, AskRequest req) {
-        if (
-            !deepSeekProps.isEnabled() ||
-            !StringUtils.hasText(deepSeekProps.getBaseUrl())
-        ) {
+        if (!llmRegistry.isReady(com.zzh.llm.LlmTiers.MAX)) {
             throw new BusinessException(503, "AI 服务未配置");
         }
         if (!StringUtils.hasText(req.getQuestion())) {
@@ -519,7 +516,7 @@ public class AiChatOrchestrationService {
             .contextOverview(overview)
             .timeAnchor(req.getTimeAnchor())
             .channel("deepseek")
-            .model(deepSeekProps.getModel())
+            .model(llmRegistry.model(com.zzh.llm.LlmTiers.MAX))
             .ctime(nowSec())
             .deletedAt(0L)
             .build();
@@ -621,6 +618,15 @@ public class AiChatOrchestrationService {
             systemPrompt = new StringBuilder(
                 promptResolver.resolve(scopeId, req.getFocusBlockId())
             );
+            // promptHints 固定区段（free-canvas §2.8）：紧贴基础提示之后、页面快照之前原样拼接——
+            // 基础提示与 promptHints 公共段跨轮稳定，紧邻拼放可最大化 LLM 供应商 prompt 缓存前缀；
+            // 任务型模版分支不叠加（与记忆/语气卡同口径：统计任务提示词自成体系）
+            String promptHints = sanitizePromptHints(req.getPromptHints());
+            if (promptHints != null) {
+                systemPrompt
+                    .append("\n\n【客户端能力提示（富客户端 scope 下发）】\n")
+                    .append(promptHints);
+            }
             String contextSummary = req.getContextSummary();
             String contextOverview = req.getContextOverview();
             if (contextSummary != null && !contextSummary.isBlank()) {
@@ -659,6 +665,9 @@ public class AiChatOrchestrationService {
             if (personaSegment != null) {
                 systemPrompt.append(personaSegment);
             }
+            // 全局动作输出规范（外壳协议归后端宣讲，free-canvas §2.8 修订）：标签与解析器常量同源，
+            // 置于系统提示最末；任务型模版分支自带外壳教学不叠加（与记忆/语气卡同口径）
+            systemPrompt.append(CopilotStatActionExtractor.ACTION_OUTPUT_CONTRACT);
         }
         List<org.springframework.ai.chat.messages.Message> messages =
             new ArrayList<>();
@@ -685,9 +694,25 @@ public class AiChatOrchestrationService {
     }
 
     /**
+     * 构造带内建工具执行环的 ChatClient（spring-ai 2.0.1 官方形态）。
+     * <p>防腐推演：2.0.1 起 OpenAiChatModel 不再内部执行工具（仅 resolveToolDefinitions），
+     * 裸模型 stream() 下模型的 tool_call 原样返回、无人执行——聚合文本为空串且状态 ok 的
+     * 静默丢失（联调实测：模型三次 fetch_kline 调用全部蒸发，「三坑」之后的第四坑）。
+     * ChatClient 默认装配 ToolCallingAdvisor 补回执行环：工具轮次 delta 对订阅者无缝续传，
+     * 跨轮 usage 由 advisor 累计兜底（末 chunk 即全量），工具调用 chunk 在下游被过滤；
+     * 工具轮次上限由默认 ToolCallingManager 兜底（40 次/工具、150 次总量）。
+     * 每次请求新建轻量包装：OpenAiChatModel 本身经 LlmRegistry 缓存，构造失败语义与
+     * 既有「ask 时 fail-fast」一致（不在容器装配期炸启动）。</p>
+     */
+    private ChatClient newChatClient() {
+        return ChatClient.builder(llmRegistry.chatModel(com.zzh.llm.LlmTiers.MAX)).build();
+    }
+
+    /**
      * MCP 工具挂载（步 5 定案）：只挂 :18083 orchestration dispatch 单连接，工具经网关分流。
-     * defaultOptions 兜底 DeepSeek 渠道原有采样参数（options 非 null 时模型不再读 model 级默认）。
-     * MCP client 未启用/未装配时返回 null（Prompt 无 options，纯聊天零工具）。
+     * 运行时 options 经 LlmRegistry 工厂构造（model/temperature 显式携带，reason tier 与
+     * copilot 渠道同源 OPENAI_MAX_* 三键）。MCP client 未启用/未装配时返回 null
+     * （Prompt 无 options，走 tier 模型自身 defaultOptions，纯聊天零工具）。
      */
     private org.springframework.ai.chat.prompt.ChatOptions mcpOptions() {
         org.springframework.ai.tool.ToolCallbackProvider provider =
@@ -695,9 +720,14 @@ public class AiChatOrchestrationService {
         if (provider == null) {
             return null;
         }
-        return org.springframework.ai.model.tool.ToolCallingChatOptions.builder()
-            .toolCallbacks(provider.getToolCallbacks())
-            .build();
+        // 必须经 LlmRegistry.runtimeOptions 构造（stock-calculator-llm）：
+        // spring-ai 2.0.1 三坑——① 运行时 options 必须是 OpenAiChatOptions（createRequest 硬 cast）；
+        // ② model 必须显式携带（缺省时 openai-java 以内置 gpt-5-mini 发出 → 渠道 404）；
+        // ③ 采样参数只读运行时 options。工厂统一封死，此处不再手写 builder。
+        return llmRegistry.runtimeOptions(
+            com.zzh.llm.LlmTiers.MAX,
+            provider.getToolCallbacks()
+        );
     }
 
     /**
@@ -706,15 +736,12 @@ public class AiChatOrchestrationService {
      * 流式持续有字节流动可绕过，且渠道默认 streamOptions.includeUsage，token 统计不丢。
      */
     private ChatResponse callLlm(Prompt prompt) {
-        OpenAiChatModel chatModel = deepSeekChatModelProvider.getIfAvailable();
-        if (chatModel == null) {
-            throw new BusinessException(503, "AI 服务未配置");
-        }
+        ChatClient chatClient = newChatClient();
         long start = System.nanoTime();
         try {
             AtomicReference<ChatResponse> aggregated = new AtomicReference<>();
             new MessageAggregator()
-                .aggregate(chatModel.stream(prompt), aggregated::set)
+                .aggregate(chatClient.prompt(prompt).stream().chatResponse(), aggregated::set)
                 .then()
                 .block();
             log.info(
@@ -764,6 +791,20 @@ public class AiChatOrchestrationService {
         Usage usage,
         List<CopilotActionItem> actions
     ) {
+        // 动作类型打点（free-canvas §2.8 观测建议）：只记 type 与条数、不记 payload 内容——
+        // payload 语义守卫在前端白名单（静默丢弃后端不可见），此处提供「LLM 吐没吐动作」的服务端唯一观测位；
+        // 无动作轮次不打点（常态零噪音）
+        if (actions != null && !actions.isEmpty()) {
+            List<String> types = actions.stream()
+                .map(CopilotActionItem::getType)
+                .toList();
+            log.info(
+                "copilot 动作块下发: sessionId={}, count={}, types={}",
+                userMsg.getSessionId(),
+                types.size(),
+                types
+            );
+        }
         int promptTokens = 0;
         int completionTokens = 0;
         if (usage != null) {
@@ -778,7 +819,7 @@ public class AiChatOrchestrationService {
             .content(content == null ? "" : content.trim())
             .status("ok")
             .channel("deepseek")
-            .model(deepSeekProps.getModel())
+            .model(llmRegistry.model(com.zzh.llm.LlmTiers.MAX))
             .promptTokens(promptTokens)
             .completionTokens(completionTokens)
             .ctime(nowSec())
@@ -802,6 +843,26 @@ public class AiChatOrchestrationService {
         if (!"pending".equals(msg.getStatus())) return false; // non-pending → 可续跑
         long elapsed = nowSec() - msg.getCtime();
         return elapsed >= PENDING_WINDOW_SECONDS;
+    }
+
+    /**
+     * 动作块异常观测（打点的另一半）：块被剔除但解析不出有效动作 = fail-open 静默丢弃，
+     * 且 content 同步被剔空——前端只会看到 actions=null + content="" 完全无感（联调实测踩坑：
+     * V4-Flash 吐了块但 JSON 不合法/未闭合）。此处补 warn 定位失败模式——只报形状指标
+     * （全文长度/有无闭合标签），不报内容，维持 actions/payload 不落库不打日志纪律。
+     */
+    private void logActionBlockAnomaly(
+        String rawText,
+        CopilotStatActionExtractor.Parsed output
+    ) {
+        if (output != null && output.actions() == null) {
+            log.warn(
+                "copilot 动作块解析失败(fail-open): rawLen={}, hasCloseTag={}",
+                rawText == null ? 0 : rawText.length(),
+                rawText != null
+                    && rawText.contains(CopilotStatActionExtractor.CLOSE_TAG)
+            );
+        }
     }
 
     private AskResponse buildAskResponse(
@@ -847,6 +908,32 @@ public class AiChatOrchestrationService {
         return response != null && response.getMetadata() != null
             ? response.getMetadata().getUsage()
             : null;
+    }
+
+    /**
+     * promptHints 清洗（纯函数，包私有供单测直达）：blank → null（整段省略，非富客户端轮次零变化）；
+     * 超 {@link #PROMPT_HINTS_MAX_BYTES} → 按字符边界截断。不可信输入契约（free-canvas §2.8）：
+     * 只截断不校验内容、不落库不打日志；「原样」指内容零改写透传（片段文本全由前端维护）。
+     * <p>防腐推演：字节截断点可能落在多字节 UTF-8 序列中间——续字节恒为 10xxxxxx，从截断点
+     * 回退跳过续字节后若仍是负数字节（lead byte）则该字符不完整，一并舍弃，保证产物解码
+     * 不出现 U+FFFD 乱码且必为原串前缀。</p>
+     */
+    static String sanitizePromptHints(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        byte[] bytes = raw.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length <= PROMPT_HINTS_MAX_BYTES) {
+            return raw;
+        }
+        int len = PROMPT_HINTS_MAX_BYTES;
+        while (len > 0 && (bytes[len - 1] & 0xC0) == 0x80) {
+            len--;
+        }
+        if (len > 0 && bytes[len - 1] < 0) {
+            len--; // lead byte：其续字节已被截掉，字符不完整
+        }
+        return new String(bytes, 0, len, StandardCharsets.UTF_8);
     }
 
     /** SSE 发送兑底：客户端已断开时取消上游订阅（openai-java 流随之关闭），静默收尾 */

@@ -81,7 +81,7 @@ class EmbeddingResultServiceTest {
         properties = new EmbeddingProperties();
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
         service = new EmbeddingResultService(articleRepository, embeddingRepository, jdbcTemplate,
-                transactionTemplate, properties, new ObjectMapper(), announcementEmbeddingProvider);
+                transactionTemplate, properties, readyRegistry(), new ObjectMapper(), announcementEmbeddingProvider);
         // 业务性跳过分支不会开启事务，lenient 防严格桩误报
         lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
 
@@ -264,5 +264,14 @@ class EmbeddingResultServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("db down");
         verify(embeddingRepository, never()).save(any());
+    }
+
+    private static com.zzh.llm.LlmRegistry readyRegistry() {
+        com.zzh.llm.EmbedSpec spec = new com.zzh.llm.EmbedSpec();
+        spec.setAccountId("acc-test");
+        spec.setApiToken("tok-test");
+        com.zzh.llm.LlmTierProperties tierProps = new com.zzh.llm.LlmTierProperties();
+        tierProps.getEmbeddings().put(com.zzh.llm.LlmTiers.EMBED, spec);
+        return new com.zzh.llm.LlmRegistry(tierProps);
     }
 }

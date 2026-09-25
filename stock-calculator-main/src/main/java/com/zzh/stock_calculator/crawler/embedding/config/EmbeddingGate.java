@@ -28,22 +28,24 @@ public class EmbeddingGate {
     /** WARN 一次标志（实例级，便于单测隔离） */
     private final AtomicBoolean warned = new AtomicBoolean(false);
 
+    private final com.zzh.llm.LlmRegistry llmRegistry;
+
+    private static final String EMBED_TIER = com.zzh.llm.LlmTiers.EMBED;
+
     /**
      * 功能开关是否打开（不含凭据判定）：MQ 发布路径（任务下发/对账）只看此开关，
-     * CF 凭据齐备性属计算端 worker 职责，主服务缺失凭据不应阻塞任务下发。
+     * 凭据齐备性属计算端 worker 职责，主服务缺失凭据不应阻塞任务下发。
      */
     public boolean isFeatureEnabled() {
         return properties.isEnabled();
     }
 
-    /** 向量化是否可用（运行期判定）：总开关开启且 CF 凭据齐备 */
+    /** 向量化是否可用（运行期判定）：总开关开启且 embed tier 凭据齐备 */
     public boolean isAvailable() {
-        String accountId = properties.getCloudflare().getAccountId();
-        String apiToken = properties.getCloudflare().getApiToken();
-        boolean credentialReady = accountId != null && !accountId.isBlank()
-                && apiToken != null && !apiToken.isBlank();
+        boolean credentialReady = llmRegistry.isEmbedReady(EMBED_TIER);
         if (properties.isEnabled() && !credentialReady && warned.compareAndSet(false, true)) {
-            log.warn("embedding.enabled=true 但 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN 未配置，"
+            log.warn("embedding.enabled=true 但 ai.embeddings." + EMBED_TIER
+                    + " 凭据未配齐（provider 对应的 account-id 或 base-url / api-token / model），"
                     + "向量化功能整体关闭（重 Bean 不实例化）");
         }
         return properties.isEnabled() && credentialReady;

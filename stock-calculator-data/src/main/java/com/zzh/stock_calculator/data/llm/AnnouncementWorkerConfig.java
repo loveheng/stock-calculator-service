@@ -33,36 +33,28 @@ import org.springframework.web.client.RestClient;
     havingValue = "true"
 )
 @EnableConfigurationProperties({
-    LlmGatewayProperties.class,
     AnnouncementParseProperties.class,
 })
 public class AnnouncementWorkerConfig {
 
-    /** OpenAI 兼容 chat-completions 网关：RestClient 单渠道（精简版 LlmChainRouter） */
+    /** OpenAI 兼容 chat-completions 网关：RestClient 单渠道（精简版 LlmChainRouter）；
+     *  连接规格读 ai.tiers.openai-mini（LlmRegistry，与 KG 抽取模型同 tier 单轨） */
     @Bean
-    public LlmGateway llmGateway(LlmGatewayProperties props) {
-        if (
-            !StringUtils.hasText(props.getBaseUrl()) ||
-            !StringUtils.hasText(props.getApiKey()) ||
-            !StringUtils.hasText(props.getModel())
-        ) {
-            throw new IllegalStateException(
-                "datasvc.worker.enabled=true 但 datasvc.llm.base-url / api-key / model 未配置，" +
-                    "公告蒸馏无法执行，拒绝以半配置状态启动"
-            );
-        }
+    public LlmGateway llmGateway(com.zzh.llm.LlmRegistry llmRegistry) {
+        // spec() 内部 fail-fast：三键缺失直接抛（worker 无降级语义，拒绝半配置启动）
+        com.zzh.llm.TierSpec spec = llmRegistry.spec(com.zzh.llm.LlmTiers.MINI);
         RestClient client = RestClient.builder()
-            .baseUrl(props.getBaseUrl())
+            .baseUrl(spec.getBaseUrl())
             .defaultHeader(
                 HttpHeaders.AUTHORIZATION,
-                "Bearer " + props.getApiKey()
+                "Bearer " + spec.getApiKey()
             )
             .defaultHeader(
                 HttpHeaders.CONTENT_TYPE,
                 MediaType.APPLICATION_JSON_VALUE
             )
             .build();
-        return new LlmGateway(client, props);
+        return new LlmGateway(client, spec);
     }
 
     /** CNINFO PDF 下载专用 RestClient（连接 5s/读 15s，与 collector 侧 cninfoRestClient 同参数） */
@@ -105,11 +97,11 @@ public class AnnouncementWorkerConfig {
     public static class LlmGateway {
 
         private final RestClient client;
-        private final LlmGatewayProperties props;
+        private final com.zzh.llm.TierSpec spec;
 
-        public LlmGateway(RestClient client, LlmGatewayProperties props) {
+        public LlmGateway(RestClient client, com.zzh.llm.TierSpec spec) {
             this.client = client;
-            this.props = props;
+            this.spec = spec;
         }
 
         /**
@@ -117,7 +109,8 @@ public class AnnouncementWorkerConfig {
          * @throws LlmGatewayException HTTP/超时/非 2xx/响应不可解析（全部按瞬时语义处理）
          */
         public String chat(String systemPrompt, String userMessage) {
-            int maxAttempts = Math.max(1, props.getMaxAttempts());
+            int maxAttempts = Math.max(1,
+                spec.getMaxRetries() != null ? spec.getMaxRetries() : 1);
             LlmGatewayException last = null;
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
@@ -154,9 +147,9 @@ public class AnnouncementWorkerConfig {
         private String callOnce(String systemPrompt, String userMessage) {
             Map<String, Object> body = Map.of(
                 "model",
-                props.getModel(),
+                spec.getModel(),
                 "max_tokens",
-                props.getMaxTokens(),
+                spec.getMaxTokens(),
                 "messages",
                 List.of(
                     Map.of("role", "system", "content", systemPrompt),

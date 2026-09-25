@@ -9,6 +9,7 @@
 # summary: monitor 巡检 JVM 侧验证（vhost 双重编码缺陷回归观察）
 # trigger: manual
 # params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER
+# cat: test
 # alias: jw
 # platform: unix
 

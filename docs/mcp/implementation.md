@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-20
+updated: 2026-09-24
 ---
 
 # MCP 服务实现规划（stock-calculator-mcp）
@@ -41,7 +41,8 @@ updated: 2026-09-20
 
 ## 四、M3 calc 工具
 
-1. quote/：EastmoneyDailyClient（RestClient 拉日线 250-500 根）+ TencentDailyClient 备用实现位；
+1. quote/：TencentDailyClient（RestClient 拉腾讯 fqkline 日线，2026-09-24 起为主实现，见 §十）
+   + EastmoneyDailyClient 备用实现位（预留）；
    Redis 行情缓存（key=quote:daily:{stockId}|{days}，TTL 30min；2026-09-20 由 Caffeine 改定，见 design.md §5.4）。
 2. indicator/：ta4j 封装——MaSeries/MacdSeries/RsiSeries/BollSeries/KdjSeries，
    输入 BarSeries 输出最新值 + 近 N 日趋势摘要（升/降/金叉死叉标记）。
@@ -80,7 +81,8 @@ updated: 2026-09-20
 ## 七、M5 行情落库（2026-09-20 追加）
 
 - quote_daily 表（sql.init 自动建）；QuoteSyncService：全窗口/增量窗口（last_date-10d）判定 + JdbcTemplate
-  ON CONFLICT 批量 upsert + 读库；EastmoneyDailyClient 纯化为 fetchWindow（无缓存）。
+  ON CONFLICT 批量 upsert + 读库；EastmoneyDailyClient 纯化为 fetchWindow（无缓存；
+  2026-09-24 起拉取改由 TencentDailyClient 承担，见 §十）。
 - 工具 stock_analysis/stock_daily 改读库；管理口 POST /admin/quote/resync（漂移修复）、
   GET /admin/quote/bars?stockId&from&to（全量分析读取）、GET /admin/quote/status。
 - Redis 行情缓存（quote:daily:*，当日寿命半日）由落库取代退役。
@@ -98,6 +100,21 @@ updated: 2026-09-20
 - M3/M4 工具定稿后：本域新增 docs/mcp/api.md 固化工具契约（design.md §九 为活口径，api.md 为冻结快照）。
 - 灌书管线若调参（切块/批次）：回写 design.md §8.2。
 - main 侧 StockDictRedisSync 属 crawler 域核心流程：完成后按 docs 规范 §二 提示核对 crawler 相关文档。
+
+## 十、数据源切腾讯（2026-09-24 追加）
+
+- **动机**：前端图表取腾讯数据，后端同源消除口径差（复权/价格/成交量一致）。
+- **实现**：`TencentDailyClient` 对接 `web.ifzq.gtimg.cn/appstock/app/fqkline/get`（免鉴权公开接口，
+  `param={code},day,{start},{end},{count},{fq}`，fq=qfq 前复权/空=不复权，返回 `qfqday`/`day`
+  每行 [日期,开,收,高,低,量(手)]）；`EastmoneyDailyClient` 删除（东财降为 `DailyQuoteClient` 备用实现位）。
+- **单请求上限**：实测约 800 根（6000 直接 param error）——按 640 根/页向更早分页回溯
+  （end=上一页最早日-1），覆盖全量/重灌最大回看窗（forceResync 上限 2000 交易日）。
+- **字段派生**：腾讯行无额/振幅/涨跌幅/换手——chg/pctChg/amplitude 由前一根收盘派生
+  （窗口前冗余 15 日历日取前收，beg 首根因此有基准；新上市首根派生值 0），
+  amount/turnover 恒 0；quote_daily 11 列结构与 upsert 管线不变。
+- **配置**：频控配置键 `quote.eastmoney.*` → `quote.tencent.*`（默认值不变，yml 未显式配置无破坏）。
+- **测试**：TencentDailyClientTest（代码归一/qfq 派生/raw/分页/空数据容错）；
+  QuoteSyncServiceTest mock 迁移至 TencentDailyClient。
 
 ## 十、M7 博主观点库 M1（2026-09-20 追加，epic: mcp-blogger-kb）
 

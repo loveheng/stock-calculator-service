@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-15
+updated: 2026-09-24
 ---
 
 # Context-Aware Copilot · 设计方案
@@ -10,7 +10,8 @@ updated: 2026-09-15
 > 配套文档：《Context-Aware Copilot 开发实施文档》v1.4（文件级落点/骨架/验收，**尚未入库**，建议收录为 `docs/copilot/implementation.md`）；设计决策编号 D1-D32 以实施文档引用为准，本文以 C1-Cn 承载本仓后端侧决策。
 > 关联：`docs/ai-pipeline/ocr-llm.md`（llm 域现状）、`docs/e2ee-auth/design.md`（信封/限流先例）、skill `stock-calculator-backend-dev`（后端编码模板）。
 > 状态：待评审冻结（对应实施文档 P0 启动前）。
-> **现状注记（2026-09-12）**：本文 C1/C5「复用 llm 域 gemini→groq 容灾链」未实现——实际为 copilot 专用 DeepSeek 渠道（`copilot.llm.deepseek.*`，`channel=deepseek` 落库）；限流实际顺序为「校验→限流→幂等门控」（AiChatOrchestrationService.beginAsk，cid 重放/续跑会消耗限流额度）；SSE 流式端点、Prompt 模板管理子系统、custom-stats 动作块提取均已实现但本文未覆盖。冲突处以 `docs/copilot/api.md` 与代码为准。
+> **现状注记（2026-09-12）**：本文 C1/C5「复用 llm 域 gemini→groq 容灾链」未实现——实际为 copilot 专用 DeepSeek 渠道（原 `copilot.llm.deepseek.*`，`channel=deepseek` 落库）；限流实际顺序为「校验→限流→幂等门控」（AiChatOrchestrationService.beginAsk，cid 重放/续跑会消耗限流额度）；SSE 流式端点、Prompt 模板管理子系统、custom-stats 动作块提取均已实现但本文未覆盖。冲突处以 `docs/copilot/api.md` 与代码为准。
+> **现状注记（2026-09-24）**：装配设施已换轨 stock-calculator-llm（`ai.tiers.openai-max`，见 `docs/architecture/llm-module.md`）；渠道隔离与限流顺序决策不变。
 
 ---
 

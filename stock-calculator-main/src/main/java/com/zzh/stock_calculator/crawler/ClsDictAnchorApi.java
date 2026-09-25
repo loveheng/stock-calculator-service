@@ -7,7 +7,9 @@ import com.zzh.stock_calculator.crawler.repository.StockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -58,5 +60,32 @@ public class ClsDictAnchorApi {
             }
         }
         return null;
+    }
+
+    /**
+     * 逐名独立解析字典锚点（guide 引导用）：与 {@link #resolveByName} 的「首个命中即返回」不同，
+     * 每个候选名各自解析出自己的锚点，命中与未命中都回显——未锚定名由调用方按「不编造」原则
+     * 丢弃并作为澄清素材回显（docs/guide/design.md D4）。
+     */
+    public List<NamedAnchor> resolveEach(Collection<String> names) {
+        if (names == null || names.isEmpty()) {
+            return List.of();
+        }
+        List<NamedAnchor> result = new ArrayList<>();
+        for (String raw : names) {
+            if (raw == null || raw.isBlank()) {
+                continue;
+            }
+            String name = raw.trim();
+            Anchor anchor = resolveByName(List.of(name));
+            result.add(new NamedAnchor(name,
+                    anchor == null ? null : anchor.anchorType(),
+                    anchor == null ? null : anchor.anchorId()));
+        }
+        return result;
+    }
+
+    /** 逐名锚点载体（anchorType/anchorId 均为 null = 未锚定自由词，仅 name 有效） */
+    public record NamedAnchor(String name, String anchorType, String anchorId) {
     }
 }

@@ -58,6 +58,7 @@ public class EmbeddingResultService {
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
     private final EmbeddingProperties properties;
+    private final com.zzh.llm.LlmRegistry llmRegistry;
     private final ObjectMapper objectMapper;
     /** 公告嵌入落账端口（announcement 域实现；ObjectProvider 防实现缺失阻启动） */
     private final ObjectProvider<AnnouncementEmbeddingApi> announcementEmbeddingProvider;
@@ -80,7 +81,7 @@ public class EmbeddingResultService {
                     result.getKind(), result.getRefId());
             return false;
         }
-        int dims = properties.getCloudflare().getDimensions();
+        int dims = llmRegistry.embedSpec(com.zzh.llm.LlmTiers.EMBED).getDimensions();
         if (result.getVector() == null || result.getVector().size() != dims) {
             log.warn("embedding result vector dimension mismatch, refId={}, expected={}, actual={}, skipped",
                     result.getRefId(), dims, result.getVector() == null ? 0 : result.getVector().size());
@@ -111,7 +112,7 @@ public class EmbeddingResultService {
      * （确定性 UUID upsert + DONE 同事务在 announcement 域内，实体不外泄）。
      */
     private boolean applyAnnouncementResult(EmbeddingComputeResult result) {
-        int dims = properties.getCloudflare().getDimensions();
+        int dims = llmRegistry.embedSpec(com.zzh.llm.LlmTiers.EMBED).getDimensions();
         if (result.getVector() == null || result.getVector().size() != dims) {
             log.warn("embedding result vector dimension mismatch, kind=announcement, refId={}, expected={}, actual={}, skipped",
                     result.getRefId(), dims, result.getVector() == null ? 0 : result.getVector().size());
@@ -159,7 +160,7 @@ public class EmbeddingResultService {
         embeddingRepository.save(row);
     }
 
-    /** 模型留档取值：worker 回报优先，缺省回退状态行留档 → 配置值 embedding.cloudflare.model */
+    /** 模型留档取值：worker 回报优先，缺省回退状态行留档 → 配置值 ai.embeddings.embed.model */
     private String resolveModel(EmbeddingComputeResult result, ClsArticleEmbedding existing) {
         if (result.getModel() != null && !result.getModel().isBlank()) {
             return result.getModel();
@@ -167,7 +168,7 @@ public class EmbeddingResultService {
         if (existing != null && existing.getModel() != null && !existing.getModel().isBlank()) {
             return existing.getModel();
         }
-        return properties.getCloudflare().getModel();
+        return llmRegistry.embedSpec(com.zzh.llm.LlmTiers.EMBED).getModel();
     }
 
     private float[] toFloatArray(List<Float> vector) {

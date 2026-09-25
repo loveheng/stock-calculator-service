@@ -20,6 +20,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+        <!-- LLM chat tier 设施（ai.tiers.chat + LlmRegistry），依赖红线见模块描述 -->
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-llm</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

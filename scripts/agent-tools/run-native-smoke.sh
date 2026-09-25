@@ -10,6 +10,7 @@
 # summary: main native 二进制带库启动冒烟（明确退出码）
 # trigger: manual
 # params: POSTGRES_PASS,POSTGRES_URL,POSTGRES_USER
+# cat: test
 # alias: ns
 # platform: unix
 

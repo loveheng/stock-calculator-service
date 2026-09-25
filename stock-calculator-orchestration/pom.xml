@@ -18,6 +18,12 @@
             <artifactId>stock-calculator-contract</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <!-- LLM chat tier 设施（ai.tiers.planner + LlmRegistry），依赖红线见模块描述 -->
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-llm</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <!-- Boot 4 webmvc 标准装配（含 spring-boot-restclient → RestClient.Builder，ToolInvoker rest 节点依赖；
              spring-ai mcp server-webmvc 传递的 spring-boot-starter-web 不含 restclient 模块，缺它服务起不来） -->
         <dependency>

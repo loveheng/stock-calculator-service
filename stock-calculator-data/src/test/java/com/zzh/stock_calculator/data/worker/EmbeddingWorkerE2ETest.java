@@ -55,11 +55,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource(properties = {
         "datasvc.worker.enabled=true",
         "datasvc.collector.enabled=false",
-        "datasvc.worker.embedding.account-id=test-account",
-        "datasvc.worker.embedding.api-token=test-token",
-        "datasvc.llm.base-url=http://127.0.0.1:1",
-        "datasvc.llm.api-key=dummy-key",
-        "datasvc.llm.model=dummy-model"
+        "ai.embeddings.embed.account-id=test-account",
+        "ai.embeddings.embed.api-token=test-token",
+        "ai.tiers.openai-mini.base-url=http://127.0.0.1:1",
+        "ai.tiers.openai-mini.api-key=dummy-key",
+        "ai.tiers.openai-mini.model=dummy-model"
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class EmbeddingWorkerE2ETest {

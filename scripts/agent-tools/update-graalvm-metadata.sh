@@ -8,6 +8,7 @@
 # name: update-graalvm-metadata
 # summary: 同步官方 GraalVM reachability-metadata 到 third_party 并校验脚本引用
 # trigger: manual
+# cat: build
 # alias: gm
 # platform: unix
 

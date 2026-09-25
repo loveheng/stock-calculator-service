@@ -1,8 +1,10 @@
 package com.zzh.stock_calculator.mcp.config;
 
+import com.zzh.stock_calculator.mcp.tool.ComputeIndicatorsTool;
 import com.zzh.stock_calculator.mcp.tool.KbBookListTool;
 import com.zzh.stock_calculator.mcp.tool.KbPersonaTool;
 import com.zzh.stock_calculator.mcp.tool.KbSearchTool;
+import com.zzh.stock_calculator.mcp.tool.FetchKlineTool;
 import com.zzh.stock_calculator.mcp.tool.PingTool;
 import com.zzh.stock_calculator.mcp.tool.StockAnalysisTool;
 import com.zzh.stock_calculator.mcp.tool.StockLevelsTool;
@@ -26,13 +28,16 @@ public class McpToolConfig {
                                                            StockDailyTool stockDailyTool,
                                                            StockLevelsTool stockLevelsTool,
                                                            StockRadarCheckTool stockRadarCheckTool,
+                                                           FetchKlineTool fetchKlineTool,
+                                                           ComputeIndicatorsTool computeIndicatorsTool,
                                                            KbSearchTool kbSearchTool,
                                                            KbBookListTool kbBookListTool,
                                                            KbPersonaTool kbPersonaTool,
                                                            TimeRangeTool timeRangeTool) {
         return MethodToolCallbackProvider.builder()
                 .toolObjects(pingTool, stockAnalysisTool, stockDailyTool, stockLevelsTool,
-                        stockRadarCheckTool, kbSearchTool, kbBookListTool, kbPersonaTool, timeRangeTool)
+                        stockRadarCheckTool, fetchKlineTool, computeIndicatorsTool, kbSearchTool,
+                        kbBookListTool, kbPersonaTool, timeRangeTool)
                 .build();
     }
 }

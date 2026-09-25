@@ -631,3 +631,21 @@ CREATE TABLE IF NOT EXISTS public.user_async_task_log (
 );
 CREATE INDEX IF NOT EXISTS idx_user_async_task_user ON public.user_async_task_log (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_async_task_status ON public.user_async_task_log (status) WHERE status = 'RUNNING';
+
+-- 画布经纪监控任务（free-canvas §3.5·B 调度路径）：用户级个股价格监控，
+-- 任务状态属用户业务数据（main 持有）；行情数据仍走 fetch_kline 读穿代理，K 线域零状态不破
+CREATE TABLE IF NOT EXISTS public.broker_monitor_task (
+	id bigserial NOT NULL,
+	user_id varchar(64) NOT NULL,
+	stock_code varchar(8) NOT NULL,               -- 6 位字典码（601318）
+	alert_type varchar(20) NOT NULL,              -- PRICE_BELOW（白名单，可扩展）
+	threshold numeric(12,4) NOT NULL,             -- 阈值（元）
+	status varchar(16) DEFAULT 'RUNNING' NOT NULL,-- RUNNING/STOPPED
+	last_checked_at timestamptz NULL,             -- 最近一轮判定时间（节流）
+	last_alert_at timestamptz NULL,               -- 最近一次告警时间（冷却窗防轰炸）
+	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	CONSTRAINT broker_monitor_task_pkey PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS idx_broker_monitor_due ON public.broker_monitor_task (status, last_checked_at) WHERE status = 'RUNNING';
+CREATE INDEX IF NOT EXISTS idx_broker_monitor_user ON public.broker_monitor_task (user_id, status);

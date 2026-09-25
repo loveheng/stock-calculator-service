@@ -32,8 +32,8 @@ public interface TaskInstanceRepository extends JpaRepository<TaskInstanceEntity
                           WHERE n ->> 'type' = 'mq_wait'
                             AND n ->> 'event' <> ''
                             AND NOT jsonb_exists(node_states, n ->> 'id')
-                            AND (:routing = 'event.' || n ->> 'event'
-                                 OR :routing LIKE 'event.' || n ->> 'event' || '.%'))
+                            AND (:routing = 'event.' || (n ->> 'event')
+                                 OR :routing LIKE 'event.' || (n ->> 'event') || '.%'))
             """, nativeQuery = true)
     List<TaskInstanceEntity> findWaitingWithDomainEvent(@org.springframework.data.repository.query.Param("routing") String routing);
 

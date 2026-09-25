@@ -54,10 +54,8 @@ class EmbeddingStatsReportTaskTest {
         properties = new EmbeddingProperties();
         // 门控开启态（R1）：enabled=true + 凭据齐备，等价生产配置
         properties.setEnabled(true);
-        properties.getCloudflare().setAccountId("acc-test");
-        properties.getCloudflare().setApiToken("tok-test");
         task = new EmbeddingStatsReportTask(embeddingRepository, articleRepository,
-                properties, eventPublisher, new EmbeddingGate(properties));
+                properties, eventPublisher, new EmbeddingGate(properties, readyRegistry()));
 
         lenient().when(embeddingRepository.countArticles()).thenReturn(1000L);
         lenient().when(embeddingRepository.countDone()).thenReturn(300L);
@@ -159,5 +157,14 @@ class EmbeddingStatsReportTaskTest {
                 .isEqualTo(Instant.ofEpochSecond(lastDay * 86400L));
         verify(articleRepository).countByCtimeGreaterThanEqual(lastDay * 86400L);
         verify(embeddingRepository).countNewPendingArticles(lastDay * 86400L);
+    }
+
+    private static com.zzh.llm.LlmRegistry readyRegistry() {
+        com.zzh.llm.EmbedSpec spec = new com.zzh.llm.EmbedSpec();
+        spec.setAccountId("acc-test");
+        spec.setApiToken("tok-test");
+        com.zzh.llm.LlmTierProperties tierProps = new com.zzh.llm.LlmTierProperties();
+        tierProps.getEmbeddings().put(com.zzh.llm.LlmTiers.EMBED, spec);
+        return new com.zzh.llm.LlmRegistry(tierProps);
     }
 }

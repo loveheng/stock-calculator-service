@@ -26,7 +26,7 @@ public class DailyBar {
 
     private double low;
 
-    /** 成交量（手，东财原始口径） */
+    /** 成交量（手，腾讯原始口径） */
     private double volume;
 
     /** 成交额（元） */

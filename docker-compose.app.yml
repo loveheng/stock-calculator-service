@@ -35,7 +35,7 @@ services:
   # 镜像内全开（单镜像多副本）：「恰一个」语义由 MQ 协议仲裁——常态拉取=种子+深度
   # 守卫、历史补录=队列 SAC、worker=竞争消费、控制面=每副本匿名队列，可跨机
   # 任意加副本（详见 docs/deploy/data-worker-replica.md）。worker 的 CLOUDFLARE_*、
-  # 蒸馏 LLM 的 LLM_*、ingest 的 INGEST_SECRET、RABBIT_* 连接拓扑经 env_file 从 .env 注入。
+  # 蒸馏 LLM 的 OPENAI_MINI_*、ingest 的 INGEST_SECRET、RABBIT_* 连接拓扑经 env_file 从 .env 注入。
   data:
     image: ghcr.io/loveheng/stock-calculator-service-data:${DATA_IMAGE_TAG:-3a4f486}
     ports:

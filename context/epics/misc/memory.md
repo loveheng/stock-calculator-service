@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: misc
-total-merged: 6
-last-merge: 2026-09-20
+total-merged: 7
+last-merge: 2026-09-25
 ---
 
 # misc：散修与小改动挂靠（常驻杂项 epic）
@@ -28,6 +28,7 @@ last-merge: 2026-09-20
 
 ## skill 与 docs 体系建设
 
+- docs/mcp/usage.md 使用手册新增（启停/客户端接入/工具速查/订阅源管理/离线加书/行情字典管理口/FAQ），README mcp 域索引同步过 lint。（2026-09-20）
 - docs/ 整合为 8 功能域子目录（域内去前缀重命名）+ docs/README.md 总索引 + 24 篇补 frontmatter（全 active）；规范沉淀为 skill stock-calculator-docs（frontmatter/域落点/墓碑/§八写后 lint）。（2026-09-15）
 - 后端编码规范 skill 定名 stock-calculator-backend-dev（原 cls-article-patterns 重构：事实指针化→workflow/service-index、3.3/3.4.3 去重、域枚举模式化、description 对偶化），全仓引用同轮同步为惯例。（2026-09-15）
 - 体系 skill 强化：dev-loop audit 十项清单（新增第 10 项事实指针化抽查）、dev-guide §5 检测网同步、workflow 补「本地依赖服务」（compose 三件套/scs-net/.env 口令口径）、新增 .agents/prompts/task-template.md 任务派发模板。（2026-09-15）
@@ -54,6 +55,16 @@ last-merge: 2026-09-20
 - 公告向量化端到端收口：EmbeddingComputeWorker kind 门控放开 announcement（曾静默 skip+ack 零向量零死信）；metadata.announcementId 键义修复（内部自增 id → CNINFO 标识）+ 存量 96 行 jsonb_set 治愈；端到端验收全绿（语义命中/分页切片/关键词路由）；相关教训已入 lessons（kind 白名单同轮接线 / metadata 键以读方口径 / 42P18 四法分流）。
 - 单日检索双断点修复：前端 searchSlice 丢 input.dateRange 已接线；后端 JPQL :param IS NULL 谓词 42P18 拆四个显式方法由 Service 分流，单日=start=end 闭区间契约不变。
 - 部署口径：main 脱离 IDE 托管（setsid 拉起，启动器 /tmp/scs-main-launch.py，日志 /tmp/scs-main.log）；.env 真 key + JAVA_TOOL_OPTIONS JVM 代理 nonProxyHosts 排除 lavinmq 修 composite 503。
+
+## orchestration 风险债收口（2026-09-23）
+
+- 六项代码层收口：①事件先于挂起到达即丢 → domain_event_inbox 收件箱（fan-in 零命中落箱 + 挂起落定 replayInboxFor 同事务重放，容量 1000/类型护栏）；②cls.daily.done 批次化（ClsDailyDoneBatcher 静默窗 30s/最大延迟 300s，载荷 {article_count, article_id=末篇, ctime}）；③fan-in O(waiting) 扫描 → TaskInstanceRepository.findWaitingWithDomainEvent JSONB SQL 预过滤（jsonb_exists 规避 ? 占位符冲突），MqWaitTimeoutScanner 改 findByStatusAndWaitDeadlineBefore，CapabilityTool Top200 封顶；④保留策略 OrchestrationRetentionTask 每日 03:30（match_log 30 天/实例终态 90 天/收件箱 7 天，orchestration.retention.* 可调）；⑤存量 plan 锚混用 → PlanEmbeddingRecomputeRunner（recompute-all 门控一次性重算）；⑥公告 E2E 存量失败修复=断言/清理改 CNINFO 口径 + 孤儿向量按 CNINFO 锚直删；唤醒逻辑沉淀 MqWaitWakeService（ObjectProvider 破 Executor 构造环）。orchestration 60 测试全绿 + main 441 全绿（RABBIT_E2E 开）。
+
+## guide 选股引导（2026-09-25，SSOT=docs/guide/design.md）
+
+- 全量落地（M1-M6）：crawler 基包扩展（ClsDictAnchorApi.resolveEach 逐名多锚点；ClsArticleQueryApi 三两跳查询 recentArticlesByStock/subjectsByStockSince/activeStocksBySubject + 关联表 native 聚合接口投影）；search 基包 StockProfileApi 门面；guide 新域（GuideController 两端点、GuideAnalyzeService 快/慢双路径+LLM fail-open、GuideStockBriefService、GuideDtos nextStep 首位红线）；orchestration REST_SEEDS 登记 main.guide.analyze_message/stock_brief；data.sql 播种 guide:entity_extract。
+- 关键定案：/api/guide/** 不挂 AuthInterceptor（D10——dispatch 工具面无会话，对齐 main.announcement.summaries 先例，设计稿「挂拦截」已废）；LLM 抽取未锚定丢弃不编造；free 链路失败 fail-open 标 llmDegraded。
+- 近期验证状态：./mvnw compile 全仓通过；main 470 用例全绿；EXPLAIN 三查询全走索引（红线①）；冒烟通过（茅台档案聚合/快路径/降级/30 天窗题材两跳产出/tool_registry 自动登记）；手搓 curl MCP 握手与 SDK 序列化不匹配属既有现象（:18081 同），全链留聊天窗实测。
 
 ## 断点
 
