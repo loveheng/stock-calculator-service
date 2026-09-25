@@ -9,8 +9,6 @@ format: v2
 - [ ] [2026-09-22] (风险) [long] 多博主人格合成（每博主一卡 + 离线 LLM 融合跑一次）v1 未做，属同机制延伸玩法，v2 再做 (src: ai)
 
 ## misc
-- [ ] [2026-09-25] (风险) [long] ReminderFireWatchdog.resolveNextFireAt：triggerSpec 解析失败静默返回 null，看门狗无告警跳过——提醒可能永久漏触发 (src: ai, degrade-scan)
-- [ ] [2026-09-25] (风险) [long] ReminderRepeater.isCapabilityAction：action JSON 解析失败静默返回 false，完结提醒流转方向误判（数据一致性）(src: ai, degrade-scan)
 - [ ] [2026-09-25] (风险) [long] CninfoClient 北交所 secCode 推导未实证（8/4 开头映射缺失），北交所公告可能映射错交易所——需补实证后扩展 (src: ai, uncertainty-scan)
 - [ ] [2026-09-25] (风险) [long] ClsArticleRepository excludeIds 空参契约仅靠注释维持（NOT IN () 非法 SQL），无断言守护，新调用方易踩——建议下沉到方法内防护 (src: ai, uncertainty-scan)
 - [ ] [2026-09-16] (功能) toolbox 僵尸淘汰消费端：list 基于 usage-ledger 吐 ⚠ 退役建议（连续失败 ≥3 或长期零调用）——触发条件：池内工具 >10 (src: 用户)

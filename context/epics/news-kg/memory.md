@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: news-kg
-total-merged: 1
-last-merge: 2026-09-19
+total-merged: 2
+last-merge: 2026-09-25
 ---
 
 # news-kg：财联社《新闻联播》要闻 → 时序知识图谱
@@ -31,6 +31,15 @@ last-merge: 2026-09-19
 - 设计/契约/六表/main kg 域 21 文件/data worker/历史回填/查询 API 四端点/前端对接 kg-api.md（draft）/cls-news-kg.md v1.1 全部落地；main 423 测试全绿。
 - 回填进行中（事件已至 2023-10）；19 条 done 曾入 dead.q 由回填轮次自愈，1 条 worker PERMANENT 待人工抽查。
 
+## 运行期修复与现行口径（2026-09-20 ~ 09-25 归并）
+
+- **data native openai 反射修复**：main 生成器轮 17/18 移植为 `stock-calculator-data/gen-openai-metadata.py`（4,719 any-setter 类 + com.openai.core.** 200 类/1,074 方法），build-native.sh 增步骤 2.5 产物守卫；坑：本地 AOT 产物会陈旧（--no-pkg 二进制缺 kg worker），须全量构建重生；broker + mock LLM E2E 全绿。
+- **KG 抽取入库链路已实证打通**（kg extracted → kg done ingested，2026-09-25）。LLM 档现行口径：SiliconFlow `Qwen/Qwen2.5-14B-Instruct`（非 thinking），凭据沿用 OPENAI_MAX_API_KEY，max-tokens 8192 / timeout 120s（经 OPENAI_MINI_* 环境变量注入 data yml）。〔已废弃：step-3.7-flash thinking 档——thinking 吃光 max-tokens 致 finish_reason=length + 空串 → TRANSIENT 重抽轮回；32768/240s 放大方案随换模型废弃。踩坑详见 docs §8.1.1。〕
+- **模型选型硬指标**：同一 prompt 横评的「别名覆盖」「事件时间归一」两项（7B 档 0/20、0/11 断崖不合格）；现行横评表在 docs §8.1.2。
+- **受控谓词归一定型**：词表单源于 contract 模块 `KgControlledVocabulary`（PREDICATES/PREDICATE_FALLBACK/PREDICATES_PROMPT）——data SYSTEM_PROMPT 以 text block 注入、main KgProperties.Fuse 默认值取同一常量、application.yml 留空即走常量（**废除**「词表 yml 显式配置双边同步」旧口径）。归一发生在 UNIQUE 判重之前（防塌陷后重复入库），越界谓词归 fallback，词表为空=退化为不归一。
+- **测试**：KgFuseServiceTest 5 例（Mockito 免 MQ/DB）；KgExtractWorkerTest 补「prompt 词表取自共享常量」守卫用例，并修其 setUp 缺 LlmRegistry 三键（base-url/api-key）配置。
+- **近期验证状态**：当日变更实测通过（链路实证 / 单测 / 横评）；历史变更未重跑。
+
 ## 断点
 
-- [断点] 下一步：重新部署 data native 二进制（openai 反射注册已内置、E2E 已验证，服务器 kg 抽取崩溃即愈）→ 回填观察继续；遗留：main 侧 FAILED PERMANENT 抽查
+- [断点] 下一步：回填与 KG 抽取运行观察（链路已通）；遗留：main 侧 FAILED PERMANENT 待人工抽查

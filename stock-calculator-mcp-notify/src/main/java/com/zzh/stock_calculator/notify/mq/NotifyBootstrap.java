@@ -9,13 +9,13 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /**
@@ -32,6 +32,7 @@ public class NotifyBootstrap implements ApplicationRunner {
     private final ReminderSeeder reminderSeeder;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -53,8 +54,13 @@ public class NotifyBootstrap implements ApplicationRunner {
 
         int reseeded = 0;
         for (ReminderEntity reminder : actives) {
-            OffsetDateTime nextFireAt = resolveNextFireAt(reminder);
-            if (nextFireAt == null) {
+            OffsetDateTime nextFireAt;
+            try {
+                nextFireAt = resolveNextFireAt(reminder);
+            } catch (Exception e) {
+                // 确定性损坏（同看门狗口径）：置 failed 显式化，既不静默跳过也不让
+                // readTree 异常上抛炸掉启动（ApplicationRunner 抛异常会中止进程）
+                markFailed(reminder, e);
                 continue;
             }
             reminderSeeder.seed(reminder.getId(), nextFireAt);
@@ -64,15 +70,21 @@ public class NotifyBootstrap implements ApplicationRunner {
                 queueDepth, actives.size(), reseeded);
     }
 
-    /** 从 spec 解析 nextFireAt；已过期时刻跳过（fire 消费幂等占位的 fired_at<due 条件会挡） */
+    /** 无 catch 直抛：解析失败与 seed 失败分流——前者确定性损坏置 failed，后者瞬时抖动下轮重启再试 */
     private OffsetDateTime resolveNextFireAt(ReminderEntity reminder) {
-        try {
-            JsonNode spec = objectMapper.readTree(reminder.getTriggerSpec());
-            return Instant.parse(spec.path("nextFireAt").asText()).atOffset(ZoneOffset.UTC);
-        } catch (DateTimeParseException | NullPointerException e) {
-            log.warn("[notify] bootstrap：reminder id={} nextFireAt 非法/缺失，跳过重投影（提醒不触发，可在 list 观测）",
+        JsonNode spec = objectMapper.readTree(reminder.getTriggerSpec());
+        return Instant.parse(spec.path("nextFireAt").asText()).atOffset(ZoneOffset.UTC);
+    }
+
+    /** 解析损坏显式失败态：bootstrap 无事务上下文，markFailed 经 TransactionTemplate 执行 */
+    private void markFailed(ReminderEntity reminder, Exception cause) {
+        log.error("[notify] bootstrap：reminder id={} triggerSpec 解析失败（确定性损坏），置 failed 终止调度",
+                reminder.getId(), cause);
+        Integer updated = transactionTemplate.execute(txn ->
+                reminderRepository.markFailed(reminder.getId()));
+        if (updated != null && updated == 0) {
+            log.info("[notify] bootstrap：reminder id={} 标记 failed 时已非 active（并发已正常完结），跳过",
                     reminder.getId());
-            return null;
         }
     }
 }

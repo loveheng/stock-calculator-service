@@ -34,3 +34,5 @@ format: v2
 - [2026-09-23] (修复) main E2E 死信断言改基线增量（5 类 7 断言点：@BeforeEach/方法首捕 dead.q 基线，断言「不新增」）——共享 broker 4184 条历史死信不再误报；RABBIT_E2E 套件 10 测试从 7 挂降至 1 挂，剩 1 个为 HEAD 同样挂的存量失败（vector row，已单独立 todos） (域: orchestration-impl)
 - [2026-09-23] (修复) orchestration 六项风险债收口：事件先于挂起到达→domain_event_inbox 收件箱+挂起重放；cls.daily.done 批次化（静默窗聚合）；fan-in JSONB SQL 预过滤+超时扫描 SQL 收口+CapabilityTool Top200 封顶；match_log/task_instance/事件收件箱保留策略（OrchestrationRetentionTask）；存量 plan 锚重算 Runner（开关式，本地池空无对象）；AnnouncementProcessMqE2ETest 断言改 CNINFO 口径+孤儿向量行直删修复存量失败；orchestration 60/main 441 测试全绿 (域: misc)
 - [2026-09-25] CopilotStatActionExtractor 静默 return null 定性为「有意降级」（fail-open 红线，docs/custom-stats/support.md §6）：补注释说明 + 登记 .degrade-whitelist，不修 (域: misc)
+- [2026-09-25] ReminderFireWatchdog/NotifyBootstrap triggerSpec 解析失败由静默跳过改为 CAS 置 failed 显式失败态（附模块单测 9 例） (域: misc)
+- [2026-09-25] ReminderRepeater triggerSpec/action 解析失败由静默完结改为置 failed 终止调度，capability 判定改三态（附模块单测） (域: misc)

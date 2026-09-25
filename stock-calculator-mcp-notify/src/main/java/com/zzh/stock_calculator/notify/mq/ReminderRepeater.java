@@ -37,14 +37,17 @@ public class ReminderRepeater {
         if (!"at_time".equals(reminder.getTriggerType())) {
             return;
         }
-        String repeat;
+        JsonNode spec;
         try {
-            JsonNode spec = objectMapper.readTree(reminder.getTriggerSpec());
-            repeat = spec.path("repeat").asText("once");
+            spec = objectMapper.readTree(reminder.getTriggerSpec());
         } catch (Exception e) {
-            log.error("[notify] reminder id={} spec JSON 非法，按 once 完结", reminder.getId(), e);
-            repeat = "once";
+            // 确定性损坏（登记期已过结构校验，损坏只可能来自手工改库或写入/读取格式演进失配）：
+            // 置 failed 终止调度——按 once 完结会把 daily/weekly 误终止，保持 active 则永久漏触发，
+            // 两个方向都是静默误流转，只有 failed 显式化可观测（本次已触发的通知由 ActionExecutor 照常执行）
+            markFailed(reminder, "triggerSpec", e);
+            return;
         }
+        String repeat = spec.path("repeat").asText("once");
 
         long nextMs = switch (repeat) {
             case "daily" -> ChronoUnit.DAYS.getDuration().toMillis();
@@ -54,7 +57,12 @@ public class ReminderRepeater {
         if (nextMs <= 0) {
             // capability 动作不在 fire 时完结：回流尚未到达，置 done 会让回流按
             // 「reminder 非活跃」丢弃、通知永远发不出——完结移交回流投递后执行
-            if (!isCapabilityAction(reminder)) {
+            Boolean capability = capabilityKind(reminder);
+            if (capability == null) {
+                // action JSON 损坏已置 failed：流转方向无法判定，完结与续种都不安全
+                return;
+            }
+            if (!capability) {
                 complete(reminder.getId());
             }
             return;
@@ -80,16 +88,27 @@ public class ReminderRepeater {
         log.info("[notify] reminder id={} 一次性触发完成，置 done", reminderId);
     }
 
-    /** action.kind=capability 判定（完结时点移交流回侧） */
-    private boolean isCapabilityAction(ReminderEntity reminder) {
+    /**
+     * action.kind=capability 三态判定（完结时点移交流回侧）：
+     * true/false = 判定结果；null = action JSON 损坏，已置 failed。
+     * 损坏时不做完结/续种——按「非 capability」完结会把循环提醒误终止，
+     * 按「capability」续种会把一次性提醒误复活。
+     */
+    private Boolean capabilityKind(ReminderEntity reminder) {
         try {
             return "capability".equals(objectMapper.readTree(reminder.getAction())
                     .path("kind").asText());
         } catch (Exception e) {
-            // DEGRADE: action.kind 解析失败按「非 capability」处理，是否应拒绝触发而非静默降级待确认
-            log.warn("[DEGRADE] reminder-action-kind-parse-failed fallback to false: {}", e.toString());
-            return false;
+            markFailed(reminder, "action", e);
+            return null;
         }
+    }
+
+    /** 解析损坏显式失败态（fire 消费事务内执行；本时点 triggerOccupy 已过，必为 active） */
+    private void markFailed(ReminderEntity reminder, String field, Exception cause) {
+        log.error("[notify] reminder id={} {} JSON 解析失败（确定性损坏），置 failed 终止调度",
+                reminder.getId(), field, cause);
+        reminderRepository.markFailed(reminder.getId());
     }
 
     /** passive declare 探 delay 队列深度（不声明参数，仅探测；连接失败按 0 放行续种） */

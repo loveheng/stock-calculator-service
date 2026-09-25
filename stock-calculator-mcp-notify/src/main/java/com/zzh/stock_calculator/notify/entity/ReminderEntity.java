@@ -19,7 +19,8 @@ import java.time.OffsetDateTime;
  * 提醒登记表实体（stock_mcp 库 reminder 表，docs/notify/design.md §4.1）。
  * trigger_spec / action 为 JSONB：JPA 侧以 String 承载（jsonb ↔ text 赋值由
  * JdbcTypeCode 处理），结构校验在 Service 层做（不引表达式引擎，轻量 JSON 条件）。
- * 状态机单向 active → done / cancelled（N6：修改走删除重建，无原地 update）。
+ * 状态机单向 active → done / cancelled / failed（failed = trigger_spec/action JSON
+ * 确定性损坏的显式失败态，终止调度防幽灵 active 永久漏触发；N6：修改走删除重建，无原地 update）。
  */
 @Data
 @Builder
@@ -55,7 +56,7 @@ public class ReminderEntity {
     @Column(name = "action", nullable = false, columnDefinition = "jsonb")
     private String action;
 
-    /** active / done / cancelled */
+    /** active / done / cancelled / failed（failed = JSON 确定性损坏，仅调度链内部置入） */
     @Column(name = "status", nullable = false, length = 16)
     @Builder.Default
     private String status = "active";

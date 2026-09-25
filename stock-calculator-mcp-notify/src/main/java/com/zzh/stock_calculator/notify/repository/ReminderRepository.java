@@ -41,7 +41,7 @@ public interface ReminderRepository extends JpaRepository<ReminderEntity, Long> 
             """)
     int markSuppressed(@Param("id") Long id);
 
-    /** 状态流转定向更新（active→done/cancelled）：整行 save 会用陈旧实体覆盖
+    /** 状态流转定向更新（active→done/cancelled/failed）：整行 save 会用陈旧实体覆盖
      *  triggerOccupy 刚写入的 fired_at/fire_count（丢失更新），禁用整行写 */
     @Modifying
     @Query("""
@@ -50,4 +50,16 @@ public interface ReminderRepository extends JpaRepository<ReminderEntity, Long> 
              WHERE r.id = :id
             """)
     int markStatus(@Param("id") Long id, @Param("status") String status);
+
+    /** 显式失败态流转（trigger_spec/action JSON 确定性损坏，终止调度防幽灵 active 永久漏触发）：
+     *  CAS 仅 active 可入——防「扫描取数后已被正常触发完结」竞态把 done/cancelled 误改回 failed；
+     *  返回 0 = 状态已流转，放弃标记 */
+    @Modifying
+    @Query("""
+            UPDATE ReminderEntity r
+               SET r.status = 'failed', r.updatedAt = CURRENT_TIMESTAMP
+             WHERE r.id = :id
+               AND r.status = 'active'
+            """)
+    int markFailed(@Param("id") Long id);
 }
