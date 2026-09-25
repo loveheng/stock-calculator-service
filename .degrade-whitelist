@@ -1,0 +1,42 @@
+# 本仓 .degrade-whitelist —— degrade-scan 已定性「有意降级」名单
+# 格式：每行一个正则，# 起注释。匹配面 = 文件路径 或 命中块 ctx 窗口（catch 行前 3 行至块结束）任一含行。
+# 收录标准：该路径已逐处读过并确认为有意降级（有设计理由）；修复后删除对应行，恢复监控。
+# 2026-09-25 首建：48 处命中 → 收录 42，留报 6（3 高危在 todos 待修 + 3 处未读待核）。
+
+# —— MQ ack/nack 基建失败：ack 失败靠 broker redeliver，重试环/dead.q 是设计内兜底 ——
+ack failed
+failed to ack
+broker will redeliver
+history sync task failed, dropped
+LLM 幻觉 id：单条丢弃不致命
+
+# —— 多格式/日期解析容错：逐格式尝试；解析失败有意置 null/跳过单条 ——
+下一格式
+全部失败
+unparsable, stored null
+unparsable, kept null
+nextFireAt 非法/缺失，跳过重投影
+trigger_spec 非法，跳过
+cron 解析失败
+
+# —— fail-open 缓存：失败回落 db/通道调用，只损缓存不损正确性 ——
+fail-open
+degraded, fallback
+视作未命中并驱逐
+
+# —— 统一错误信封/宽松降级：调用方有明确回落语义 ——
+宽松降级
+宽松回落
+回退重试
+按零候选处理
+投递失败 endpoint
+渠道失败
+memory recall injection failed
+
+# —— 吞点无意图注释的文件（路径抑制；今后该文件新增吞点也会被抑制，留意）——
+CopilotTaskPromptRenderer\.java
+CompositeSearchService\.java
+ComputeIndicatorsTool\.java
+FetchKlineTool\.java
+Planner\.java
+ProfileService\.java
