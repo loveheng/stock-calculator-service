@@ -78,6 +78,8 @@ description: stock-calculator-service 的 Native 构建与多模块故障排查�
 | native 跑 PDFBox 报 `NoClassDefFoundError: java/awt/GraphicsEnvironment` | `PDDocument.<clinit>` 直拉 Raster/ColorModel → `System.loadLibrary("awt")` → libawt 的 C 代码 JNI FindClass，静态分析不可见；伴随 Helvetica.afm 字体资源缺失（`org/apache/pdfbox/resources/`） | native-image-agent 采集（§四），产物落 `src/main/resources/META-INF/native-image/`；PDFBox 不自带 GraalVM 配置 |
 | 冒烟 curl HTTP 端点返回 000（连接被拒），但应用日志正常 | yml `web-application-type: none` + pom 无 web starter——控制器从未监听；单测直调 Controller 方法掩盖缺口 | 补 `spring-boot-starter-web` + 删 yml 该行，重建后冒烟断言（如 ingest 503/400） |
 | 沙箱终端连 localhost broker 全部连接拒绝，broker 实际存活（podman 容器 lavinmq） | 终端沙箱与主机网络隔离 | 需连本地 broker 的命令一律非沙箱运行；URL 用 `127.0.0.1` 防 IPv6 解析 |
+| MCP client 启用后（2026-09-24 yml 修复生效）main native 冒烟挂：`McpSyncClient.initialize` 阻塞中被 kill（InterruptedException），Tomcat 8s 内起不来 | mcpSyncClients bean 创建即连 SSE 并 initialize；CI 隔离 runner 无 orchestration(:18083)，对端不在阻塞到 20s 超时炸启动 | build-native.sh 冒烟步探 `127.0.0.1:18083`，不在则 `export SPRING_AI_MCP_CLIENT_INITIALIZED=false`（initialized 是 bean 工厂方法运行期读取的普通值，非 AOT 冻结条件；enabled 才是条件，运行期改无效）；对端在时保持急切初始化真验 dispatch |
+| data native 冒烟炸 `LLM tier [openai-mini] 配置不完整` | smoke-native.sh 的 SPRING_APPLICATION_JSON 还在注旧死键 `datasvc.llm`/`datasvc.worker.embedding`，而 yml 已迁 `ai.tiers.openai-mini`/`ai.embeddings.embed`（供应商可切换改造） | 冒烟 dummy 与构建期钉死段同步迁移命名空间；LLM/embedding 键迁移时必须同步改 build-native.sh 与 smoke-native.sh 两处 |
 
 ## 四、运行期动态缺口采集：native-image-agent（2026-09-11 R1 实证）
 

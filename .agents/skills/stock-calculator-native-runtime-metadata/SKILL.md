@@ -102,7 +102,7 @@ description: stock-calculator-service native 二进制「编译成功但运行�
    Cannot reflectively instantiate the array class 'java.util.UUID[]'；
    数组注册只写 {"type": "X[]"}（见四.4），组件类用 JDK 前缀放行（见三）
 
-## 七、十八轮修复目录（症状 → 修复，全部验证通过）
+## 七、十九轮修复目录（症状 → 修复，全部验证通过）
 
 | 轮 | 崩溃点 | 修复 |
 |---|--------|------|
@@ -124,6 +124,7 @@ description: stock-calculator-service native 二进制「编译成功但运行�
 | 16 | main 模块（Spring AI 2.0.1，173 jar）直接 native 化：7g 堆 OOM；Boot 4 新式 test jar 泄入 | lazy-off 重录 agent 全量覆盖 + -J-Xmx12g + 剥离模式补 *-test-*\|*resttestclient*；2026-08-31 新基线 303MB ELF / 0.317s / 90s 全绿（native 模块就此删除） |
 | 17 | openai SDK 响应反序列化：private any-setter putAdditionalProperty(String,JsonValue) 不可调用（仅响应含 SDK 未建模字段时触发；表层只见 Error reading response） | 生成器扫描 openai jar 全部 class 字节码含该常量的类，显式注册该签名（4,719 类，对仅引用常量的类静默容忍）；AbstractOpenAiCompatibleLlmService 两个 catch 加完整堆栈 WARN（根因可见性） |
 | 18 | Jackson 3 序列化：OpenAiChatModel.from() 对 _additionalProperties() 做 tools.jackson convertValue，MethodHandle 反射调 JsonField.isMissing() 未注册；lambda 只 catch Exception 而 MissingReflectionRegistrationError 是 Error 穿透 | 生成器纯 Python class 文件解析器，com.openai.core.** 全部 200 类注册全部声明方法（+1,074 条显式 methods）；--no-pkg 重建 317MB ELF + mock E2E 全绿（方法见十一/十二） |
+| 19 | orchestration native：显式设 `hibernate.type.json_format_mapper: jackson3` 后 EMF 构建即炸 `MissingReflectionRegistrationError: Cannot reflectively invoke constructor Jackson3JsonFormatMapper(FormatMapperCreationContext)`（冒烟日志尾部只见 EMF/BeanCreation 链，根因在 Caused by 中段） | SessionFactoryOptionsBuilder.lambda$formatMapper$0 对显式按名策略**先试** `<init>(FormatMapperCreationContext)` 缺失才回退无参（javap 实证 7.4.5.Final）；生成器 EXTRA_CTORS 为 Jackson3/Jackson/JacksonXml 三 mapper 补该构造器（JaxbXml 无此构造器无需登记）；默认值路径（main/notify/mcp 未显式设置）走 JacksonIntegration 直接 `new`，静态可达无需注册。生成器补丁 --no-pkg 重建 25 分钟，冒烟 0.959s 全绿 |
 
 ## 八、Spring 静默失效陷阱（编译过、启动过，功能不工作，零报错）
 

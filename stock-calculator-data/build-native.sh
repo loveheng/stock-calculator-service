@@ -153,6 +153,7 @@ ls -lh "target/$BINARY_NAME"
 file "target/$BINARY_NAME"
 
 echo "==================== 启动冒烟（复用 smoke-native.sh） ===================="
-# 注意：SPRING_APPLICATION_JSON（本脚本导出的构建期同款 dummy 凭据）在冒烟时
-# 仍然生效——运行期实例化单例同样会触发 CF/LLM fail-fast，须有非空值
+# smoke-native.sh 会以自己的 SPRING_APPLICATION_JSON 覆盖这里的构建期值（键与
+# 构建期段同源，均对齐 ai.tiers.openai-mini / ai.embeddings.embed 活跃命名空间）——
+# 运行期实例化单例同样触发 CF/LLM fail-fast，dummy 凭据缺一不可
 bash smoke-native.sh

@@ -12,12 +12,17 @@ cd "$(dirname "$0")"
 BIN=./target/stock-calculator-data-service
 [ -x "$BIN" ] || { echo "❌ 二进制不存在，先运行 build-native.sh"; exit 1; }
 
-# 运行期 dummy 凭据（Tomcat 必须照常起，ingest 探活依赖它）
+# 运行期 dummy 凭据（Tomcat 必须照常起，ingest 探活依赖它）。
+# 命名空间必须与 data yml 当前活跃键对齐（与 build-native.sh 构建期钉死段同款）：
+# datasvc.llm / datasvc.worker.embedding 已分别迁 ai.tiers.openai-mini /
+# ai.embeddings.embed（供应商可切换改造），回填旧键 = LlmRegistry fail-fast 炸启动
 export SPRING_APPLICATION_JSON='{
   "datasvc": {
-    "worker": {"enabled": true,
-               "embedding": {"account-id": "smoke-dummy", "api-token": "smoke-dummy"}},
-    "llm": {"base-url": "http://smoke.invalid", "api-key": "smoke-dummy", "model": "smoke-dummy"}
+    "worker": {"enabled": true}
+  },
+  "ai": {
+    "tiers": {"openai-mini": {"base-url": "http://smoke.invalid", "api-key": "smoke-dummy", "model": "smoke-dummy"}},
+    "embeddings": {"embed": {"account-id": "smoke-dummy", "api-token": "smoke-dummy"}}
   }
 }'
 

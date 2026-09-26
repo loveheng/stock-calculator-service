@@ -460,6 +460,18 @@ logger_set = set(logger_classes)
 EXTRA_CTORS = {
     'org.hibernate.boot.models.annotations.internal.CacheAnnotation':
         [['org.hibernate.models.spi.ModelsContext']],
+    # SessionFactoryOptionsBuilder.lambda$formatMapper 对显式按名选择的 json/xml
+    # format mapper（hibernate.type.json_format_mapper 等设置）优先反射调用
+    # <init>(FormatMapperCreationContext)，缺失才回退无参（javap 实证 7.4.5.Final）。
+    # 不注册则 json_format_mapper=jackson3 时 native EMF 构建即炸
+    # （Could not instantiate named strategy class [..Jackson3JsonFormatMapper]）。
+    # JaxbXmlFormatMapper 无该构造器，走无参回退，无需登记
+    'org.hibernate.type.format.jackson.Jackson3JsonFormatMapper':
+        [['org.hibernate.type.format.FormatMapperCreationContext']],
+    'org.hibernate.type.format.jackson.JacksonJsonFormatMapper':
+        [['org.hibernate.type.format.FormatMapperCreationContext']],
+    'org.hibernate.type.format.jackson.JacksonXmlFormatMapper':
+        [['org.hibernate.type.format.FormatMapperCreationContext']],
 }
 
 def ctor_entries(fq):

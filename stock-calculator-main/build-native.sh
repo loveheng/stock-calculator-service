@@ -172,6 +172,16 @@ echo ""
 echo "==================== 启动测试 (8 秒) ===================="
 # 启动测试（8 秒）：能打印 Tomcat started 才算构建成功，失败直接退出非零
 # --kill-after=3: 二进制若忽略 TERM（如旧产物无 exit handlers），3 秒后升级 SIGKILL，保证时间窗有界
+# orchestration(:18083) 是 MCP client 的启动期硬依赖（mcpSyncClients bean 创建即连
+# SSE 并 initialize，对端不在则阻塞到超时炸启动）。CI 各模块 job 跑在隔离 runner 上，
+# 本机 :18083 恒空——此时降级为惰性初始化（initialized=false 在 bean 工厂方法运行期
+# 读取，native AOT 下同样生效，同 orchestration/build-native.sh 2026-09-24 定案），
+# 冒烟只验自身起得来；toolcallback 三消费方均 ObjectProvider 请求期懒解析，不受影响。
+# 对端在（本地联启全量冒烟）则保持急切初始化，真实验 dispatch 连接。
+if ! (exec 3<>/dev/tcp/127.0.0.1/18083) 2>/dev/null; then
+  echo "⚠️ :18083 无 orchestration（CI 隔离 runner 场景）→ MCP client 惰性初始化，冒烟不验 dispatch 链路"
+  export SPRING_AI_MCP_CLIENT_INITIALIZED=false
+fi
 timeout --kill-after=3 8 ./target/stock-calculator-service --server.port=19999 > /tmp/ni-run.log 2>&1 || true
 # 兜底清理：确保测试进程不残留（否则残留实例会占住 19999 端口干扰后续验证）
 pkill -9 -f 'target/stock-calculator-service --server.port=19999' 2>/dev/null || true
