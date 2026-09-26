@@ -284,7 +284,7 @@ sequenceDiagram
 | SMTP_USERNAME / SMTP_PASSWORD | SMTP 凭据 |
 | MAIL_FROM | 发件人（如 股票计算助手 <no-reply@example.com>） |
 
-yml 内以 Spring 占位符引用（写法对齐 application.yml 现有 GEMINI_API_KEY 条目）；不引入其他密钥——会话令牌运行时随机生成，不入配置。
+yml 内以 Spring 占位符引用（写法对齐 application.yml 现有 OPENAI_MINI_API_KEY 条目）；不引入其他密钥——会话令牌运行时随机生成，不入配置。
 
 ### 7.2 网络与 CORS
 

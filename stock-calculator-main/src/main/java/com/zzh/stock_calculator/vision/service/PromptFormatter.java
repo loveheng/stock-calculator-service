@@ -46,7 +46,7 @@ public class PromptFormatter {
             %s
             """;
 
-    /** 交易流水提取 System Prompt：名称优先、代码由后端 Smartbox 补全 + JSON 二维数组输出约束（任务指令内嵌于字段规范） */
+    /** 交易流水提取 System Prompt：名称优先、代码由后端字典补全 + JSON 二维数组输出约束（任务指令内嵌于字段规范） */
     private static final String TRADE_SYSTEM_PROMPT = """
             你是一个资深的金融证券交易记录与对账单提取专家。用户将提供一段由 OCR 从交易截图中提取的原始文本（可能包含错字、断行、列错位等识别噪声）。
             请从中提取所有【已成交】交易明细记录，字段规范：

@@ -137,7 +137,7 @@ public final class BrokerDtos {
         private List<java.util.Map<String, Object>> actions;
     }
 
-    /** 监控告警规则（§3.5：type 白名单，一期仅 PRICE_BELOW） */
+    /** 监控告警规则（docs/alert/design.md §四.3：type 白名单 PRICE_BELOW/PRICE_NEAR，band 仅 PRICE_NEAR 用） */
     @Data
     @Builder
     @NoArgsConstructor
@@ -145,6 +145,8 @@ public final class BrokerDtos {
     public static class AlertRule {
         private String type;
         private java.math.BigDecimal threshold;
+        /** PRICE_NEAR 区间容差（元），abs(现价−threshold)≤band 触发；PRICE_BELOW 忽略 */
+        private java.math.BigDecimal band;
     }
 
     /** POST /api/broker/monitor/start 请求体（§3.5） */
@@ -155,6 +157,8 @@ public final class BrokerDtos {
     public static class MonitorStartRequest {
         private String fullCode;
         private String interval;
+        /** 交易方向 BUY/SELL 必填；SELL 仅容 PRICE_NEAR（前端反馈定案） */
+        private String direction;
         private AlertRule alertRule;
     }
 
@@ -175,6 +179,39 @@ public final class BrokerDtos {
     @AllArgsConstructor
     public static class MonitorStopRequest {
         private Long taskId;
+    }
+
+    /** GET /api/broker/monitor/list data：单条预告单（docs/alert/design.md，含 3 次提醒进度回显） */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MonitorTaskItem {
+        private Long taskId;
+        private String fullCode;
+        private String stockCode;
+        private String alertType;
+        /** 交易方向 BUY/SELL（前端反馈定案） */
+        private String direction;
+        private java.math.BigDecimal threshold;
+        /** PRICE_NEAR 区间容差（元），仅 PRICE_NEAR 非空 */
+        private java.math.BigDecimal band;
+        private String status;
+        /** 累计告警次数（前端展示「已提醒 n/3 次」） */
+        private Integer alertCount;
+        private java.time.OffsetDateTime lastAlertAt;
+        private java.time.OffsetDateTime createdAt;
+        private java.time.OffsetDateTime updatedAt;
+    }
+
+    /** GET /api/broker/monitor/list data：任务列表 + 汇总 */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MonitorListData {
+        private List<MonitorTaskItem> tasks;
+        private long runningCount;
     }
 
     @Data

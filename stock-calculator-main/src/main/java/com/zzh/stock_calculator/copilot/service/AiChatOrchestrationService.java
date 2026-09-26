@@ -12,6 +12,7 @@ import com.zzh.stock_calculator.copilot.entity.AiChatSession;
 import com.zzh.stock_calculator.copilot.repository.AiChatMessageRepository;
 import com.zzh.stock_calculator.copilot.repository.AiChatSessionRepository;
 import com.zzh.stock_calculator.copilot.service.store.AiChatSessionStore;
+import com.zzh.stock_calculator.copilot.util.ActionShellStreamFilter;
 import com.zzh.stock_calculator.copilot.util.CopilotStatActionExtractor;
 import com.zzh.stock_calculator.copilot.util.CopilotTaskPromptRenderer;
 import java.nio.charset.StandardCharsets;
@@ -108,6 +109,17 @@ public class AiChatOrchestrationService {
     /** promptHints 硬顶（free-canvas §2.8 不可信输入防线）：UTF-8 8192 字节，超长截断不报错 */
     private static final int PROMPT_HINTS_MAX_BYTES = 8192;
 
+    /**
+     * 选股引导约定（docs/guide/design.md D12，G2 旁路回流）：全聊天面统一注入的固定短段——
+     * 用户旁路进入（直接问个股/题材）时 copilot 主动带上引导视角；工具名与 orchestration
+     * REST_SEEDS、会话身份块（reminder_*）同款代码级耦合先例。置于动作块契约之前（外壳协议保持最末）。
+     */
+    private static final String GUIDE_FLOW_CONVENTION =
+        "\n\n【选股引导约定】\n"
+            + "用户听到消息/传闻想选股、给题材或股票代码问机会时，先调用 main.guide.analyze_message "
+            + "获取候选清单并请用户选定；深入讨论某只个股时，可调用 main.guide.stock_brief 补充近况档案"
+            + "（电报提及、题材归属、公告摘要）后再回答；纯技术面问题照常走形态/指标工具。";
+
     // ==================== Ask（主方法）====================
 
     /**
@@ -160,7 +172,9 @@ public class AiChatOrchestrationService {
         AtomicReference<Usage> usageRef = new AtomicReference<>();
         AtomicReference<Disposable> subRef = new AtomicReference<>();
         AtomicBoolean archivedRef = new AtomicBoolean(); // 归档成功后置位，防止断开回调把 ok 改写为 failed
-        AtomicBoolean suppressRef = new AtomicBoolean(); // 动作块直传抑制位（见 chunk 回调）
+        // 动作外壳流式截断（规范⑤）：delta 通道永不漏外壳片段（含跨 chunk 拆分的半截标签），
+        // 开标签前的正文照常透传、闭合后恢复壳后正文——口径与 done 阶段 parse 的 cleanedText 逐条对齐
+        ActionShellStreamFilter shellFilter = new ActionShellStreamFilter();
 
         Disposable disposable = chatClient.prompt(pending.prompt())
             .stream()
@@ -178,16 +192,8 @@ public class AiChatOrchestrationService {
                     return;
                 }
                 fullText.append(delta);
-                // 动作块（模版约定恒在回复末尾）不直传：开标签出现即停止 delta 转发，
-                // 权威全文在 done 阶段剔除动作块后下发，避免聊天气泡闪烁机器 JSON；
-                // done 的 content 为权威全文，流式尾部少量正文片段被 done 替换自愈
-                if (
-                    !suppressRef.get() &&
-                    fullText.indexOf(CopilotStatActionExtractor.OPEN_TAG) >= 0
-                ) {
-                    suppressRef.set(true);
-                }
-                if (suppressRef.get()) {
+                String emit = shellFilter.filter(delta);
+                if (emit.isEmpty()) {
                     return;
                 }
                 safeSend(
@@ -195,7 +201,7 @@ public class AiChatOrchestrationService {
                     subRef,
                     SseEmitter.event()
                         .name("delta")
-                        .data(new DeltaEvent(delta), MediaType.APPLICATION_JSON)
+                        .data(new DeltaEvent(emit), MediaType.APPLICATION_JSON)
                 );
             },
             error -> {
@@ -223,6 +229,17 @@ public class AiChatOrchestrationService {
             },
             () -> {
                 try {
+                    // 流尾兜底：扣留的疑似标签前缀按正文补发（无完整标签=原文口径），使流式视图收敛到权威全文
+                    String tail = shellFilter.flush();
+                    if (!tail.isEmpty()) {
+                        safeSend(
+                            emitter,
+                            subRef,
+                            SseEmitter.event()
+                                .name("delta")
+                                .data(new DeltaEvent(tail), MediaType.APPLICATION_JSON)
+                        );
+                    }
                     // 阶段二：动作块提取 + 归档 assistant + userMsg.status→ok（新事务），content 以剔除动作块后的全文为权威
                     CopilotStatActionExtractor.Parsed output =
                         CopilotStatActionExtractor.parse(fullText.toString());
@@ -665,6 +682,8 @@ public class AiChatOrchestrationService {
             if (personaSegment != null) {
                 systemPrompt.append(personaSegment);
             }
+            // 选股引导约定（D12/G2）：固定短段全聊天面注入，任务型模版分支不叠加（与记忆/语气卡同口径）
+            systemPrompt.append(GUIDE_FLOW_CONVENTION);
             // 全局动作输出规范（外壳协议归后端宣讲，free-canvas §2.8 修订）：标签与解析器常量同源，
             // 置于系统提示最末；任务型模版分支自带外壳教学不叠加（与记忆/语气卡同口径）
             systemPrompt.append(CopilotStatActionExtractor.ACTION_OUTPUT_CONTRACT);

@@ -108,41 +108,15 @@ spring:
             orchestration-dispatch:
               url: ${MCP_ORCH_URL:http://localhost:18083}
         common:
-          # 超时梯队第 3 层（步 5 定案 3）：copilot HTTP 15s > dispatch 10s > ToolInvoker 8s
-          request-timeout: 15s
+          # 超时梯队（步 5 定案 3 基础上 2026-09-26 为 vision ocr 工具调档）：
+          # main 经 dispatch 同步调 ocr 工具，需覆盖 orchestration 侧 40s 预算，45s 留余量
+          request-timeout: 45s
 
 crawler:
   # /api/admin/sync 管理端点令牌；未配置时端点拒绝所有请求
   admin-token: ${CRAWLER_ADMIN_TOKEN:}
 
 vision:
-  ocr:
-    # 默认识别语言（OCR.space 语言码：chs=简体中文）
-    language: chs
-    # 图片哈希 -> 识别文本缓存（Redis，key=vision:ocr:text:<MD5>；命中直接返回节省免费额度，重启不清零）
-    cache-ttl: 30m
-    # 单渠道最大尝试次数与退避间隔（仅对 429/5xx/超时可重试异常生效）
-    max-attempts: 2
-    retry-backoff: 300ms
-    azure:
-      # 首选渠道：未申请 Azure AI Vision Key 时保持关闭，调度器健康检查自动跳过；
-      # 启用时通过环境变量提供 endpoint 与订阅 Key（或直接改为此处的字面量）
-      enabled: ${AZURE_OCR_ENABLED:true}
-      endpoint: ${AZURE_OCR_ENDPOINT:https://zzhscsocr.cognitiveservices.azure.com/}
-      api-key: ${AZURE_OCR_API_KEY:}
-      api-version: "2024-02-01"
-      connect-timeout: 5s
-      read-timeout: 30s
-      poll-interval: 500ms
-      poll-max-times: 20
-    ocrspace:
-      # 备用渠道：免费额度 Key（环境变量 OCRSPACE_API_KEY 可覆盖默认值）
-      enabled: true
-      api-key: ${OCRSPACE_API_KEY:K82621831488957}
-      url: https://api.ocr.space/parse/image
-      engine: "2"
-      connect-timeout: 5s
-      read-timeout: 30s
   ai:
     # 智能图片分析门面：图片哈希 -> 交易草稿 AI 结果缓存（Redis，key=vision:ai:draft:<MD5>；命中零 OCR/LLM 消耗，useCache=false 时淘汰）
     result-cache-ttl: 30m
@@ -151,20 +125,14 @@ llm:
   # 链路内单渠道最大尝试次数：429 属 RPM/TPM 窗口限流，短退避重试无意义，默认 1 次即流转下一渠道
   max-attempts: 1
   retry-backoff: 300ms
-  gemini:
-    # 首选渠道（Gemini OpenAI 兼容端点）；Key/baseUrl 未配置时健康检查自动跳过
-    enabled: ${LLM_GEMINI_ENABLED:true}
-    base-url: https://generativelanguage.googleapis.com/v1beta/openai
-    api-key: ${GEMINI_API_KEY:}
-    model: ${GEMINI_MODEL:gemini-3.6-flash}
-    read-timeout: 20s
-  groq:
-    # 备用渠道（Groq OpenAI 兼容端点，Llama 开源模型极速推理）；Key 未配置时健康检查自动跳过
-    enabled: ${LLM_GROQ_ENABLED:true}
-    base-url: https://api.groq.com/openai/v1
-    api-key: ${GROQ_API_KEY:}
-    model: ${GROQ_MODEL:openai/gpt-oss-120b}
-    read-timeout: 20s
+  openai-mini:
+    # 首选渠道（廉价批量档，OpenAI 兼容端点）：承担图片交易流水规整 / 文本解析。
+    # 三键对齐 .env 的 OPENAI_MINI_BASE_URL/API_KEY/MODEL（硅基流动 Qwen 等）
+    enabled: ${LLM_OPENAI_MINI_ENABLED:true}
+    base-url: ${OPENAI_MINI_BASE_URL:}
+    api-key: ${OPENAI_MINI_API_KEY:}
+    model: ${OPENAI_MINI_MODEL:}
+    read-timeout: ${OPENAI_MINI_TIMEOUT:30s}
   fallback:
     # 兜底哑响应：不调用任何模型，明确告知降级；enabled=false 时全链失败抛 503
     enabled: ${LLM_FALLBACK_ENABLED:true}

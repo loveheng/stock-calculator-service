@@ -15,8 +15,12 @@ public interface BrokerMonitorTaskRepository extends JpaRepository<BrokerMonitor
 
     long countByUserIdAndStatus(String userId, String status);
 
-    Optional<BrokerMonitorTaskEntity> findFirstByUserIdAndStockCodeAndAlertTypeAndThresholdAndStatus(
-            String userId, String stockCode, String alertType, java.math.BigDecimal threshold, String status);
+    /** 用户任务列表（前端预告单管理页，docs/alert/design.md）：新单在前 */
+    List<BrokerMonitorTaskEntity> findByUserIdOrderByUpdatedAtDesc(String userId);
+
+    Optional<BrokerMonitorTaskEntity> findFirstByUserIdAndStockCodeAndAlertTypeAndThresholdAndBandAndDirectionAndStatus(
+            String userId, String stockCode, String alertType, java.math.BigDecimal threshold,
+            java.math.BigDecimal band, String direction, String status);
 
     /** 到期 RUNNING 集：从未判定过，或距上次判定超过节流间隔 */
     @Query("SELECT t FROM BrokerMonitorTaskEntity t WHERE t.status = 'RUNNING' "

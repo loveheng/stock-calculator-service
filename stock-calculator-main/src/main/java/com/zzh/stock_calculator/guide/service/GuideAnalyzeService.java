@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
 
 /**
  * 选股引导 Step1：消息→候选股票（docs/guide/design.md §三.1）。
@@ -54,6 +55,11 @@ public class GuideAnalyzeService {
     private static final int FALLBACK_ARTICLE_LIMIT = 5;
     private static final int LLM_TIMEOUT_SECONDS = 20;
     private static final long SECONDS_PER_DAY = 86400L;
+    private static final int MAX_ENTITIES = 10;
+
+    /** 6 位数字 token（前后非数字）：消息内嵌代码的确定性归一化扫描（D11） */
+    private static final java.util.regex.Pattern SIX_DIGIT_TOKEN =
+            java.util.regex.Pattern.compile("(?<!\\d)\\d{6}(?!\\d)");
 
     /** 抽取契约标签（postgres/data.sql 播种，copilot_prompt_template 可热调；未播种回落常量） */
     public static final String TAG_GUIDE_ENTITY_EXTRACT = "guide:entity_extract";
@@ -66,12 +72,15 @@ public class GuideAnalyzeService {
             keywords 放事件或行业关键词（候选为空时用于兜底搜索）。\
             无可靠候选时输出空数组。禁止输出 JSON 以外的任何内容。""";
 
+    /** 机器可读分支取值（nextAction；前端分支判据唯一来源，docs/guide/api.md §1.2） */
+    public static final String NEXT_ACTION_PRESENT = "present_candidates";
+    public static final String NEXT_ACTION_CLARIFY = "clarify";
+
+    /** 展示安全提示文案（v1.1：不含工具名，REST 前端可直接渲染；工具链接由 copilot 提示词约定与工具描述承担） */
     static final String NEXT_STEP_WITH_CANDIDATES =
-            "向用户呈现候选清单（附近期提及数与样例依据）并请其选定关注对象；"
-                    + "选定后调用 main.guide.stock_brief（stockId=所选，days 可透传）取个股档案。";
+            "向用户呈现候选清单（附近期提及数与样例依据），请其选定关注对象后查看个股档案。";
     static final String NEXT_STEP_EMPTY =
-            "候选为空：向用户复述你理解的要点并澄清（请补充公司名/行业/大致时间），不要编造股票；"
-                    + "如相关文章里有线索可先引用再追问。";
+            "候选为空：请补充公司名、行业或大致时间，我可以再帮你找；下方相关电报供参考。";
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
@@ -110,11 +119,12 @@ public class GuideAnalyzeService {
         List<ArticleBrief> relatedArticles = candidates.isEmpty()
                 ? fallbackArticles(extraction.keywords(), trimmed, sinceCtime)
                 : List.of();
-        String nextStep = candidates.isEmpty() ? NEXT_STEP_EMPTY : NEXT_STEP_WITH_CANDIDATES;
+        boolean empty = candidates.isEmpty();
         log.info("guide analyze: days={}, entities={}, candidates={}, llmDegraded={}",
                 windowDays, extraction.entities().size(), candidates.size(), extraction.degraded());
         return AnalyzeMessageResponse.builder()
-                .nextStep(nextStep)
+                .nextStep(empty ? NEXT_STEP_EMPTY : NEXT_STEP_WITH_CANDIDATES)
+                .nextAction(empty ? NEXT_ACTION_CLARIFY : NEXT_ACTION_PRESENT)
                 .candidates(candidates)
                 .entities(entities)
                 .keywords(extraction.keywords())
@@ -126,11 +136,49 @@ public class GuideAnalyzeService {
     // ==================== 实体抽取（快/慢路径） ====================
 
     private Extraction extract(String message) {
+        // 代码 token 先行归一化（D11）：裸码/内嵌码 → 字典公司名，确定性零 LLM——
+        // resolveByName 只认名称/曾用名/题材名，代码直传必然落空（裸码中途入口实测根因）
+        List<String> entities = new ArrayList<>(resolveCodeTokens(message));
         if (clsArticleQueryApi.isEntityLikeQuery(message)) {
-            // 快路径：消息即代码/公司名/题材名短查询，词典直锚零 LLM 成本
-            return new Extraction(List.of(message), List.of(), false);
+            // 快路径：消息即代码/公司名/题材名短查询，词典直锚零 LLM 成本；
+            // 消息整体就是一个代码时（已归一化为公司名）不再回填原码，实体回显保持单一
+            String trimmed = message.trim();
+            if (!SIX_DIGIT_TOKEN.matcher(trimmed).matches() && !entities.contains(trimmed)) {
+                entities.add(0, trimmed);
+            }
+            return new Extraction(List.copyOf(entities), List.of(), false);
         }
-        return extractByLlm(message);
+        Extraction llm = extractByLlm(message);
+        if (entities.isEmpty()) {
+            return llm;
+        }
+        // 代码归一化名与 LLM 抽取结果合并去重——LLM 降级时仍有确定性代码锚定兜底（D8 强化）
+        for (String name : llm.entities()) {
+            if (entities.size() >= MAX_ENTITIES) {
+                break;
+            }
+            if (!entities.contains(name)) {
+                entities.add(name);
+            }
+        }
+        return new Extraction(List.copyOf(entities), llm.keywords(), llm.degraded());
+    }
+
+    /** 消息内 6 位数字 token（前后非数字）逐个解析为字典公司名，未收录跳过 */
+    private List<String> resolveCodeTokens(String message) {
+        List<String> names = new ArrayList<>();
+        Matcher matcher = SIX_DIGIT_TOKEN.matcher(message);
+        while (matcher.find() && names.size() < MAX_ENTITIES) {
+            String dictKey = stockDirectoryApi.resolveDictKey(matcher.group());
+            if (dictKey == null) {
+                continue;
+            }
+            String name = stockDirectoryApi.nameByCode(dictKey);
+            if (name != null && !name.isBlank() && !names.contains(name)) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     private Extraction extractByLlm(String message) {

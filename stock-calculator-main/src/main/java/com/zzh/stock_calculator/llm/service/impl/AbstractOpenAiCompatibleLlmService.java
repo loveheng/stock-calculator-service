@@ -25,8 +25,8 @@ import org.springframework.util.StringUtils;
 import java.util.List;
 
 /**
- * OpenAI 兼容渠道基类（Gemini / Groq 共用，策略模式的模板骨架）。
- * 模型实例为 LlmConfig 声明的**全局 Bean**（geminiChatModel / groqChatModel），
+ * OpenAI 兼容渠道基类（openai-mini 渠道复用，策略模式的模板骨架）。
+ * 模型实例为 LlmConfig 声明的**全局 Bean**（openAiMiniChatModel），
  * 渠道类经 @Qualifier + ObjectProvider 注入：Bean 未装配（base-url 未配置）时
  * getIfAvailable() 返回 null，健康检查判定不可用、调度器跳过该节点。
  * maxRetries 已在全局 Bean 上固定为 0，429/5xx 立即抛出、由 LlmChainRouter 快速流转。

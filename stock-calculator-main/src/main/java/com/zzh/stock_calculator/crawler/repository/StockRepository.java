@@ -23,4 +23,7 @@ public interface StockRepository extends JpaRepository<Stock, String> {
 
     /** 6 位码双形态匹配（字典形态混杂：沪深 sh600745 前缀尾部 / 北交所 920000.BJ 后缀头部 "920000."） */
     boolean existsByStockIdEndingWithOrStockIdStartingWith(String endingSuffix, String startingPrefix);
+
+    /** 6 位码双形态解析出字典键实体（guide 中途入口裸码归一化，docs/guide/design.md D11；与 exists 同款形态语义） */
+    Optional<Stock> findFirstByStockIdEndingWithOrStockIdStartingWith(String endingSuffix, String startingPrefix);
 }

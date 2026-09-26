@@ -34,10 +34,10 @@ class LlmChainRouterTest {
     private static final String USER = "user-message";
 
     @Mock
-    private LlmService gemini;
+    private LlmService openaiMini;
 
     @Mock
-    private LlmService groq;
+    private LlmService second;
 
     @Mock
     private LlmService fallback;
@@ -50,77 +50,77 @@ class LlmChainRouterTest {
         props = new LlmProperties();
         props.setMaxAttempts(1);
         props.setRetryBackoff(Duration.ofMillis(1));
-        router = new LlmChainRouter(List.of(gemini, groq, fallback), props);
+        router = new LlmChainRouter(List.of(openaiMini, second, fallback), props);
     }
 
     @Test
     void firstChannelSuccessReturnsImmediately() {
-        when(gemini.isAvailable()).thenReturn(true);
-        when(gemini.chat(SYS, USER)).thenReturn("整理结果");
+        when(openaiMini.isAvailable()).thenReturn(true);
+        when(openaiMini.chat(SYS, USER)).thenReturn("整理结果");
 
         assertEquals("整理结果", router.chat(SYS, USER));
-        verify(groq, never()).chat(anyString(), anyString());
+        verify(second, never()).chat(anyString(), anyString());
         verify(fallback, never()).chat(anyString(), anyString());
     }
 
     @Test
     void rateLimitedFlowsToNextChannelWithoutRetryByDefault() {
-        when(gemini.isAvailable()).thenReturn(true);
-        when(gemini.chat(anyString(), anyString()))
-                .thenThrow(new LlmProviderException("gemini 触发限流, http=429", true));
-        when(groq.isAvailable()).thenReturn(true);
-        when(groq.chat(SYS, USER)).thenReturn("groq 结果");
+        when(openaiMini.isAvailable()).thenReturn(true);
+        when(openaiMini.chat(anyString(), anyString()))
+                .thenThrow(new LlmProviderException("openai-mini 触发限流, http=429", true));
+        when(second.isAvailable()).thenReturn(true);
+        when(second.chat(SYS, USER)).thenReturn("second 结果");
 
-        assertEquals("groq 结果", router.chat(SYS, USER));
-        verify(gemini, times(1)).chat(anyString(), anyString());
+        assertEquals("second 结果", router.chat(SYS, USER));
+        verify(openaiMini, times(1)).chat(anyString(), anyString());
         verify(fallback, never()).chat(anyString(), anyString());
     }
 
     @Test
     void retryableErrorRetriesWhenMaxAttemptsAboveOne() {
         props.setMaxAttempts(2);
-        LlmChainRouter configured = new LlmChainRouter(List.of(gemini, groq, fallback), props);
-        when(gemini.isAvailable()).thenReturn(true);
-        when(gemini.chat(anyString(), anyString()))
-                .thenThrow(new LlmProviderException("gemini 服务端异常, http=500", true));
-        when(groq.isAvailable()).thenReturn(true);
-        when(groq.chat(SYS, USER)).thenReturn("groq 结果");
+        LlmChainRouter configured = new LlmChainRouter(List.of(openaiMini, second, fallback), props);
+        when(openaiMini.isAvailable()).thenReturn(true);
+        when(openaiMini.chat(anyString(), anyString()))
+                .thenThrow(new LlmProviderException("openai-mini 服务端异常, http=500", true));
+        when(second.isAvailable()).thenReturn(true);
+        when(second.chat(SYS, USER)).thenReturn("second 结果");
 
-        assertEquals("groq 结果", configured.chat(SYS, USER));
-        verify(gemini, times(2)).chat(anyString(), anyString());
+        assertEquals("second 结果", configured.chat(SYS, USER));
+        verify(openaiMini, times(2)).chat(anyString(), anyString());
     }
 
     @Test
     void nonRetryableErrorMovesOnWithoutRetry() {
         props.setMaxAttempts(2);
-        LlmChainRouter configured = new LlmChainRouter(List.of(gemini, groq, fallback), props);
-        when(gemini.isAvailable()).thenReturn(true);
-        when(gemini.chat(anyString(), anyString()))
-                .thenThrow(new LlmProviderException("gemini 鉴权失败, http=401", false));
-        when(groq.isAvailable()).thenReturn(true);
-        when(groq.chat(SYS, USER)).thenReturn("groq 结果");
+        LlmChainRouter configured = new LlmChainRouter(List.of(openaiMini, second, fallback), props);
+        when(openaiMini.isAvailable()).thenReturn(true);
+        when(openaiMini.chat(anyString(), anyString()))
+                .thenThrow(new LlmProviderException("openai-mini 鉴权失败, http=401", false));
+        when(second.isAvailable()).thenReturn(true);
+        when(second.chat(SYS, USER)).thenReturn("second 结果");
 
-        assertEquals("groq 结果", configured.chat(SYS, USER));
-        verify(gemini, times(1)).chat(anyString(), anyString());
+        assertEquals("second 结果", configured.chat(SYS, USER));
+        verify(openaiMini, times(1)).chat(anyString(), anyString());
     }
 
     @Test
     void skipsUnavailableChannels() {
-        when(gemini.isAvailable()).thenReturn(false);
-        when(groq.isAvailable()).thenReturn(true);
-        when(groq.chat(SYS, USER)).thenReturn("groq 结果");
+        when(openaiMini.isAvailable()).thenReturn(false);
+        when(second.isAvailable()).thenReturn(true);
+        when(second.chat(SYS, USER)).thenReturn("second 结果");
 
-        assertEquals("groq 结果", router.chat(SYS, USER));
-        verify(gemini, never()).chat(anyString(), anyString());
+        assertEquals("second 结果", router.chat(SYS, USER));
+        verify(openaiMini, never()).chat(anyString(), anyString());
     }
 
     @Test
     void fallbackGuaranteesResultWhenEnabled() {
-        when(gemini.isAvailable()).thenReturn(true);
-        when(gemini.chat(anyString(), anyString()))
+        when(openaiMini.isAvailable()).thenReturn(true);
+        when(openaiMini.chat(anyString(), anyString()))
                 .thenThrow(new LlmProviderException("超时", true));
-        when(groq.isAvailable()).thenReturn(true);
-        when(groq.chat(anyString(), anyString()))
+        when(second.isAvailable()).thenReturn(true);
+        when(second.chat(anyString(), anyString()))
                 .thenThrow(new LlmProviderException("http=429", true));
         when(fallback.isAvailable()).thenReturn(true);
         when(fallback.chat(anyString(), anyString())).thenReturn("[降级响应] 模板");
@@ -130,11 +130,11 @@ class LlmChainRouterTest {
 
     @Test
     void allFailThrows503WhenFallbackDisabled() {
-        when(gemini.isAvailable()).thenReturn(true);
-        when(gemini.chat(anyString(), anyString()))
+        when(openaiMini.isAvailable()).thenReturn(true);
+        when(openaiMini.chat(anyString(), anyString()))
                 .thenThrow(new LlmProviderException("超时", true));
-        when(groq.isAvailable()).thenReturn(true);
-        when(groq.chat(anyString(), anyString()))
+        when(second.isAvailable()).thenReturn(true);
+        when(second.chat(anyString(), anyString()))
                 .thenThrow(new LlmProviderException("http=429", true));
         when(fallback.isAvailable()).thenReturn(false);
 
@@ -149,17 +149,17 @@ class LlmChainRouterTest {
     void blankPromptRejected() {
         BusinessException ex = assertThrows(BusinessException.class, () -> router.chat(" ", USER));
         assertEquals(400, ex.getCode());
-        verify(gemini, never()).chat(anyString(), anyString());
+        verify(openaiMini, never()).chat(anyString(), anyString());
     }
 
     @Test
     void routerPassesExactPromptsToChannel() {
-        when(gemini.isAvailable()).thenReturn(true);
-        when(gemini.chat(anyString(), anyString())).thenReturn("ok");
+        when(openaiMini.isAvailable()).thenReturn(true);
+        when(openaiMini.chat(anyString(), anyString())).thenReturn("ok");
 
         router.chat(SYS, USER);
 
-        verify(gemini).chat(argThat(SYS::equals), argThat(USER::equals));
+        verify(openaiMini).chat(argThat(SYS::equals), argThat(USER::equals));
     }
 
     @Test

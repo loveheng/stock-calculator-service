@@ -77,7 +77,9 @@ class GuideAnalyzeServiceTest {
     @Test
     void fastPathAnchorsDirectStockWithoutLlm() {
         when(clsArticleQueryApi.isEntityLikeQuery("600519")).thenReturn(true);
-        List<NamedAnchor> anchors = List.of(new NamedAnchor("600519", "STOCK", "sh600519"));
+        when(stockDirectoryApi.resolveDictKey("600519")).thenReturn("sh600519");
+        when(stockDirectoryApi.nameByCode("sh600519")).thenReturn("贵州茅台");
+        List<NamedAnchor> anchors = List.of(new NamedAnchor("贵州茅台", "STOCK", "sh600519"));
         when(clsDictAnchorApi.resolveEach(anyCollection())).thenReturn(anchors);
         stubCommon("sh600519", "贵州茅台");
 
@@ -89,9 +91,49 @@ class GuideAnalyzeServiceTest {
         assertEquals("STOCK", response.getCandidates().get(0).getHitType());
         assertEquals(12L, response.getCandidates().get(0).getRecentMentionCount());
         assertEquals(1, response.getCandidates().get(0).getSampleArticles().size());
-        assertTrue(response.getNextStep().contains("main.guide.stock_brief"));
+        assertTrue(response.getNextStep().contains("选定关注对象"));
+        assertEquals("present_candidates", response.getNextAction());
         assertFalse(response.isLlmDegraded());
         verify(llmChainRouter, never()).chat(anyString(), anyString());
+    }
+
+    @Test
+    void bareCodeNormalizesBeforeAnchoring() {
+        // D11 回归锚点：裸 6 位码（有效股票）不再空候选+澄清，词典归一化后直锚
+        when(clsArticleQueryApi.isEntityLikeQuery("600519")).thenReturn(true);
+        when(stockDirectoryApi.resolveDictKey("600519")).thenReturn("sh600519");
+        when(stockDirectoryApi.nameByCode("sh600519")).thenReturn("贵州茅台");
+        when(clsDictAnchorApi.resolveEach(anyCollection())).thenReturn(
+                List.of(new NamedAnchor("贵州茅台", "STOCK", "sh600519")));
+        stubCommon("sh600519", "贵州茅台");
+
+        AnalyzeMessageResponse response = service.analyze("600519", null);
+
+        assertEquals(1, response.getCandidates().size());
+        assertEquals("sh600519", response.getCandidates().get(0).getStockId());
+        // 纯代码消息实体回显只留归一化后的公司名，不再回填原码
+        assertEquals(1, response.getEntities().size());
+        assertEquals("贵州茅台", response.getEntities().get(0).getName());
+    }
+
+    @Test
+    void embeddedCodeAnchorsEvenWhenLlmDegraded() {
+        // D11 强化：LLM 免费链路降级时，消息内嵌代码仍经词典路径确定性锚定（fail-open 不空手）
+        when(clsArticleQueryApi.isEntityLikeQuery("600519最近怎么样")).thenReturn(false);
+        when(stockDirectoryApi.resolveDictKey("600519")).thenReturn("sh600519");
+        when(stockDirectoryApi.nameByCode("sh600519")).thenReturn("贵州茅台");
+        when(copilotPromptResolver.resolveTaskTemplate(anyString())).thenReturn(null);
+        when(llmChainRouter.chat(anyString(), anyString())).thenReturn("降级模板文本");
+        when(llmChainRouter.isDegradedResponse(anyString())).thenReturn(true);
+        when(clsDictAnchorApi.resolveEach(anyCollection())).thenReturn(
+                List.of(new NamedAnchor("贵州茅台", "STOCK", "sh600519")));
+        stubCommon("sh600519", "贵州茅台");
+
+        AnalyzeMessageResponse response = service.analyze("600519最近怎么样", null);
+
+        assertTrue(response.isLlmDegraded());
+        assertEquals(1, response.getCandidates().size());
+        assertEquals("sh600519", response.getCandidates().get(0).getStockId());
     }
 
     @Test
@@ -167,7 +209,8 @@ class GuideAnalyzeServiceTest {
         assertTrue(response.getCandidates().isEmpty());
         assertEquals(1, response.getRelatedArticles().size());
         assertEquals(201L, response.getRelatedArticles().get(0).getArticleId());
-        assertTrue(response.getNextStep().contains("澄清"));
+        assertEquals("clarify", response.getNextAction());
+        assertTrue(response.getNextStep().contains("补充公司名"));
         verify(clsArticleQueryApi, never()).countByStockCodeSince(anyString(), anyLong());
     }
 

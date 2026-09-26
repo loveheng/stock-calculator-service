@@ -36,6 +36,7 @@ public class WebConfig implements WebMvcConfigurer {
                 "/api/search/**",    // 资讯搜索（search 域，backend-implementation §6）
                 "/api/kg/**",        // 时序知识图谱查询（kg 域前端可视化，登录即可用）
                 "/api/push/**",      // Web Push 订阅管理（notify 域，登录即可用）
-                "/api/broker/**");   // 画布 broker 端点族（free-canvas v3，登录即可用）
+                "/api/broker/**",   // 画布 broker 端点族（free-canvas v3，登录即可用）
+                "/api/import/**");  // 截图导入/OCR 端点族（vision 域，登录即可用；经 MCP ocr 工具链路）
     }
 }

@@ -1,9 +1,5 @@
-package com.zzh.stock_calculator.vision.service.impl;
+package com.zzh.stock_calculator.mcp.vision;
 
-import com.zzh.stock_calculator.util.HttpUtil;
-import com.zzh.stock_calculator.vision.config.OcrProperties;
-import com.zzh.stock_calculator.vision.service.OcrChannelException;
-import com.zzh.stock_calculator.vision.service.OcrService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ByteArrayResource;
@@ -17,13 +13,14 @@ import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 /**
- * OCR.space 免费渠道（备用策略，@Order(2)）。
+ * OCR.space 免费渠道（备用策略，@Order(2)；自 main vision 域平移）。
  * POST multipart/form-data 至 https://api.ocr.space/parse/image（默认 OCREngine=2），
- * language 参数透传（备注渠道约定：chs=简体中文），API 文档见 https://ocr.space/ocrapi#ocrengine。
+ * language 参数透传（渠道约定：chs=简体中文）。
  * 错误判定：HTTP 429（免费额度耗尽/请求过快）、5xx、超时 → 可重试；其余 4xx → 不可重试直接换渠道。
  * OCRExitCode 1=成功、2=部分成功均视为有结果；IsErroredOnProcessing=true → 可重试异常。
  */
@@ -41,8 +38,7 @@ public class OcrSpaceService implements OcrService {
     public OcrSpaceService(OcrProperties properties, ObjectMapper objectMapper) {
         this.props = properties.getOcrspace();
         this.objectMapper = objectMapper;
-        // 客户端构建统一收敛在 HttpUtil
-        this.restClient = HttpUtil.jdkRestClient(props.getConnectTimeout(), props.getReadTimeout());
+        this.restClient = jdkRestClient(props.getConnectTimeout(), props.getReadTimeout());
     }
 
     @Override
@@ -78,14 +74,14 @@ public class OcrSpaceService implements OcrService {
                     .retrieve()
                     .body(byte[].class);
 
-            return parseResult(HttpUtil.toUtf8String(respBytes));
+            return parseResult(toUtf8String(respBytes));
 
         } catch (RestClientResponseException e) {
             throw classify(e);
         } catch (OcrChannelException e) {
             throw e;
         } catch (Exception e) {
-            throw new OcrChannelException("ocrspace 请求异常: " + HttpUtil.rootMessage(e), true, e);
+            throw new OcrChannelException("ocrspace 请求异常: " + rootMessage(e), true, e);
         }
     }
 
@@ -132,5 +128,26 @@ public class OcrSpaceService implements OcrService {
             return list.stream().map(String::valueOf).reduce((a, b) -> a + "; " + b).orElse("");
         }
         return String.valueOf(raw);
+    }
+
+    // ===== HTTP/字符串辅助（main util.HttpUtil 的 mcp 侧内联等价，避免跨模块依赖） =====
+
+    private static RestClient jdkRestClient(Duration connectTimeout, Duration readTimeout) {
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) connectTimeout.toMillis());
+        factory.setReadTimeout((int) readTimeout.toMillis());
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
+    private static String toUtf8String(byte[] bytes) {
+        return bytes == null ? "" : new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static String rootMessage(Throwable e) {
+        Throwable cur = e;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur.getMessage() == null ? cur.getClass().getSimpleName() : cur.getMessage();
     }
 }

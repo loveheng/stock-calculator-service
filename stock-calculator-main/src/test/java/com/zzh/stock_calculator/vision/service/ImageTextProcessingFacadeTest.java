@@ -3,7 +3,7 @@ package com.zzh.stock_calculator.vision.service;
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.copilot.CopilotPromptResolver;
 import com.zzh.stock_calculator.llm.LlmChainRouter;
-import com.zzh.stock_calculator.vision.config.VisionAiProperties;
+import com.zzh.stock_calculator.vision.VisionAiProperties;
 import com.zzh.stock_calculator.vision.dto.StockCandidate;
 import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
 import com.zzh.stock_calculator.vision.enums.TradeDirection;
@@ -47,7 +47,7 @@ class ImageTextProcessingFacadeTest {
     private static final byte[] IMAGE = "fake-image-bytes".getBytes(StandardCharsets.UTF_8);
 
     @Mock
-    private OcrChainManager ocrChainManager;
+    private OcrViaMcpService ocrViaMcpService;
 
     @Mock
     private LlmChainRouter llmChainRouter;
@@ -56,7 +56,7 @@ class ImageTextProcessingFacadeTest {
     private TradeDraftParser tradeDraftParser;
 
     @Mock
-    private StockCodeResolver stockCodeResolver;
+    private DictStockCodeResolver stockCodeResolver;
 
     @Mock
     private CopilotPromptResolver promptResolver;
@@ -78,7 +78,7 @@ class ImageTextProcessingFacadeTest {
         cacheStore = new InMemoryVisionCacheStore();
         // PromptFormatter、Jackson 与结果缓存用真实实现，校验真实数据流（含 JSON 往返）与缓存行为
         // mock resolver 未打桩返回 null → PromptFormatter 全部走内置常量（fail-open 默认态）
-        facade = new ImageTextProcessingFacade(ocrChainManager, new PromptFormatter(promptResolver), llmChainRouter,
+        facade = new ImageTextProcessingFacade(ocrViaMcpService, new PromptFormatter(promptResolver), llmChainRouter,
                 tradeDraftParser, stockCodeResolver, new VisionAiProperties(), new ObjectMapper(), cacheStore);
     }
 
@@ -86,7 +86,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void happyPathOrchestratesOcrThenPromptThenLlm() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("  600745 中际旭创  \n\n\n\n买入 100股 \n");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("  600745 中际旭创  \n\n\n\n买入 100股 \n");
         when(llmChainRouter.chat(anyString(), anyString())).thenReturn("整理结果");
 
         String result = facade.processImageToAiResult(IMAGE, "提取交易记录");
@@ -100,7 +100,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void emptyOcrTextThrows422WithoutCallingLlm() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("");
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> facade.processImageToAiResult(IMAGE, null));
@@ -111,7 +111,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void ocrAllFailPropagatesWithoutCallingLlm() {
-        when(ocrChainManager.recognizeText(IMAGE))
+        when(ocrViaMcpService.recognizeText(IMAGE))
                 .thenThrow(new BusinessException(503, "所有 OCR 渠道均不可用"));
 
         BusinessException ex = assertThrows(BusinessException.class,
@@ -123,7 +123,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void blankTaskFallsBackToDefaultInstruction() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("600745 中际旭创");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("600745 中际旭创");
         when(llmChainRouter.chat(anyString(), anyString())).thenReturn("结果");
 
         facade.processImageToAiResult(IMAGE, "   ");
@@ -135,7 +135,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void tradeDraftsCachedOnSecondCall() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("600745 买入");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("600745 买入");
         when(llmChainRouter.chat(anyString(), anyString()))
                 .thenReturn("[[\"600745\",\"中际旭创\",\"BUY\",16.69,100,\"2026-09-01 10:00:00\"]]");
         when(tradeDraftParser.parse(anyString())).thenReturn(List.of(sampleDraft()));
@@ -147,14 +147,14 @@ class ImageTextProcessingFacadeTest {
         assertEquals(1, first.size());
         assertEquals(first, second);
         // 第二次命中结果缓存：OCR / LLM / 解析均只执行一次
-        verify(ocrChainManager, times(1)).recognizeText(IMAGE);
+        verify(ocrViaMcpService, times(1)).recognizeText(IMAGE);
         verify(llmChainRouter, times(1)).chat(anyString(), anyString());
         verify(tradeDraftParser, times(1)).parse(anyString());
     }
 
     @Test
     void forceRefreshBypassesCacheAndEnablesStrictReviewPrompt() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("600745 买入");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("600745 买入");
         when(llmChainRouter.chat(anyString(), anyString()))
                 .thenReturn("[[\"600745\",\"中际旭创\",\"BUY\",16.69,100,\"2026-09-01 10:00:00\"]]");
         when(tradeDraftParser.parse(anyString())).thenReturn(List.of(sampleDraft()));
@@ -165,7 +165,7 @@ class ImageTextProcessingFacadeTest {
 
         assertEquals(1, refreshed.size());
         // 强制刷新：不命中缓存，OCR 与 LLM 均重新执行
-        verify(ocrChainManager, times(2)).recognizeText(IMAGE);
+        verify(ocrViaMcpService, times(2)).recognizeText(IMAGE);
         verify(llmChainRouter, times(2)).chat(anyString(), anyString());
         // 第二次调用（useCache=false）的 System Prompt 必须启用审查模式
         verify(llmChainRouter).chat(argThat(sys -> sys.contains("审查模式")), anyString());
@@ -173,7 +173,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void degradedResponseThrows503AndNeverCached() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("600745 买入");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("600745 买入");
         when(llmChainRouter.chat(anyString(), anyString()))
                 .thenReturn("[降级响应] AI 渠道暂不可用，本次结果未经模型处理，请稍后重试。");
         when(llmChainRouter.isDegradedResponse(anyString())).thenReturn(true);
@@ -191,7 +191,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void parseFailurePropagatesWithoutCaching() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("600745 买入");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("600745 买入");
         when(llmChainRouter.chat(anyString(), anyString())).thenReturn("不是 JSON 的输出");
         when(llmChainRouter.isDegradedResponse(anyString())).thenReturn(false);
         when(tradeDraftParser.parse(anyString()))
@@ -213,7 +213,7 @@ class ImageTextProcessingFacadeTest {
                 () -> facade.processImageToTradeDrafts(new byte[0], true));
 
         assertEquals(400, ex.getCode());
-        verify(ocrChainManager, never()).recognizeText(any(byte[].class));
+        verify(ocrViaMcpService, never()).recognizeText(any(byte[].class));
     }
 
     private TradeDraftItem sampleDraft() {
@@ -243,7 +243,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void uniqueCandidateAutoFillsStockCodeAndCachesEnrichedResult() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("*ST闻泰 卖出");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("*ST闻泰 卖出");
         when(llmChainRouter.chat(anyString(), anyString()))
                 .thenReturn("[[\"*ST闻泰\",\"SELL\",16.69,100,\"2026-09-01 10:00:00\"]]");
         when(tradeDraftParser.parse(anyString())).thenReturn(List.of(draftWithoutCode()));
@@ -266,7 +266,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void multiCandidatesTransferredToFrontendWithNullCode() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("沪深300ETF 买入");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("沪深300ETF 买入");
         when(llmChainRouter.chat(anyString(), anyString()))
                 .thenReturn("[[\"沪深300ETF\",\"BUY\",3.85,10000,\"2026-09-01 10:00:00\"]]");
         when(tradeDraftParser.parse(anyString())).thenReturn(List.of(
@@ -291,7 +291,7 @@ class ImageTextProcessingFacadeTest {
 
     @Test
     void zeroMatchSetsEmptyCandidatesWithNullCode() {
-        when(ocrChainManager.recognizeText(IMAGE)).thenReturn("不存在的股票 卖出");
+        when(ocrViaMcpService.recognizeText(IMAGE)).thenReturn("不存在的股票 卖出");
         when(llmChainRouter.chat(anyString(), anyString()))
                 .thenReturn("[[\"不存在的股票\",\"SELL\",16.69,100,\"2026-09-01 10:00:00\"]]");
         when(tradeDraftParser.parse(anyString())).thenReturn(List.of(
@@ -323,7 +323,7 @@ class ImageTextProcessingFacadeTest {
 
         assertEquals("600745", drafts.getFirst().getStockCode());
         // 全程未走 OCR/LLM（纯缓存命中 + 回填）
-        verify(ocrChainManager, never()).recognizeText(any(byte[].class));
+        verify(ocrViaMcpService, never()).recognizeText(any(byte[].class));
         verify(llmChainRouter, never()).chat(anyString(), anyString());
 
         // 回写缓存后：再次命中不再是旧结构，resolver 不重复查询

@@ -300,10 +300,10 @@ CREATE INDEX idx_ann_sub_stock ON announcement_subscription (stock_id);
   - 下载：static.cninfo.com.cn/<adjunctUrl> 直出无防盗链；短时 ~10 请求无拦截，300ms 节流维持
   - 边界：整月无公告返回空 JSON 属正常（例：000001 的 2025-01），水位幂等吸收
 - S4 辅证：同 JVM 双抽 deterministic=true 逐字节一致；跨进程/重启留实现期
-- S5 LLM 双阶段（groq/gpt-oss-120b，经代理 192.168.1.40:2080；直连 403 被中间设备拦截，代理后 curl 200）：600745 共 5 篇全链路实证 **5/5 DONE**，零 GROUNDING_FAIL/零 FAILED
+- S5 LLM 双阶段（gpt-oss-120b，OpenAI 兼容端点，经代理 192.168.1.40:2080；直连 403 被中间设备拦截，代理后 curl 200）：600745 共 5 篇全链路实证 **5/5 DONE**，零 GROUNDING_FAIL/零 FAILED
   - 阶段一：nodeId 契约回传正常（selected 2~9 节点）；两次异常实测——空数组 `[]` 与幻觉树外 nodeId `"1"`（树上为 `0-x` 形态）均致 joined 空串，已加降级守卫（空 selection → level≤2 全树重切片），守卫两路径均实测生效
   - 阶段二：摘要 257~349 字，数值全部照抄原文（1,394,505,000.00 元/16.22%、2,139,057,955 元、279.04 万股、0.22%），接地校验零失配；缩进列表无 Markdown 表格
-  - 瞬时语义闭环：groq 429 → fallback 降级响应 → LlmRouteException → fail_count=1 保 PENDING（不烧终态），下轮自动恢复 DONE
+  - 瞬时语义闭环：LLM 渠道 429 → fallback 降级响应 → LlmRouteException → fail_count=1 保 PENDING（不烧终态），下轮自动恢复 DONE
   - 向量化：确定性 UUID（announcement:{id}）落 vector_store，bge-m3 1024 维与 cls 同空间；429 期间 PENDING 保持、额度护栏语义未触发
   - 单测：TextCleaner 6 + GroundingValidator 8（单位族/容差/大写金额盲区/裸数通配）+ DistillService 8（围栏容错/重试/降级/年报注入）全绿；过程中修复 validate() 全通过误返回 fail 的逻辑 Bug
 - 文档同步：§4.1/§4.2/§8 状态行已按实证结论更新

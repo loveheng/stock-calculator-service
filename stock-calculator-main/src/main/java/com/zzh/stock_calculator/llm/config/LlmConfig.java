@@ -16,26 +16,16 @@ import org.springframework.context.annotation.Primary;
  * 自动装配底层 OkHttp 客户端（Spring AI 2.x 标准做法）。
  * bean 方法按 base-url 是否配置做条件装配：未配置时不建 Bean，渠道服务经
  * ObjectProvider 注入后健康检查自动跳过，不影响其余渠道。
- * geminiChatModel 标 @Primary：vision 旧链路（/ocr-parse 的 ChatClient.Builder）按唯一
- * ChatModel 解析时复用同一实例，Gemini 连接参数因此全工程只有 llm.gemini.* 一处。
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(LlmProperties.class)
 public class LlmConfig {
 
-    /** Gemini 渠道模型（全局 Bean，@Primary 供旧视觉链路 ChatClient 复用） */
-    @Bean("geminiChatModel")
-    @Primary
-    @ConditionalOnProperty(prefix = "llm.gemini", name = "base-url")
-    public OpenAiChatModel geminiChatModel(LlmProperties properties) {
-        return buildChatModel(properties.getGemini());
-    }
-
-    /** Groq 渠道模型（全局 Bean） */
-    @Bean("groqChatModel")
-    @ConditionalOnProperty(prefix = "llm.groq", name = "base-url")
-    public OpenAiChatModel groqChatModel(LlmProperties properties) {
-        return buildChatModel(properties.getGroq());
+    /** openai-mini 渠道模型（全局 Bean）：廉价批量档，承担图片交易流水规整解析 */
+    @Bean("openAiMiniChatModel")
+    @ConditionalOnProperty(prefix = "llm.openai-mini", name = "base-url")
+    public OpenAiChatModel openAiMiniChatModel(LlmProperties properties) {
+        return buildChatModel(properties.getOpenaiMini());
     }
 
     /** 渠道专属 ChatModel：连接参数全部落在 OpenAiChatOptions 上；maxRetries=0 保住责任链快速流转语义 */

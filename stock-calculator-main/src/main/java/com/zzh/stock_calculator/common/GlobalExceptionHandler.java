@@ -3,6 +3,8 @@ package com.zzh.stock_calculator.common;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -46,9 +48,19 @@ public class GlobalExceptionHandler {
         return ApiResponse.fail(400, "上传文件大小超过系统上限");
     }
 
+    /**
+     * 系统未知异常兜底：HTTP 恒 200 约定下业务 500 在网关/访问日志不可见（api 信封口径），
+     * 本行是服务侧唯一可观测点——[ALERT-500] 稳定标记供日志告警/计数 grep（同 [DEGRADE] 惯例），
+     * uri 定位端点（getRequestURI 不含 query，不违反 C1 不打明文红线）。
+     */
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleGenericException(Exception e) {
-        log.error("系统未知异常", e);
+        String uri = "";
+        if (RequestContextHolder.getRequestAttributes()
+                instanceof ServletRequestAttributes servletAttributes) {
+            uri = servletAttributes.getRequest().getRequestURI();
+        }
+        log.error("[ALERT-500] 系统未知异常 uri={}", uri, e);
         return ApiResponse.fail(500, "系统繁忙，请稍后重试");
     }
 }

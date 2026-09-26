@@ -9,9 +9,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -83,6 +85,10 @@ public class DispatchTool {
             case SYNC_DIRECT -> {
                 // 梯队保障：sync 路径由 ToolInvoker 8s 上游兜底，天然落在 dispatch 10s 预算内
                 ObjectNode args = parseParams(paramsJson);
+                String contract = validateArgs(route.tool(), args);
+                if (contract != null) {
+                    return contract + " traceId=" + tid;
+                }
                 return toolInvoker.invoke(route.tool(), args, tid).toString();
             }
             case TASK -> {
@@ -128,11 +134,83 @@ public class DispatchTool {
         }
     }
 
-    /** 全量能力菜单（copilot 零命中自纠用）：从注册表动态生成——注册表加工具菜单自动更新，零维护 */
+    /**
+     * 参数契约预检（2026-09-26 画布实证：copilot LLM 只见 dispatch 单工具、能力菜单原不含参数
+     * schema，会按直觉编造参数名（symbol/loadToCanvas ≠ fetch_kline 的 stock）直传，被下游 MCP
+     * JSON schema 校验拒绝且错误穿透前端）。与「零命中回能力菜单」同一自纠模式：预检不符时回
+     * 单工具参数契约，LLM 同轮修正重发；schema 缺失的工具不校验（放行，由下游兜底）。
+     */
+    private String validateArgs(ToolDescriptor tool, ObjectNode args) {
+        JsonNode schema = tool.getParamSchema();
+        if (schema == null || !schema.isObject() || schema.size() == 0) {
+            return null;
+        }
+        List<String> problems = new ArrayList<>();
+        for (var entry : schema.properties()) {
+            JsonNode def = entry.getValue();
+            if (def.has("required") && def.get("required").asBoolean()) {
+                JsonNode value = args.get(entry.getKey());
+                if (value == null || value.isNull()) {
+                    problems.add("缺必填参数 " + entry.getKey());
+                }
+            }
+        }
+        for (String name : args.propertyNames()) {
+            if (!schema.has(name)) {
+                problems.add("未定义参数 " + name);
+            }
+        }
+        if (problems.isEmpty()) {
+            return null;
+        }
+        return "参数不符（" + String.join("；", problems) + "）。" + tool.getToolName()
+                + " 参数契约：" + renderSchema(schema) + "。请修正后重发 dispatch"
+                + "（intentText 含工具名，已知参数用 paramsJson 直传）";
+    }
+
+    /** 参数契约渲染：stock*(股票代码或名称)，adjustType(...)…（带*必填） */
+    private static String renderSchema(JsonNode schema) {
+        StringBuilder sb = new StringBuilder();
+        for (var entry : schema.properties()) {
+            if (!sb.isEmpty()) {
+                sb.append("，");
+            }
+            sb.append(entry.getKey());
+            if (entry.getValue().has("required") && entry.getValue().get("required").asBoolean()) {
+                sb.append("*");
+            }
+            sb.append("(");
+            if (entry.getValue().has("desc")) {
+                sb.append(entry.getValue().get("desc").asString());
+            }
+            sb.append(")");
+        }
+        return sb.append("（带*必填）").toString();
+    }
+
+    /** 全量能力菜单（copilot 零命中自纠用）：从注册表动态生成——注册表加工具菜单自动更新，零维护；附参数名清单（带*必填）防 LLM 编造参数名 */
     private String capabilityMenu() {
         return toolRegistry.plannable().stream()
-                .map(t -> t.getToolName() + "（" + t.getDescription() + "）")
+                .map(t -> t.getToolName() + "（" + t.getDescription()
+                        + "；参数：" + paramNames(t.getParamSchema()) + "）")
                 .reduce((a, b) -> a + "；" + b)
                 .orElse("（注册表为空）");
+    }
+
+    private static String paramNames(JsonNode schema) {
+        if (schema == null || !schema.isObject() || schema.size() == 0) {
+            return "无";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (var entry : schema.properties()) {
+            if (!sb.isEmpty()) {
+                sb.append("、");
+            }
+            sb.append(entry.getKey());
+            if (entry.getValue().has("required") && entry.getValue().get("required").asBoolean()) {
+                sb.append("*");
+            }
+        }
+        return sb.append("（*必填）").toString();
     }
 }

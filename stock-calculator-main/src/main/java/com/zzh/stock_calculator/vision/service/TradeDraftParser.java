@@ -32,7 +32,7 @@ public class TradeDraftParser {
     /**
      * 解析模型输出为交易草稿列表。
      *
-     * @param rawModelText LLM/多模态模型的原始输出
+     * @param rawModelText LLM 的原始输出
      * @return 解析结果；模型输出 [] 或空白时返回空列表（业务空结果，可缓存）
      * @throws BusinessException 500 输出不含合法 JSON 二维数组
      */
@@ -66,7 +66,7 @@ public class TradeDraftParser {
     }
 
     /**
-     * 逐行映射；列数自适应：5 列 = 新契约（名称在前，代码由后端 Smartbox 补全，见 SmartBoxStockCodeResolver），
+     * 逐行映射；列数自适应：5 列 = 新契约（名称在前，代码由后端字典补全，见 DictStockCodeResolver），
      * 6 列及以上 = 旧契约（代码在前，兼容 DB/Redis 未刷新的旧模板）；列数不足或数字/时间字段非法的行跳过并告警。
      */
     private List<TradeDraftItem> mapToItems(List<List<Object>> rawRows) {

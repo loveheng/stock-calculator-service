@@ -1160,41 +1160,6 @@
       "type": "com.zzh.stock_calculator.vision.service.TradeVisionService"
     },
     {
-      "type": "com.zzh.stock_calculator.vision.impl.GeminiOcrExecutorImpl",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": [
-            "org.springframework.ai.chat.client.ChatClient$Builder"
-          ]
-        }
-      ]
-    },
-    {
-      "type": "com.zzh.stock_calculator.vision.impl.GeminiOcrExecutorImpl$$SpringCGLIB$$0",
-      "fields": [
-        {
-          "name": "CGLIB$CALLBACK_FILTER"
-        },
-        {
-          "name": "CGLIB$FACTORY_DATA"
-        }
-      ]
-    },
-    {
-      "type": "com.zzh.stock_calculator.vision.service.impl.GeminiTradeVisionServiceImpl",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": [
-            "com.zzh.stock_calculator.vision.OcrExecutor",
-            "com.zzh.stock_calculator.vision.service.ImagePreprocessService",
-            "tools.jackson.databind.ObjectMapper"
-          ]
-        }
-      ]
-    },
-    {
       "type": "com.zzh.stock_calculator.crawler.task.ClsDayTask",
       "methods": [
         {
@@ -13038,12 +13003,6 @@
     },
     {
       "glob": "com/zzh/stock_calculator/service/TradeVisionService.class"
-    },
-    {
-      "glob": "com/zzh/stock_calculator/service/impl/GeminiOcrExecutorImpl.class"
-    },
-    {
-      "glob": "com/zzh/stock_calculator/service/impl/GeminiTradeVisionServiceImpl.class"
     },
     {
       "glob": "com/zzh/stock_calculator/task/ClsDayTask.class"

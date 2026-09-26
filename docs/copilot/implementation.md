@@ -42,7 +42,7 @@ updated: 2026-09-15
 | 鉴权 | 前端 `services/apiClient.ts` 走 Spring Boot `:18080/api/auth`，Bearer 注入 + 恒 200 信封（code 分支）+ 拦截器 401 例外；Copilot 复用同一底座与令牌 |
 | 前端执行环境 | 前端仓库根（stock-calculator/）；验证命令 `npx tsc --noEmit` / `npm test`（pretest 自动跑 `check:arch`） |
 | 后端执行环境 | 本仓库；无 DB 环境 `./mvnw test -pl stock-calculator-main -am '-Dtest=!StockCalculatorApplicationTests,!SyncBackupL1IntegrationTest' '-DfailIfNoTests=false'`（两个 @SpringBootTest 需本地 PG；原 TaskServiceTest 已随 2026-09 MQ 化改造删除） |
-| LLM 基建 | **复用 llm 域既有双渠道责任链**（`LlmChainRouter` + `GeminiLlmService`/`GroqLlamaService` + `LlmConfig` 全局 Bean，`llm.*` 配置，native OCR 已验证主路径）；copilot 仅做向后兼容扩展（§8.3），首次真实调用若 usage 反序列化报 native 反射缺口，按报错类名补 `gen-logger-config.py` EXTRA_CLASSES 迭代（P3 预留 1 轮） |
+| LLM 基建 | **复用 llm 域责任链**（`LlmChainRouter` + `OpenAiMiniLlmService` + `LlmConfig` 全局 Bean，`llm.openai-mini.*` 配置，native 已验证主路径）；copilot 仅做向后兼容扩展（§8.3），首次真实调用若 usage 反序列化报 native 反射缺口，按报错类名补 `gen-logger-config.py` EXTRA_CLASSES 迭代（P3 预留 1 轮） |
 | 写入约束 | 终端命令禁含占位符展开形式；单次写入过长会被截断，大文件分段写 |
 
 ## 1. 文件清单与分层落点
@@ -564,7 +564,7 @@ public class AiChatSessionStore {
 
 ### 8.3 LLM 接入（v1.5 重写：复用 llm 域，勿自建）
 
-- **复用**：`llm.LlmChainRouter` 责任链（Gemini → Groq → fallback，`llm.*` 配置 Bean）+ `AbstractOpenAiCompatibleLlmService` 既有异常分类（`com.openai.errors.*` → `LlmProviderException(retryable)`）。
+- **复用**：`llm.LlmChainRouter` 责任链（openai-mini → fallback，`llm.openai-mini.*` 配置 Bean）+ `AbstractOpenAiCompatibleLlmService` 既有异常分类（`com.openai.errors.*` → `LlmProviderException(retryable)`）。
 - **扩展**（落点见 §1.2 表）：`chat(LlmConversation)` 默认方法 + 覆写实现多轮 Prompt 与 usage 提取；`chatDetailed` 路由方法复用既有重试/流转/降级语义。
 - **Fatal 语义（C4，v1.5 修订）**：确定性失败（400/401/403）与可重试失败一样**流转下一渠道**——单渠道 Key 失效时直接失败会放大不可用面；耗尽后统一 `UPSTREAM_ERROR`。
 - **降级识别（C3）**：fallback 渠道返回模板文本（无 tokens），编排层以 `isDegradedResponse` 判定后按 `UPSTREAM_ERROR` 处理，**不归档** assistant 消息。
@@ -582,7 +582,7 @@ public class CopilotController {
 ```
 
 ```yaml
-# v1.5：渠道连接配置沿用现有 llm.gemini.* / llm.groq.*（含 env 注入占位），零新增渠道配置
+# v1.5：渠道连接配置沿用现有 llm.openai-mini.*（含 env 注入占位），零新增渠道配置
 copilot:
   rate-limit: { per-minute: 10, per-day: 100 }
   history: { window-rounds: 3, max-messages: 200 }
@@ -618,7 +618,7 @@ app:
 
 // Response data
 { "assistantMessageId": 9102, "content": "…纯文本回答…",
-  "promptTokens": 852, "completionTokens": 418, "channel": "gemini",
+  "promptTokens": 852, "completionTokens": 418, "channel": "openai-mini",
   "userMessageId": 9101, "userContextOverview": "{\"pnl\":1234.56,…}",
   "userTimeAnchor": "{\"asOf\":1756713600,…}", "ctime": 1756713601 }
 ```
@@ -777,7 +777,7 @@ POSTGRES_PASS=... ./mvnw install -pl stock-calculator-main -am
 ```sh
 POSTGRES_PASS=... bash stock-calculator-main/build-native.sh   # 全量（改 yml 后必须）
 # 8s 冒烟（脚本内置）→ 90s 加长 → smoke-curl.sh 403 门禁
-# 额外：带 GEMINI_API_KEY 启动二进制，真实 POST /api/copilot/threads/statistics/messages 一次
+# 额外：带 OPENAI_MINI_API_KEY 启动二进制，真实 POST /api/copilot/threads/statistics/messages 一次
 # 若真实 ask 报 usage/DTO 反射缺失：按报错类名补 gen-logger-config.py EXTRA_CLASSES
 #   → --no-pkg 重建（迭代法，预留 1 轮；OCR 链路已验证 spring-ai 主路径）
 # 架构迁移验证：确保 AesGcmUtil.java 已移除，无遗留 import/aes-key 引用

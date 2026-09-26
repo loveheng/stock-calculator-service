@@ -33,14 +33,21 @@ public final class CopilotStatActionExtractor {
      * 措辞 scope 无关（「客户端」而非「画布」）：本契约对所有 scope 无条件生效，动作类型语义与
      * 图纸 schema 由前端 promptHints 承载（free-canvas §2.8 修订：外壳归后端全局提示词，业务载荷归前端）。
      * 任务型模版分支不叠加（custom_stat 模板自带外壳教学，与记忆/语气卡同口径）。
+     * <p>示例取「抽象骨架 + 画布真实动作」双示例（2026-09-26 画布「多标的建档」散文幻觉实证后补强）：
+     * 画布是 chat 分支唯一动作消费方，具体 few-shot 比抽象占位符的依从性高得多；载荷字段以后端提示为准。</p>
      */
     public static final String ACTION_OUTPUT_CONTRACT =
             "\n\n【动作输出规范】当你的回答包含需要客户端执行的结构化动作时，"
             + "必须在回复正文全部结束后、于最末尾原样输出动作块（严禁使用代码围栏包裹）：\n"
             + OPEN_TAG + "\n{\"actions\":[{\"type\":\"动作类型\",\"payload\":{...}}]}\n" + CLOSE_TAG + "\n"
+            + "完整示例（多动作照此格式；动作类型与 payload 字段以客户端提示中的能力清单为准）：\n"
+            + OPEN_TAG + "\n{\"actions\":[{\"type\":\"canvas_add_block\",\"payload\":{\"type\":\"brief\",\"stockCode\":\"sh600519\"}},"
+            + "{\"type\":\"canvas_add_block\",\"payload\":{\"type\":\"kline\",\"stockCode\":\"sh600519\"}}]}\n" + CLOSE_TAG + "\n"
             + "规则：①块内必须是合法 JSON（{\"actions\":[...]} 或动作数组），type 必填，payload 必须为对象；"
-            + "②动作块必须完整闭合且置于回复最末；③正文只输出给用户看的自然语言说明，"
-            + "严禁在正文中书写【行动】等动作描述；④动作数量保持精简（上限 10）。";
+            + "②动作块必须完整闭合且置于回复最末，严禁用 ``` 等代码围栏包裹；"
+            + "③正文只输出给用户看的自然语言结论，严禁在正文中书写【行动】或「我已执行/将执行某动作」等动作描述"
+            + "——需要客户端执行的动作若不放进动作块，客户端将无法执行，该次请求即视为失败；"
+            + "④动作数量保持精简（上限 10）。";
 
     /** 单次响应动作数上限（前端白名单上限 5，此处放宽做防御） */
     private static final int MAX_ACTIONS = 10;

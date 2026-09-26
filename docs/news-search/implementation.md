@@ -22,7 +22,7 @@ updated: 2026-09-19
 | 订阅闭环 | `AnnouncementSubscriptionController`（/api/announcement/subscriptions，WebConfig 已拦截） | §5 订阅态、语料增长入口 |
 | CLS 电报 | `crawler` 域：`cls_article`（id/title/brief/content/ctime/level/type）+ `cls_article_stock`（提及关系）+ `stock` 字典 | §3 数据源；mentions/count7d 现成 |
 | CLS 向量化+检索 | `ArticleEmbeddingService`（metadata 含 articleId/ctime）+ `ArticleEmbeddingSearchService.similaritySearch`（SearchRequest→批量回查 ClsArticle 组装 Hit；javadoc 已预留「P1 场景接入时上提门面至 crawler 基包」） | §3 检索上提该门面即可复用 |
-| LLM 通道 | `llm` 域 `LlmChainRouter.chat(systemPrompt, userMessage)`：gemini→groq→fallback 责任链，跨域唯一合法入口，400/503 语义 | §4 综合摘要生成通道 |
+| LLM 通道 | `llm` 域 `LlmChainRouter.chat(systemPrompt, userMessage)`：openai-mini→fallback 责任链，跨域唯一合法入口，400/503 语义 | §4 综合摘要生成通道 |
 | SSE 先例 | `copilot`：`CopilotController`（Accept=text/event-stream → SseEmitter）+ `AiChatOrchestrationService.askStream`（delta/error/done 事件、safeSend 断连取消订阅、阶段一失败手工写 JSON 信封回落防 406） | §4 SSE 骨架与内容协商回落范本 |
 | 限流先例 | `copilot/util/AiChatRateLimiter`（Redis INCR+EXPIRE 固定窗口、按窗口序号分桶、fail-open、429 穿透降级分支） | §5 SearchRateLimiter 模式 |
 | 信封/异常 | `common`：ApiResponse + BusinessException + GlobalExceptionHandler（业务异常 HTTP 200 + 信封 code；AsyncRequestNotUsable/Timeout 已有静默 handler） | 搜索沿用；401 由 AuthInterceptor 直写 |

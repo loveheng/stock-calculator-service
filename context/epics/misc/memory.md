@@ -2,8 +2,8 @@
 dev-loop: memory
 format: v1
 epic: misc
-total-merged: 7
-last-merge: 2026-09-25
+total-merged: 9
+last-merge: 2026-09-26
 ---
 
 # misc：散修与小改动挂靠（常驻杂项 epic）
@@ -65,7 +65,26 @@ last-merge: 2026-09-25
 - 全量落地（M1-M6）：crawler 基包扩展（ClsDictAnchorApi.resolveEach 逐名多锚点；ClsArticleQueryApi 三两跳查询 recentArticlesByStock/subjectsByStockSince/activeStocksBySubject + 关联表 native 聚合接口投影）；search 基包 StockProfileApi 门面；guide 新域（GuideController 两端点、GuideAnalyzeService 快/慢双路径+LLM fail-open、GuideStockBriefService、GuideDtos nextStep 首位红线）；orchestration REST_SEEDS 登记 main.guide.analyze_message/stock_brief；data.sql 播种 guide:entity_extract。
 - 关键定案：/api/guide/** 不挂 AuthInterceptor（D10——dispatch 工具面无会话，对齐 main.announcement.summaries 先例，设计稿「挂拦截」已废）；LLM 抽取未锚定丢弃不编造；free 链路失败 fail-open 标 llmDegraded。
 - 近期验证状态：./mvnw compile 全仓通过；main 470 用例全绿；EXPLAIN 三查询全走索引（红线①）；冒烟通过（茅台档案聚合/快路径/降级/30 天窗题材两跳产出/tool_registry 自动登记）；手搓 curl MCP 握手与 SDK 序列化不匹配属既有现象（:18081 同），全链留聊天窗实测。
+- v1.1 中途入口加固（D11/M8，2026-09-25）：中途入口评估实证裸码三断链（analyze 纯码/内嵌码、brief 裸码静默空档案）→ StockDirectoryApi.resolveDictKey（裸 6 位/腾讯形态→字典键，双形态查库）收敛 crawler 基包单点 + extract 内嵌码 token 确定性归一化（LLM 降级仍有代码锚定兜底）+ brief 入参归一化 + dispatch 两工具描述扩面（G1/G3：题材/代码找票、个股近况聚合）；guide 13 用例、main 473 全绿，重启后三场景实测回归全通。G2 旁路回流（copilot 提示词层）留 P2。
+- 评审收口与前端对接（2026-09-26）：api.md v1.0 对接切片（通用约定/契约字段表/真实样例/llmDegraded 非错误/聊天 vs REST 选型）→ v1.1 四项收口（D13 暴露面评估；nextStep 双语义消解=nextAction 枚举 present_candidates/clarify + hint 去工具名；§5 对话路由约定；CORS 不补注解）；§0.1 时间字段口径表（ctime epoch 秒/annDate yyyy-MM-dd）+ 滚动时间窗措辞；GlobalExceptionHandler 500 兜底加 [ALERT-500] 稳定标记+uri（HTTP 恒 200 下业务 500 可 grep）。
+- G2 旁路回流落地（D12/M9）：copilot buildPrompt 聊天分支固定短段「选股引导约定」（GUIDE_FLOW_CONVENTION，动作块契约之前、任务型模版不叠加），弃 guide:stock_selection 页面模板方案（scope 回落不全覆盖+ON CONFLICT 对存量库不生效）。
+- 技术面快照接线（P2 落地 2026-09-26）：GuideDtos 增 TechSnapshot/LevelBand，GuideStockBriefService 经 common/McpDispatchClient 调 mcp stock_analysis+stock_levels（粗粒度：指标信号 ≤8 条+最近支撑/压力位带各一档），[DEGRADE] 降级 null 不阻塞主流程；stock_brief 响应与 api.md §2.2 同步；冒烟实证（茅台 09-24 techSnapshot 完整）。
+- 近期验证状态（09-26 轮）：guide/broker/dispatch/Modulith 29 用例全绿；analyze 响应 nextAction 枚举与 [ALERT-500] 日志实测 ✓。
+
+## dispatch 工具面与画布联动（2026-09-26）
+
+- dispatch 参数契约预检（画布实证 bug）：copilot LLM 只见 dispatch 单工具无参数 schema，fetch_kline 按直觉编造参数被 :18081 拒绝且错误穿透前端；DispatchTool.sync DIRECT 前按 paramSchema 预检——缺必填/未定义字段回单工具契约+自纠指引，capabilityMenu 附参数名清单，schema 缺失放行（DispatchToolTest 4 用例）。
+- 画布「服务响应异常（HTTP 200）」根因在跨仓前端：/api/guide 未在 vite 代理白名单→SPA 回落 index.html→JSON 解析失败；vite.config.ts + middleware.js（Vercel）补 '/api/guide' 条目（前端仓 ~/Documents/zed/stock-calculator）。
+- 工具面补全一：ToolRegistry MCP_SEEDS 补 time_parse（domain=time，needUserConfirm 约定）与 fetch_realtime_quote——两工具 mcp 侧早已实现但 dispatch 缺种聊天调不到；monitor REST seed 经取证不登记（/api/broker/** 挂 AuthInterceptor + ToolInvoker REST 只带 X-Trace-Id + userId 取自会话→直调必 401，需先定 dispatch 用户身份传递设计，候选方案落 todos）。
+- 工具面补全二：stock_radar_check 条件枚举扩展（mcp/indicator/RadarCheckService 单股/批量同源；conditions 12 token：ma_break/volume_surge/macd金叉死叉/kdj金叉死叉与J极值/pct_up·pct_down/位带破立，位带按昨收基线取前 n-1 根；缺省保持旧行为 signal 枚举+补 matched/allMatched）+ 新增 stock_radar_batch（≤50 只，unresolved 分流，hitCount）；ToolRegistry seed 同步。
+- 存量 bug 修复：FetchRealtimeQuoteTool 从未挂 McpToolConfig provider（mcp 恒 12 工具，monitor 取价一直静默降级），同修把 StockRadarBatchTool 挂上→现 14 工具；教训已入 lessons（新工具三件套缺一不可）。
+- 近期验证状态（09-26 轮）：mcp 83 全绿（radar 18 用例真实计算）、orchestration 64 全绿；端到端冒烟 techSnapshot 实证、mcp "Registered tools: 14" 日志实证。
+
+## notify 与基础设施收口（2026-09-25/26）
+
+- mcp-notify 提醒 JSON 解析损坏由静默完结改显式 failed：Repository.markFailed（CAS 仅 active）、Repeater/Watchdog/Bootstrap 解析失败逐条置 failed（Bootstrap 不再被 readTree 异常炸启动），capability 判定改三态；notify 9 单测全绿。（09-25）
+- postgres/data.sql 删除收口：schema.sql 迁入 main resources 为单文件 SSOT（表结构+播种区；pom 删 ../postgres 拷贝块、application-postgres.yml 非法 validate 修回 always、CI 四 job 路径联动）；pull_task_config 12 行/4 段与 copilot prompt 8 段 INSERT 原文搬入播种区随建表自动执行（guide:entity_extract 随迁、入库已核实）；README/service-index/docs/代码注释全仓引用联动。（09-26）
 
 ## 断点
 
-- [断点] 下一步：等待散修任务
+- [断点] 下一步：等待散修任务（ai选股下一步候选：聊天窗实测 radar/批量/time_parse 调用；全市场选股=路线二独立 epic）

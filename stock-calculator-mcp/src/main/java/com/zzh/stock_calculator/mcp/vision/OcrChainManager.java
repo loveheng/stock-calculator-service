@@ -1,7 +1,5 @@
-package com.zzh.stock_calculator.vision.service;
+package com.zzh.stock_calculator.mcp.vision;
 
-import com.zzh.stock_calculator.common.BusinessException;
-import com.zzh.stock_calculator.vision.config.OcrProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.DigestUtils;
@@ -10,21 +8,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * OCR 多渠道统一调度器（责任链模式）。
- * 按预设优先级（实现类的 @Order：azure -> ocrspace -> local-gemini，Spring 注入 List 时已排序）逐节点执行
+ * OCR 多渠道统一调度器（责任链模式；自 main vision 域平移，纯 OCR 渠道无模型）。
+ * 按预设优先级（实现类的 @Order：azure -> ocrspace，Spring 注入 List 时已排序）逐节点执行
  * {@link OcrService} 策略：
  * <ul>
  *   <li>节点成功：立即返回并写缓存（含「业务识别为空」的 ""，同样视为成功）；</li>
  *   <li>节点抛 {@link OcrChannelException}：记录 Warning 日志，可重试异常（429/5xx/超时）先按
  *       maxAttempts 重试，随后流转下一节点；不可重试异常（401/403 等）直接流转；</li>
- *   <li>全部节点失败：抛出明确的 {@link BusinessException}(503)，message 汇总各渠道失败原因。</li>
+ *   <li>全部节点失败：抛出明确的 {@link OcrChainException}，message 汇总各渠道失败原因。</li>
  * </ul>
  * 辅助优化特性（集成于本调度器）：
  * <ul>
  *   <li>图片哈希缓存：MD5(图片字节) -> 识别文本，Redis 实现（决策 B12，key=vision:ocr:text:&lt;MD5&gt;），
- *       命中直接返回，不消耗任何渠道额度；应用重启不清零；</li>
- *   <li>超时与重试控制：连接/读取超时由各渠道的 JDK HttpClient 显式配置；
- *       重试次数与退避间隔在本类统一控制，渠道实现无感知。</li>
+ *       命中直接返回，不消耗任何渠道额度；与 main 旧实现同 key 语义，应用重启不清零；</li>
+ *   <li>超时与重试控制：连接/读取超时由各渠道显式配置；重试次数与退避间隔在本类统一控制，
+ *       渠道实现无感知。</li>
  * </ul>
  */
 @Slf4j
@@ -56,11 +54,11 @@ public class OcrChainManager {
      * @param imageBytes 图片字节（非空）
      * @param language   语言提示（如 "chs"）；空白时回退默认语言
      * @return 识别文本；图片本身无文字时返回 ""（业务识别为空，同样会缓存）
-     * @throws BusinessException 400 图片为空；503 全部渠道失败
+     * @throws OcrChainException 400 图片为空；503 全部渠道失败
      */
     public String recognizeText(byte[] imageBytes, String language) {
         if (imageBytes == null || imageBytes.length == 0) {
-            throw new BusinessException(400, "图片内容不能为空");
+            throw new OcrChainException(400, "图片内容不能为空");
         }
         String lang = (language == null || language.isBlank())
                 ? properties.getLanguage()
@@ -87,7 +85,7 @@ public class OcrChainManager {
         }
 
         log.error("全部 OCR 渠道均失败 (hash={}, failures={})", hash, failures);
-        throw new BusinessException(503, "所有 OCR 渠道均不可用：" + String.join("；", failures));
+        throw new OcrChainException(503, "所有 OCR 渠道均不可用：" + String.join("；", failures));
     }
 
     /** 单渠道尝试（含重试）：成功返回文本并写缓存；最终失败返回 null，原因追加进 failures */
@@ -124,7 +122,7 @@ public class OcrChainManager {
             Thread.sleep(properties.getRetryBackoff().toMillis());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new BusinessException(503, "OCR 识别被中断");
+            throw new OcrChainException(503, "OCR 识别被中断");
         }
     }
 }

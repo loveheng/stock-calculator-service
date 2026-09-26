@@ -3,6 +3,7 @@ package com.zzh.stock_calculator.broker.service;
 import com.zzh.stock_calculator.broker.config.BrokerProperties;
 import com.zzh.stock_calculator.broker.dto.BrokerDtos;
 import com.zzh.stock_calculator.broker.entity.BrokerMonitorTaskEntity;
+import com.zzh.stock_calculator.broker.task.MonitorCheckTask;
 import com.zzh.stock_calculator.broker.repository.BrokerMonitorTaskRepository;
 import com.zzh.stock_calculator.broker.util.FullCodeNormalizer;
 import com.zzh.stock_calculator.common.BusinessException;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Set;
 
 /**
@@ -29,8 +31,8 @@ public class MonitorService {
     public static final String STATUS_RUNNING = "RUNNING";
     public static final String STATUS_STOPPED = "STOPPED";
 
-    /** alertType 白名单（§3.5 一期仅 PRICE_BELOW；扩展 PRICE_ABOVE/MA_CROSS 时同步判定器） */
-    private static final Set<String> ALERT_TYPES = Set.of("PRICE_BELOW");
+    /** alertType 白名单（docs/alert/design.md §四.3：PRICE_BELOW + PRICE_NEAR；判定器同步见 MonitorCheckTask） */
+    private static final Set<String> ALERT_TYPES = Set.of("PRICE_BELOW", MonitorCheckTask.ALERT_TYPE_PRICE_NEAR);
     private static final Set<String> INTERVALS = Set.of("1d");
 
     private final BrokerMonitorTaskRepository repository;
@@ -59,6 +61,23 @@ public class MonitorService {
             throw new BusinessException(400, "未收录的股票代码: " + request.getFullCode());
         }
         String alertType = rule.getType().trim().toUpperCase();
+        // direction 校验（前端反馈定案）：BUY/SELL 必填；SELL 仅容 PRICE_NEAR（低吸/高抛语义，BELOW 是低吸专属）
+        if (request.getDirection() == null || request.getDirection().isBlank()) {
+            throw new BusinessException(400, "direction 缺失（需 BUY/SELL）");
+        }
+        String direction = request.getDirection().trim().toUpperCase();
+        if (!"BUY".equals(direction) && !"SELL".equals(direction)) {
+            throw new BusinessException(400, "direction 非法（仅 BUY/SELL）: " + request.getDirection());
+        }
+        BigDecimal band = null;
+        if (MonitorCheckTask.ALERT_TYPE_PRICE_NEAR.equals(alertType)) {
+            if (rule.getBand() == null || rule.getBand().signum() < 0) {
+                throw new BusinessException(400, "PRICE_NEAR 需提供非负 band（价位区间容差，元）");
+            }
+            band = rule.getBand();
+        } else if ("SELL".equals(direction)) {
+            throw new BusinessException(400, "SELL 仅支持 PRICE_NEAR（PRICE_BELOW 为低吸语义）");
+        }
 
         long running = repository.countByUserIdAndStatus(userId, STATUS_RUNNING);
         if (running >= properties.getMonitor().getMaxConcurrentPerUser()) {
@@ -66,20 +85,42 @@ public class MonitorService {
                     + properties.getMonitor().getMaxConcurrentPerUser() + "），请先停止部分监控");
         }
         var existing = repository
-                .findFirstByUserIdAndStockCodeAndAlertTypeAndThresholdAndStatus(
-                        userId, code, alertType, rule.getThreshold(), STATUS_RUNNING);
+                .findFirstByUserIdAndStockCodeAndAlertTypeAndThresholdAndBandAndDirectionAndStatus(
+                        userId, code, alertType, rule.getThreshold(), band, direction, STATUS_RUNNING);
         if (existing.isPresent()) {
             return BrokerDtos.MonitorStartData.builder()
                     .taskId(existing.get().getId()).status(STATUS_RUNNING).build();
         }
         BrokerMonitorTaskEntity saved = repository.save(BrokerMonitorTaskEntity.builder()
-                .userId(userId).stockCode(code).alertType(alertType)
-                .threshold(rule.getThreshold()).status(STATUS_RUNNING)
+                .userId(userId).stockCode(code).alertType(alertType).direction(direction)
+                .threshold(rule.getThreshold()).band(band).status(STATUS_RUNNING)
                 .build());
         log.info("[broker-monitor] started id={} user={} code={} {} {}",
                 saved.getId(), userId, code, alertType, rule.getThreshold());
         return BrokerDtos.MonitorStartData.builder()
                 .taskId(saved.getId()).status(STATUS_RUNNING).build();
+    }
+
+    /** 用户预告单列表（docs/alert/design.md）：fullCode 还原带前缀形态供前端直连 K 线接口 */
+    @Transactional(readOnly = true)
+    public BrokerDtos.MonitorListData list(String userId) {
+        var tasks = repository.findByUserIdOrderByUpdatedAtDesc(userId);
+        var items = tasks.stream().map(t -> BrokerDtos.MonitorTaskItem.builder()
+                .taskId(t.getId())
+                .fullCode(FullCodeNormalizer.toDictKey(t.getStockCode()))
+                .stockCode(t.getStockCode())
+                .alertType(t.getAlertType())
+                .direction(t.getDirection())
+                .threshold(t.getThreshold())
+                .band(t.getBand())
+                .status(t.getStatus())
+                .alertCount(t.getAlertCount())
+                .lastAlertAt(t.getLastAlertAt())
+                .createdAt(t.getCreatedAt())
+                .updatedAt(t.getUpdatedAt())
+                .build()).toList();
+        long running = tasks.stream().filter(t -> STATUS_RUNNING.equals(t.getStatus())).count();
+        return BrokerDtos.MonitorListData.builder().tasks(items).runningCount(running).build();
     }
 
     @Transactional

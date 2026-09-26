@@ -19,7 +19,7 @@ updated: 2026-09-24
 
 | # | 决策点 | 结论 |
 |---|--------|------|
-| C1 | LLM 基建复用 | **不新建** `copilot/service/LlmChainRouter` / `LlmChannelClient` / `CopilotLlmConfig`（实施文档 §1.2/§8.3 作废）；复用 `llm` 域既有 `LlmChainRouter` + `GeminiLlmService`/`GroqLlamaService` + `LlmConfig` 全局 Bean（项目自有 `llm.*` 属性装配，非 spring.ai auto-config）。copilot 只 import llm **基包**公开类型（Modulith 边界） |
+| C1 | LLM 基建复用 | **不新建** `copilot/service/LlmChainRouter` / `LlmChannelClient` / `CopilotLlmConfig`（实施文档 §1.2/§8.3 作废）；复用 `llm` 域既有 `LlmChainRouter` + `OpenAiMiniLlmService` + `LlmConfig` 全局 Bean（项目自有 `llm.*` 属性装配，非 spring.ai auto-config）。copilot 只 import llm **基包**公开类型（Modulith 边界） |
 | C2 | llm 包扩展 | 为满足多轮对话与用量统计，llm 包做**向后兼容扩展**：① 新增 `LlmTurn(role, content)` 与 `LlmConversation(systemPrompt, List<LlmTurn>)`；② 新增 `LlmChatResult(content, provider, model, promptTokens, completionTokens)`；③ `LlmService` 增加 `chat(LlmConversation)` 默认方法（委托旧单轮 `chat`，vision 链路零改动），`AbstractOpenAiCompatibleLlmService` 覆写为多轮 Prompt 组装 + usage 提取；④ `LlmChainRouter` 增加 `chatDetailed(LlmConversation)` 路由方法，复用既有重试/流转/降级语义 |
 | C3 | 降级识别 | 编排层对 `chatDetailed` 结果先做 `isDegradedResponse(content)` 判定（fallback 渠道返回模板文本、无 tokens）：命中则按 `UPSTREAM_ERROR` 处理，**不归档** assistant 消息 |
 | C4 | Fatal 语义 | 维持 llm 包现状：确定性失败（400/401/403）同样流转下一渠道。不采纳实施文档 §8.3「Fatal → 直接失败」——单渠道 Key 失效时直接失败会放大不可用面，现有语义已在 OCR 链路验证 |
@@ -47,7 +47,7 @@ updated: 2026-09-24
 
 - 页面在挂载时向全局注册**快照取数函数**（命令式、白名单字段），提问时现场取数随请求上行；
 - 后端按 `scopeId` 维护隔离会话，只落**标量概览 + 时间锚点**，不落明细快照（隐私最小化 + 存储轻量化）；
-- LLM 侧完全复用 llm 域既有 Gemini→Groq 容灾链，零新增依赖。
+- LLM 侧完全复用 llm 域既有 openai-mini→fallback 容灾链，零新增依赖。
 
 ### 1.2 目标与非目标
 
@@ -77,8 +77,7 @@ flowchart TD
     ORC --> RL[CopilotRateLimiter Redis]
     ORC --> REPO[(ai_chat_session / ai_chat_message)]
     ORC -->|chatDetailed 多轮+usage| RTR[LlmChainRouter llm 域]
-    RTR --> GEM[GeminiLlmService @Order 2]
-    RTR --> GRQ[GroqLlamaService]
+    RTR --> OPM[OpenAiMiniLlmService @Order 1]
     RTR --> FB[FallbackLlmService 降级模板]
 ```
 
@@ -367,7 +366,7 @@ turns        = [user:【页面上下文】contextSummary 序列化] + 历史交�
 | # | v1.4 原方案 | 本设计 | 理由 |
 |---|---|---|---|
 | 1 | copilot 域新建 LlmChainRouter / LlmChannelClient / CopilotLlmConfig | C1/C2：复用 llm 域 + 向后兼容扩展 | 仓库已有成熟双渠道责任链（ocr-llm-pipeline），重复建设且类名冲突 |
-| 2 | 「spring.ai.openai auto-config 是 vision 调优配置，须避开」 | 事实修正：项目自有 LlmConfig（`llm.*` 属性）已是解耦方案 | LlmConfig.java 现状；geminiChatModel @Primary 供 vision 复用 |
+| 2 | 「spring.ai.openai auto-config 是 vision 调优配置，须避开」 | 事实修正：项目自有 LlmConfig（`llm.*` 属性）已是解耦方案 | LlmConfig.java 现状；渠道模型 Bean 经 @Qualifier + ObjectProvider 注入 |
 | 3 | §8.3 示例用 OpenAiApi.builder().baseUrl(...) | OpenAiChatOptions.builder().baseUrl(...)（llm 包现状） | 项目 Spring AI 2.x 用法已在 LlmConfig 验证 |
 | 4 | Fatal（400/401）直接失败 | C4：确定性失败也流转下一渠道 | 单渠道 Key 失效会放大不可用面 |
 | 5 | 新增 copilot.llm.* 渠道配置 | C5：沿用 llm.*；copilot 仅 rate-limit/history | 渠道连接参数全工程一处（yml 注释明示） |
@@ -386,7 +385,7 @@ turns        = [user:【页面上下文】contextSummary 序列化] + 历史交�
 
 **后端**：`./mvnw compile`；DDL 手动执行入 postgres；`POSTGRES_PASS=... ./mvnw install -pl stock-calculator-main -am`（需本地 PG；原 TaskServiceTest 排除项已随该测试删除失效）。单测：llm 扩展（多轮组装 / usage 提取 / 降级识别，mock ChatModel）；编排（幂等两段式、滑窗条数、懒清理、轻量字段落库、级联软删语义、get-or-create 竞态回退）；错误子码（413/429/503/404 恒 200 信封）——LLM 一律 mock，禁止真实 API。
 
-**native（P3）**：build-native.sh 全量 → 8s/90s 冒烟 → smoke-curl 403 门禁 → 带 GEMINI_API_KEY 真实 ask 一次；确认无 AesGcmUtil 遗留引用（v1.2 架构迁移）。
+**native（P3）**：build-native.sh 全量 → 8s/90s 冒烟 → smoke-curl 403 门禁 → 带 OPENAI_MINI_API_KEY 真实 ask 一次；确认无 AesGcmUtil 遗留引用（v1.2 架构迁移）。
 
 ## 10. 维护约定
 

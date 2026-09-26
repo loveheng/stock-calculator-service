@@ -35,7 +35,7 @@ lombok / configuration-processor / starter-test(test)。
   一服务一名的漂移复发）；
 - tier 名跨服务同名不同义是合法形态——`ai.tiers` 按服务各自解析，换渠道互不影响；
 - `openai-` 前缀标记「OpenAI 兼容协议 chat 端点」，与 embedding（见 §三）/vision
-  （gemini 原生）划界；渠道在 SiliconFlow/stepfun/deepseek 间切换名字不变。
+  （vision 原生协议）划界；渠道在 SiliconFlow/stepfun/deepseek 间切换名字不变。
 
 ### Spring AI 2.0.1 三坑（本模块存在的核心理由）
 
@@ -137,15 +137,15 @@ flowchart LR
 
 ## 七、换供应商操作手册
 
-chat 档换渠道（例：mini 档换 Groq）——只改 yml 三键，代码零改动：
+chat 档换渠道（例：mini 档换硅基流动/stepfun 等 OpenAI 兼容供应商）——只改 yml 三键，代码零改动：
 
 ```yaml
 ai:
   tiers:
     openai-mini:
-      base-url: https://api.groq.com/openai/v1
-      api-key: ${GROQ_API_KEY:}
-      model: llama-3.3-70b-versatile
+      base-url: https://api.siliconflow.cn/v1
+      api-key: ${OPENAI_MINI_API_KEY:}
+      model: Qwen/Qwen2.5-14B-Instruct
 ```
 
 embedding 换出 CF（例：SiliconFlow bge-m3，1024 维同规格免重嵌）：
@@ -166,9 +166,9 @@ worker fail-fast / mcp-orchestration 宽松告警三种门控语义见各服务�
 
 ## 八、演进边界（刻意不做）
 
-- **embedding/vision 不进 chat tier**：协议不同（CF 原生 / gemini 原生），
+- **embedding/vision 不进 chat tier**：协议不同（CF 原生 / vision 原生协议），
   vision 仍走 main 独立装配；
-- **main `llm.*` 引流链未收编**：多渠道 fallback 语义（gemini 兜底链）与单 tier
+- **main `llm.*` 引流链未收编**：多渠道 fallback 语义（openai-mini→fallback 链）与单 tier
   形态不同，收编需先把「渠道列表」作为 tier 扩展能力设计；
 - **不加挡的纪律**：新增档位前先回答「出错代价 × 调用量」是否真的与现有三挡
   都不同——通常该换渠道/模型而不是加结构。

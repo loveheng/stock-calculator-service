@@ -638,11 +638,14 @@ CREATE TABLE IF NOT EXISTS public.broker_monitor_task (
 	id bigserial NOT NULL,
 	user_id varchar(64) NOT NULL,
 	stock_code varchar(8) NOT NULL,               -- 6 位字典码（601318）
-	alert_type varchar(20) NOT NULL,              -- PRICE_BELOW（白名单，可扩展）
+	alert_type varchar(20) NOT NULL,              -- PRICE_BELOW/PRICE_NEAR（白名单）
+	direction varchar(8) NOT NULL,                -- BUY/SELL（SELL 仅容 PRICE_NEAR）
 	threshold numeric(12,4) NOT NULL,             -- 阈值（元）
+	band numeric(12,4) NULL,                      -- PRICE_NEAR 区间容差（元），abs(现价-阈值)≤band 触发
 	status varchar(16) DEFAULT 'RUNNING' NOT NULL,-- RUNNING/STOPPED
 	last_checked_at timestamptz NULL,             -- 最近一轮判定时间（节流）
 	last_alert_at timestamptz NULL,               -- 最近一次告警时间（冷却窗防轰炸）
+	alert_count int DEFAULT 0 NOT NULL,           -- 累计告警次数（docs/alert/design.md：≥3 自动 STOPPED）
 	created_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	CONSTRAINT broker_monitor_task_pkey PRIMARY KEY (id)
@@ -806,3 +809,13 @@ ON CONFLICT (tag) DO NOTHING;
 INSERT INTO copilot_prompt_template (tag, content, ctime, mtime) VALUES
     ('guide:entity_extract', '你是 A 股选股引导助手。用户会给你一条他听到的消息，请从中抽取可能相关的公司名、股票名、题材名或口语别称。只输出 JSON，格式：{"entities":["名称1","名称2"],"keywords":["关键词1"]}。entities 放具体公司/股票/题材名称候选（允许别称与简称，词典会校验）；keywords 放事件或行业关键词（候选为空时用于兜底搜索）。无可靠候选时输出空数组。禁止输出 JSON 以外的任何内容。', (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT)
 ON CONFLICT (tag) DO NOTHING;
+
+
+ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS band numeric(12,4);
+ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS alert_count int NOT NULL DEFAULT 0;
+
+ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS band numeric(12,4);
+ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS alert_count int NOT NULL DEFAULT 0;
+ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS direction varchar(8);
+UPDATE public.broker_monitor_task SET direction = 'BUY' WHERE direction IS NULL;  -- 存量任务按低吸语义补默认
+ALTER TABLE public.broker_monitor_task ALTER COLUMN direction SET NOT NULL;

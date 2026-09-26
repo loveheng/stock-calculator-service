@@ -9,6 +9,7 @@ format: v2
 - [ ] [2026-09-22] (风险) [long] 多博主人格合成（每博主一卡 + 离线 LLM 融合跑一次）v1 未做，属同机制延伸玩法，v2 再做 (src: ai)
 
 ## misc
+- [ ] [2026-09-26] (功能) 聊天 agent 自主登记/取消监控提醒（guide P2「帮我设个提醒」闭环）：前置需定 dispatch 侧用户身份传递设计——/api/broker/** 挂 AuthInterceptor 且 monitor 端点 userId 取自会话，ToolInvoker REST 分支无凭证头，裸登记 REST seed 必 401；候选方案：a) dispatch 请求透传调用方会话凭证 b) main 侧新增 action 型内部端点（服务间凭证）c) copilot actions 随 done 交前端代调 (src: ai)
 - [ ] [2026-09-25] (风险) [long] CninfoClient 北交所 secCode 推导未实证（8/4 开头映射缺失），北交所公告可能映射错交易所——需补实证后扩展 (src: ai, uncertainty-scan)
 - [ ] [2026-09-25] (风险) [long] ClsArticleRepository excludeIds 空参契约仅靠注释维持（NOT IN () 非法 SQL），无断言守护，新调用方易踩——建议下沉到方法内防护 (src: ai, uncertainty-scan)
 - [ ] [2026-09-16] (功能) toolbox 僵尸淘汰消费端：list 基于 usage-ledger 吐 ⚠ 退役建议（连续失败 ≥3 或长期零调用）——触发条件：池内工具 >10 (src: 用户)

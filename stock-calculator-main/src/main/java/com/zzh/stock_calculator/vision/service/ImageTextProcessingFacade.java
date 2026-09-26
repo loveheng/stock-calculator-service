@@ -2,7 +2,7 @@ package com.zzh.stock_calculator.vision.service;
 
 import com.zzh.stock_calculator.common.BusinessException;
 import com.zzh.stock_calculator.llm.LlmChainRouter;
-import com.zzh.stock_calculator.vision.config.VisionAiProperties;
+import com.zzh.stock_calculator.vision.VisionAiProperties;
 import com.zzh.stock_calculator.vision.dto.StockCandidate;
 import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
 import lombok.extern.slf4j.Slf4j;
@@ -18,15 +18,16 @@ import java.util.Map;
 
 /**
  * 智能图片分析门面（Facade + Pipeline 编排）：
- * 图片字节 -> OCR 多渠道责任链提取纯文本 -> PromptFormatter 清洗与组装 -> LLM 多渠道责任链 -> 业务结果。
+ * 图片字节 -> 经 MCP ocr 工具提取纯文本（纯 OCR 渠道，无模型）-> PromptFormatter 清洗与组装
+ * -> LLM 多渠道责任链 -> 业务结果。
  *
- * <p>股票代码补全（拍板决策）：截图中只有名称没有代码时，解析后统一经 {@link StockCodeResolver}
+ * <p>股票代码补全：截图中只有名称没有代码时，解析后统一经 {@link DictStockCodeResolver}
  * 按名称补全——唯一候选静默回填 stockCode；多候选/零匹配保留 null 并透传 candidates 给前端人工选择。
  * 旧缓存结构（无 candidates 字段）命中时惰性回填并重写缓存（read-through）。</p>
  *
  * <p>异常边界（三类可预期的业务结果，均经 GlobalExceptionHandler 统一转 ApiResponse）：
  * <ul>
- *   <li>OCR 全链失败：BusinessException(503, "所有 OCR 渠道均不可用：...")；</li>
+ *   <li>OCR 失败：BusinessException(503, "OCR 识别失败（MCP ocr 工具）...")；</li>
  *   <li>图中无文字：BusinessException(422, "图片中未识别到文字...")——空文本拦截，不消耗 LLM 额度；</li>
  *   <li>LLM 全链失败 / 降级模板输出：BusinessException(503, ...)。</li>
  * </ul>
@@ -39,26 +40,26 @@ public class ImageTextProcessingFacade {
     private static final String DEFAULT_TASK = "请整理并总结文本中的关键信息。";
     private static final String DRAFT_CACHE_KEY_PREFIX = "vision:ai:draft:";
 
-    private final OcrChainManager ocrChainManager;
+    private final OcrViaMcpService ocrViaMcpService;
     private final PromptFormatter promptFormatter;
     private final LlmChainRouter llmChainRouter;
     private final TradeDraftParser tradeDraftParser;
-    private final StockCodeResolver stockCodeResolver;
+    private final DictStockCodeResolver stockCodeResolver;
     private final VisionAiProperties properties;
     /** 结构化结果 <-> JSON（与 TradeDraftParser 同用 Boot 自动装配的 Jackson 3 Bean） */
     private final ObjectMapper objectMapper;
-    /** 图片 MD5 -> 交易草稿结果缓存（Redis，决策 B12；命中零 OCR/LLM 消耗，与 OCR 文本缓存相互独立） */
+    /** 图片 MD5 -> 交易草稿结果缓存（Redis；命中零 OCR/LLM 消耗，与 mcp 侧 OCR 文本缓存相互独立） */
     private final VisionCacheStore draftCache;
 
-    public ImageTextProcessingFacade(OcrChainManager ocrChainManager,
+    public ImageTextProcessingFacade(OcrViaMcpService ocrViaMcpService,
                                      PromptFormatter promptFormatter,
                                      LlmChainRouter llmChainRouter,
                                      TradeDraftParser tradeDraftParser,
-                                     StockCodeResolver stockCodeResolver,
+                                     DictStockCodeResolver stockCodeResolver,
                                      VisionAiProperties properties,
                                      ObjectMapper objectMapper,
                                      VisionCacheStore draftCache) {
-        this.ocrChainManager = ocrChainManager;
+        this.ocrViaMcpService = ocrViaMcpService;
         this.promptFormatter = promptFormatter;
         this.llmChainRouter = llmChainRouter;
         this.tradeDraftParser = tradeDraftParser;
@@ -78,8 +79,8 @@ public class ImageTextProcessingFacade {
     public String processImageToAiResult(byte[] imageBytes, String taskInstruction) {
         long start = System.currentTimeMillis();
 
-        // 1. OCR 多渠道责任链（内置 MD5 哈希缓存与自动降级）
-        String rawText = ocrChainManager.recognizeText(imageBytes);
+        // 1. 经 MCP ocr 工具提取文本（mcp 侧内置 MD5 哈希缓存与渠道降级）
+        String rawText = ocrViaMcpService.recognizeText(imageBytes);
         long ocrCost = System.currentTimeMillis() - start;
 
         // 2. 清洗 + 空文本拦截
@@ -144,8 +145,8 @@ public class ImageTextProcessingFacade {
             log.info("交易草稿缓存已淘汰，启用审查模式重新处理 (hash={})", hash);
         }
 
-        // 1. OCR 多渠道责任链（内置 MD5 文本缓存与自动降级）
-        String rawText = ocrChainManager.recognizeText(imageBytes);
+        // 1. 经 MCP ocr 工具提取文本（mcp 侧内置 MD5 哈希缓存与渠道降级）
+        String rawText = ocrViaMcpService.recognizeText(imageBytes);
         long ocrCost = System.currentTimeMillis() - start;
 
         // 2. 清洗 + 空文本拦截
@@ -212,7 +213,7 @@ public class ImageTextProcessingFacade {
     }
 
     /** 旧缓存结构判定：存在「缺码且 candidates 字段缺失（从未解析过）」的草稿时需要回填；
-     *  已解析过的缺码草稿（candidates 已置空列表或候选列表）不重复查询，避免每次读缓存都打 Smartbox */
+     *  已解析过的缺码草稿（candidates 已置空列表或候选列表）不重复查询，避免每次读缓存都打字典 */
     private boolean needsCodeEnrichment(List<TradeDraftItem> drafts) {
         for (TradeDraftItem item : drafts) {
             if (!StringUtils.hasText(item.getStockCode()) && item.getCandidates() == null) {

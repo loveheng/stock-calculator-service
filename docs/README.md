@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # 文档索引
@@ -42,7 +42,8 @@ updated: 2026-09-25
 
 ## guide/ — 选股引导
 
-- [design](guide/design.md) · 选股引导设计（消息→候选股→个股档案两步向导 + copilot 聊天入口，评审定案待实施）
+- [design](guide/design.md) · 选股引导设计（消息→候选股→个股档案两步向导 + copilot 聊天入口，已实施上线）
+- [api](guide/api.md) · 接口文档 v1.0（前端对接：analyze-message / stock-brief 契约与样例）
 
 ## ai-pipeline/ — AI 管道（四条独立管道）
 
@@ -50,7 +51,12 @@ updated: 2026-09-25
 - [cls-article-vector](ai-pipeline/cls-article-vector.md) · cls_article 向量化（语义检索基座）设计
 - [cls-news-kg](ai-pipeline/cls-news-kg.md) · 《新闻联播》要闻时序知识图谱（kg 域）设计
 - [kg-api](ai-pipeline/kg-api.md) · kg 时间轴查询 API 前端对接文档（信封/字段表/样例/待确认清单）
-- [ocr-llm](ai-pipeline/ocr-llm.md) · 多渠道 OCR + 免费 LLM 全链路管道
+- [ocr-llm](ai-pipeline/ocr-llm.md) · MCP OCR 工具（mcp 模块）+ main LLM 解析管道
+
+## alert/ — 价格预告单监控
+
+- [design](alert/design.md) · 价格预告单监控设计（实时批量取价 + PRICE_NEAR 区间告警 + 交易时段 30 分钟轮询 + 3 次提醒自动停 + 推送合并窗口）
+- [api](alert/api.md) · 接口文档 v1.0（前端对接：monitor/start·list·stop 契约与推送行为预期）
 
 ## notify/ — 个人定制提醒服务（stock-calculator-mcp-notify）
 
@@ -75,6 +81,11 @@ updated: 2026-09-25
 - [agent-orchestration-possibilities](architecture/agent-orchestration-possibilities.md) · Agent 编排的可能性功能展望与演进路线
 - [free-canvas](architecture/free-canvas.md) · 自由画布后端对接方案 v3 Master（后端代理模式 / 读穿代理与出口防护 / 本地计算代理 / 多实例裁决）
 - [llm-module](architecture/llm-module.md) · stock-calculator-llm 共享装配模块（chat 三档 tier + embedding 供应商抽象 / 运行时 options 三坑 / AOT 设计取舍）
+- [jpa-native-extraction](architecture/jpa-native-extraction.md) · 抽取 spring-data-jpa 为共享 Native 组件改造方案（初版待评审）
+
+## toolbox/ — 脚本工具箱
+
+- [run](toolbox/run.md) · 项目 agent-tools 工具池登记实录（5 模块起停脚本规范与金丝雀预检）
 
 ## deploy/ — 部署与运维
 

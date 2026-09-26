@@ -1,7 +1,8 @@
-package com.zzh.stock_calculator.vision.config;
+package com.zzh.stock_calculator.vision;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
@@ -10,6 +11,7 @@ import java.time.Duration;
  * 目前承载「图片哈希 -> 交易草稿 AI 结果缓存」的 Redis 存活时长配置。
  */
 @Data
+@Component
 @ConfigurationProperties(prefix = "vision.ai")
 public class VisionAiProperties {
 

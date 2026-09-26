@@ -5,6 +5,7 @@ import com.zzh.stock_calculator.broker.dto.BrokerDtos;
 import com.zzh.stock_calculator.broker.util.BrokerRateLimiter;
 import com.zzh.stock_calculator.broker.util.FullCodeNormalizer;
 import com.zzh.stock_calculator.common.BusinessException;
+import com.zzh.stock_calculator.common.McpDispatchClient;
 import com.zzh.stock_calculator.crawler.StockDirectoryApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +36,7 @@ public class BrokerKlineService {
     private final BrokerRateLimiter rateLimiter;
     private final BrokerProperties properties;
     private final StockDirectoryApi stockDirectoryApi;
-    private final BrokerDispatchClient dispatchClient;
+    private final McpDispatchClient dispatchClient;
 
     /** (code|adjust|from|to) → 过期时间 + 上游 payload（短 TTL 请求合并） */
     private final ConcurrentHashMap<String, MergeEntry> mergeCache = new ConcurrentHashMap<>();

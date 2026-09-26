@@ -3,12 +3,11 @@ package com.zzh.stock_calculator.vision.service;
 import java.time.Duration;
 
 /**
- * 视觉结果缓存抽象（决策 B12：内存缓存全部移除，识别结果统一存 Redis）。
+ * 视觉结果缓存抽象：识别结果统一存 Redis。
  *
  * @description 值一律 String（对象与 JSON 的互转由调用方负责），key 由调用方拼接业务前缀
- *              （vision:ocr:text: / vision:ai:draft: / vision:executor:）。
- *              降级策略与 auth.SessionCacheStore 一致：Redis 不可用时 get 视作未命中、
- *              put/evict 静默跳过——识别主链路绝不因缓存故障失败，仅损失额度节省。
+ *              （vision:ai:draft:）。降级策略与 auth.SessionCacheStore 一致：Redis 不可用时
+ *              get 视作未命中、put/evict 静默跳过——识别主链路绝不因缓存故障失败，仅损失额度节省。
  */
 public interface VisionCacheStore {
 

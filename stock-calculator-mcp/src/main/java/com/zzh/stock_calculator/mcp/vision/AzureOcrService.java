@@ -1,9 +1,5 @@
-package com.zzh.stock_calculator.vision.service.impl;
+package com.zzh.stock_calculator.mcp.vision;
 
-import com.zzh.stock_calculator.util.HttpUtil;
-import com.zzh.stock_calculator.vision.config.OcrProperties;
-import com.zzh.stock_calculator.vision.service.OcrChannelException;
-import com.zzh.stock_calculator.vision.service.OcrService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
@@ -21,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Azure AI Vision Read 渠道（首选策略，@Order(1)）。
+ * Azure AI Vision Read 渠道（首选策略，@Order(1)；自 main vision 域平移）。
  * 两段式流程：POST /computervision/imageanalysis:analyze?features=read（小图 200 同步返回，
  * 大图 202 返回 Operation-Location，需轮询直至 Succeeded）。
  * 错误判定：429/5xx/连接/读取超时 → 可重试；401/403（Key 无效）与任务 Failed → 不可重试，直接换渠道。
@@ -41,8 +37,7 @@ public class AzureOcrService implements OcrService {
     public AzureOcrService(OcrProperties properties, ObjectMapper objectMapper) {
         this.props = properties.getAzure();
         this.objectMapper = objectMapper;
-        // 客户端构建统一收敛在 HttpUtil
-        this.restClient = HttpUtil.jdkRestClient(props.getConnectTimeout(), props.getReadTimeout());
+        this.restClient = jdkRestClient(props.getConnectTimeout(), props.getReadTimeout());
     }
 
     @Override
@@ -61,7 +56,7 @@ public class AzureOcrService implements OcrService {
     public String recognizeText(byte[] imageBytes, String language) {
         try {
             String submitUrl = UriComponentsBuilder
-                    .fromUriString(HttpUtil.trimTrailingSlash(props.getEndpoint()))
+                    .fromUriString(trimTrailingSlash(props.getEndpoint()))
                     .path("/computervision/imageanalysis:analyze")
                     .queryParam("api-version", props.getApiVersion())
                     .queryParam("features", "read")
@@ -77,7 +72,7 @@ public class AzureOcrService implements OcrService {
                     .retrieve()
                     .toEntity(byte[].class);
 
-            String body = HttpUtil.toUtf8String(submitResp.getBody());
+            String body = toUtf8String(submitResp.getBody());
             String operationLocation = submitResp.getHeaders().getFirst(OPERATION_LOCATION_HEADER);
             if (operationLocation != null) {
                 return pollResult(operationLocation);
@@ -91,7 +86,7 @@ public class AzureOcrService implements OcrService {
             throw e;
         } catch (Exception e) {
             // 连接/读取超时与其它网络 IO 统一按可重试处理
-            throw new OcrChannelException("azure 请求异常: " + HttpUtil.rootMessage(e), true, e);
+            throw new OcrChannelException("azure 请求异常: " + rootMessage(e), true, e);
         }
     }
 
@@ -104,7 +99,7 @@ public class AzureOcrService implements OcrService {
                     .header(KEY_HEADER, props.getApiKey())
                     .retrieve()
                     .body(byte[].class);
-            String body = HttpUtil.toUtf8String(pollBytes);
+            String body = toUtf8String(pollBytes);
             Map<String, Object> json = readJson(body);
             String status = String.valueOf(json.get("status"));
             if ("Succeeded".equalsIgnoreCase(status)) {
@@ -265,5 +260,30 @@ public class AzureOcrService implements OcrService {
             Thread.currentThread().interrupt();
             throw new OcrChannelException("azure 轮询被中断", true, e);
         }
+    }
+
+    // ===== HTTP/字符串辅助（main util.HttpUtil 的 mcp 侧内联等价，避免跨模块依赖） =====
+
+    private static RestClient jdkRestClient(Duration connectTimeout, Duration readTimeout) {
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) connectTimeout.toMillis());
+        factory.setReadTimeout((int) readTimeout.toMillis());
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
+    private static String toUtf8String(byte[] bytes) {
+        return bytes == null ? "" : new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static String trimTrailingSlash(String url) {
+        return url != null && url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
+
+    private static String rootMessage(Throwable e) {
+        Throwable cur = e;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur.getMessage() == null ? cur.getClass().getSimpleName() : cur.getMessage();
     }
 }

@@ -8,12 +8,12 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * 视觉结果缓存的 Redis 实现（决策 B12）。
+ * 视觉结果缓存的 Redis 实现。
  *
- * @description 纯 String 值存取（OCR 文本原样；结构化结果由调用方转 JSON），
+ * @description 纯 String 值存取（结构化结果由调用方转 JSON），
  *              TTL 由调用方按各自配置传入。所有操作 try/catch 降级：
- *              get 失败视作未命中（回源渠道调用），put/evict 失败仅打日志，
- *              保证 OCR/LLM 主链路不受 Redis 可用性影响。
+ *              get 失败视作未命中（回源重算），put/evict 失败仅打日志，
+ *              保证主链路不受 Redis 可用性影响。
  */
 @Slf4j
 @Component

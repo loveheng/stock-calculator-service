@@ -28,7 +28,7 @@ public class TradeDraftItem {
 
     private String tradeTime;     // 成交时间，格式 YYYY-MM-DD HH:mm:ss
 
-    /** 股票代码候选：截图无代码且 Smartbox 多候选/零匹配时透传给前端人工选择；唯一匹配已回填后为空列表 */
+    /** 股票代码候选：截图无代码且字典补全多候选/零匹配时透传给前端人工选择；唯一匹配已回填后为空列表 */
     private List<StockCandidate> candidates;
 
     @Builder.Default

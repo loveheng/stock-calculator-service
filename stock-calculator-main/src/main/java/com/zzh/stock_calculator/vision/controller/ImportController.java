@@ -5,9 +5,8 @@ import com.zzh.stock_calculator.vision.dto.StockCandidate;
 import com.zzh.stock_calculator.vision.dto.TradeDraftItem;
 import com.zzh.stock_calculator.vision.service.ImagePreprocessService;
 import com.zzh.stock_calculator.vision.service.ImageTextProcessingFacade;
-import com.zzh.stock_calculator.vision.service.OcrChainManager;
-import com.zzh.stock_calculator.vision.service.StockCodeResolver;
-import com.zzh.stock_calculator.vision.service.TradeVisionService;
+import com.zzh.stock_calculator.vision.service.OcrViaMcpService;
+import com.zzh.stock_calculator.vision.service.DictStockCodeResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -22,53 +21,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ImportController {
 
-    private final TradeVisionService tradeVisionService;
-
-    private final OcrChainManager ocrChainManager;
+    private final OcrViaMcpService ocrViaMcpService;
 
     private final ImagePreprocessService imagePreprocessService;
 
     private final ImageTextProcessingFacade imageTextProcessingFacade;
 
-    private final StockCodeResolver stockCodeResolver;
-
-    @PostMapping("/ocr-parse")
-    public ApiResponse<List<TradeDraftItem>> parseTradeScreenshot(@RequestParam("file") MultipartFile file) {
-        List<TradeDraftItem> result = tradeVisionService.parseScreenshot(file);
-        return ApiResponse.success(result);
-    }
+    private final DictStockCodeResolver stockCodeResolver;
 
     /**
-     * 通用 OCR 文本识别（责任链调度示例）：
-     * azure -> ocrspace -> local-gemini 依次兜底，命中图片哈希缓存直接返回。
-     */
-    @PostMapping("/ocr-text")
-    public ApiResponse<String> recognizeScreenshotText(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "language", required = false) String language) {
-        try {
-            return ApiResponse.success(ocrChainManager.recognizeText(file.getBytes(), language));
-        } catch (IOException e) {
-            throw new BusinessException(400, "读取上传文件失败");
-        }
-    }
-
-    /**
-     * 智能图片分析（Facade 全链路示例）：
-     * OCR 多渠道提取文本 -> 清洗与 Prompt 组装 -> LLM 多渠道处理（gemini -> groq -> 降级模板）。
-     * task 不传时使用默认指令（整理总结）。
-     */
-    @PostMapping("/image-ai")
-    public ApiResponse<String> processImageWithAi(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "task", required = false) String taskInstruction) {
-        byte[] imageBytes = imagePreprocessService.validateAndProcess(file);
-        return ApiResponse.success(imageTextProcessingFacade.processImageToAiResult(imageBytes, taskInstruction));
-    }
-
-    /**
-     * 交易流水图片 -> AI 交易草稿（结果缓存版）：
-     * OCR 多渠道提取文本 -> 清洗与交易 Prompt 组装 -> LLM 多渠道 -> 解析为 TradeDraftItem 列表。
+     * 交易流水图片 → AI 交易草稿（结果缓存版）：
+     * 经 MCP ocr 工具提取文本 -> 清洗与交易 Prompt 组装 -> LLM 多渠道 -> 解析为 TradeDraftItem 列表。
      * useCache=true（默认）命中图片哈希结果缓存直接返回；
      * useCache=false 淘汰缓存并以审查模式 Prompt 重新处理（结果未被认可，要求逐字校对数字）。
      */
@@ -78,6 +41,44 @@ public class ImportController {
             @RequestParam(value = "useCache", required = false, defaultValue = "true") boolean useCache) {
         byte[] imageBytes = imagePreprocessService.validateAndProcess(file);
         return ApiResponse.success(imageTextProcessingFacade.processImageToTradeDrafts(imageBytes, useCache));
+    }
+
+    /**
+     * 交易流水结构化解析：与 /process-image 同管道（MCP ocr → LLM 交易 prompt → 解析），
+     * 固定走缓存，供旧调用方使用。
+     */
+    @PostMapping("/ocr-parse")
+    public ApiResponse<List<TradeDraftItem>> parseTradeScreenshot(@RequestParam("file") MultipartFile file) {
+        byte[] imageBytes = imagePreprocessService.validateAndProcess(file);
+        return ApiResponse.success(imageTextProcessingFacade.processImageToTradeDrafts(imageBytes, true));
+    }
+
+    /**
+     * 通用 OCR 纯文本识别：经 MCP ocr 工具（azure → ocrspace 责任链在 mcp 侧，
+     * 图片哈希缓存命中零渠道消耗）。
+     */
+    @PostMapping("/ocr-text")
+    public ApiResponse<String> recognizeScreenshotText(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "language", required = false) String language) {
+        try {
+            return ApiResponse.success(ocrViaMcpService.recognizeText(file.getBytes(), language));
+        } catch (IOException e) {
+            throw new BusinessException(400, "读取上传文件失败");
+        }
+    }
+
+    /**
+     * 智能图片分析（Facade 全链路示例）：
+     * OCR 多渠道提取文本 -> 清洗与 Prompt 组装 -> LLM 多渠道处理（openai-mini -> 降级模板）。
+     * task 不传时使用默认指令（整理总结）。
+     */
+    @PostMapping("/image-ai")
+    public ApiResponse<String> processImageWithAi(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "task", required = false) String taskInstruction) {
+        byte[] imageBytes = imagePreprocessService.validateAndProcess(file);
+        return ApiResponse.success(imageTextProcessingFacade.processImageToAiResult(imageBytes, taskInstruction));
     }
 
     /**

@@ -47,8 +47,16 @@ public class BrokerMonitorTaskEntity {
     @Column(name = "alert_type", nullable = false, length = 20)
     private String alertType;
 
+    /** 交易方向 BUY/SELL（前端反馈定案）：BUY 低吸区间、SELL 高抛区间；SELL 仅容 PRICE_NEAR */
+    @Column(name = "direction", nullable = false, length = 8)
+    private String direction;
+
     @Column(nullable = false, precision = 12, scale = 4)
     private BigDecimal threshold;
+
+    /** PRICE_NEAR 专用：区间容差（元），abs(现价−threshold) ≤ band 触发；PRICE_BELOW 忽略 */
+    @Column(precision = 12, scale = 4)
+    private BigDecimal band;
 
     @Column(nullable = false, length = 16)
     @Builder.Default
@@ -59,6 +67,11 @@ public class BrokerMonitorTaskEntity {
 
     @Column(name = "last_alert_at")
     private OffsetDateTime lastAlertAt;
+
+    /** 累计告警次数（docs/alert/design.md §四.5）：≥3 时同事务自动 STOPPED，预告单生命周期结束 */
+    @Column(name = "alert_count", nullable = false)
+    @Builder.Default
+    private int alertCount = 0;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

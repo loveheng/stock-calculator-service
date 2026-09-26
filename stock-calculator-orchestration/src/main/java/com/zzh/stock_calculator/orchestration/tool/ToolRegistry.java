@@ -64,17 +64,34 @@ public class ToolRegistry {
                             + "\"indicators\":{\"type\":\"string\",\"required\":true,\"desc\":\"指标名 JSON 数组，如 [macd,kdj,boll]\"}}")),
             Map.entry("stock_levels", new McpSeed("个股支撑/压力位与关键价位", "quote",
                     "{\"stock\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票代码或名称\"}}")),
-            Map.entry("stock_radar_check", new McpSeed("多条件雷达断言：是否突破N日均线和/或量能放大，返回枚举信号 both/break_only/volume_only/none（switch 节点按此分流，命中才触发提醒）", "quote",
+            Map.entry("stock_radar_check", new McpSeed("多条件雷达断言：conditions 可选（JSON 数组）ma_break 突破N日均线/volume_surge 量能放大/macd_golden macd_dead MACD金叉死叉/kdj_golden kdj_dead KDJ金叉死叉/kdj_overbought kdj_oversold J超买超卖/pct_up pct_down 涨跌幅达阈值/resistance_break support_break 穿越最近支撑压力位带；缺省只查均线突破+量能，返回枚举信号 both/break_only/volume_only/none（switch 节点按此分流）；传 conditions 时返回逐条件布尔 results、命中列表 matched、allMatched", "quote",
                     "{\"stock\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票代码或名称\"},"
                             + "\"maWindow\":{\"type\":\"int\",\"required\":false,\"desc\":\"均线窗口（日），默认20，范围5-120\"},"
-                            + "\"volumeRatio\":{\"type\":\"number\",\"required\":false,\"desc\":\"量能倍数阈值，默认2.0\"}}")),
+                            + "\"volumeRatio\":{\"type\":\"number\",\"required\":false,\"desc\":\"量能倍数阈值，默认2.0\"},"
+                            + "\"conditions\":{\"type\":\"array\",\"required\":false,\"desc\":\"条件列表，如 [macd_golden,pct_up]\"},"
+                            + "\"pctThreshold\":{\"type\":\"number\",\"required\":false,\"desc\":\"涨跌幅阈值（%），默认3，仅 pct_up/pct_down\"}}")),
+            Map.entry("stock_radar_batch", new McpSeed("批量雷达过筛：对一组候选股票逐只跑 stock_radar_check 同款条件断言，返回逐只命中摘要与 hitCount，适合候选清单过筛（选股引导候选、自选池巡检）；单次 ≤50 只，解析失败的代码进 unresolved 不中断整批", "quote",
+                    "{\"stocks\":{\"type\":\"array\",\"required\":true,\"desc\":\"股票代码或名称列表，≤50 只\"},"
+                            + "\"conditions\":{\"type\":\"array\",\"required\":false,\"desc\":\"条件列表，语义同 stock_radar_check\"},"
+                            + "\"maWindow\":{\"type\":\"int\",\"required\":false,\"desc\":\"均线窗口（日），默认20\"},"
+                            + "\"volumeRatio\":{\"type\":\"number\",\"required\":false,\"desc\":\"量能倍数阈值，默认2.0\"},"
+                            + "\"pctThreshold\":{\"type\":\"number\",\"required\":false,\"desc\":\"涨跌幅阈值（%），默认3\"}}")),
+            Map.entry("fetch_realtime_quote", new McpSeed("批量获取股票实时现价（交易时段最新价，非交易时段为最近收盘价），返回 quotes:{代码:现价}；停牌/解析失败的代码不在结果中", "quote",
+                    "{\"codes\":{\"type\":\"array\",\"required\":true,\"desc\":\"股票代码列表，如 [\\\"600519\\\",\\\"sz000001\\\"]，单次 ≤200 只\"},"
+                            + "\"traceId\":{\"type\":\"string\",\"required\":false,\"desc\":\"调用方追踪 ID，原样回传\"}}")),
+            Map.entry("time_parse", new McpSeed("把中文时间表达解析为具体时间点/时间范围（Asia/Shanghai）：绝对时间、节日节气、相对时间（昨天/最近7天）、交易日语义（上一个交易日/盘前盘后/T+1）、周期→cron；"
+                    + "模糊表达返回候选且 needUserConfirm=true，必须转交用户确认后采用。LLM 需要时间口径时一律先调本工具归一，不自行推算", "time",
+                    "{\"text\":{\"type\":\"string\",\"required\":true,\"desc\":\"中文时间表达原文，如 '上周五收盘后'/'最近7天'\"}}")),
             Map.entry("kb_search", new McpSeed("本地书库知识检索（RAG），按语义查经典/博主观点并返回出处", "kb",
                     "{\"query\":{\"type\":\"string\",\"required\":true,\"desc\":\"检索问题\"},"
                             + "\"book\":{\"type\":\"string\",\"required\":false,\"desc\":\"限定书名\"},"
                             + "\"top_k\":{\"type\":\"int\",\"required\":false,\"desc\":\"返回条数\"}}")),
             Map.entry("kb_book_list", new McpSeed("书库清单（书目元数据）", "kb", "{}")),
             Map.entry("kb_persona", new McpSeed("博主人格卡（语气/立场/金句 few-shot），数字人提示词层", "kb",
-                    "{\"blogger\":{\"type\":\"string\",\"required\":true,\"desc\":\"博主名\"}}")));
+                    "{\"blogger\":{\"type\":\"string\",\"required\":true,\"desc\":\"博主名\"}}")),
+            Map.entry("ocr", new McpSeed("图片 OCR 文字识别：输入 base64 图片，返回纯文本（azure→ocrspace 责任链 + 图片哈希缓存）", "vision",
+                    "{\"imageBase64\":{\"type\":\"string\",\"required\":true,\"desc\":\"base64 编码图片（不带 data: 前缀）\"},"
+                            + "\"language\":{\"type\":\"string\",\"required\":false,\"desc\":\"语言提示，如 chs\"}}")));
 
     /**
      * main REST 工具种子（2② 财报对比链路数据源；原「手工 SQL 登记」收编为同款启动自注册，
@@ -88,16 +105,19 @@ public class ToolRegistry {
                     "keep_summary", EM_SYNC),
             new RestSeed("main.guide.analyze_message", "POST /api/guide/analyze-message",
                     "guide",
-                    "选股引导 Step1：从用户听到的一条消息找相关股票（词典快路径+LLM 抽实体，返回候选清单+依据+nextStep 指令）。"
-                            + "用户表达「听到一个消息/新闻，想看看有什么股票机会」时先调本工具，拿到候选后向用户澄清选定",
-                    "{\"message\":{\"type\":\"string\",\"required\":true,\"desc\":\"消息原文（≤500 字口语转述）\"},"
+                    "选股引导 Step1：从一条消息/题材/代码找相关股票（词典快路径+LLM 抽实体，返回候选清单+依据+nextStep 指令）。"
+                            + "触发面：用户表达「听到一个消息/新闻想选股」、给题材/概念问有哪些活跃票、"
+                            + "给个股代码或名称问最近消息面机会时调本工具，拿到候选后向用户澄清选定",
+                    "{\"message\":{\"type\":\"string\",\"required\":true,\"desc\":\"消息/题材/代码原文（≤500 字口语转述）\"},"
                             + "\"days\":{\"type\":\"int\",\"required\":false,\"desc\":\"时间窗（天），默认 7，范围 1-30\"}}",
                     "keep_head", EM_SYNC),
             new RestSeed("main.guide.stock_brief", "GET /api/guide/stock-brief",
                     "guide",
-                    "选股引导 Step2：个股引导档案（近期电报提及+题材归属+公告摘要+nextSteps 建议）。"
-                            + "用户从 analyze_message 候选中选定某只后调用，stockId 必须用 Step1 返回的 stockId",
-                    "{\"stockId\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票 ID（Step1 候选的 stockId）\"},"
+                    "选股引导 Step2：个股引导档案（近期电报提及+题材归属+公告摘要+techSnapshot 技术面快照："
+                            + "日线级最新指标信号与最近支撑/压力位带，dispatch 不可用时缺席+nextSteps 建议）。"
+                            + "触发面：用户从 analyze_message 候选选定某只、或问某只股票「近况/最近有什么消息/动态汇总」"
+                            + "（含公告解读后的近况聚合）时调用；stockId 优先用 Step1 返回值，裸 6 位代码也可自动归一化",
+                    "{\"stockId\":{\"type\":\"string\",\"required\":true,\"desc\":\"股票 ID（Step1 候选的 stockId，或裸 6 位代码）\"},"
                             + "\"days\":{\"type\":\"int\",\"required\":false,\"desc\":\"时间窗（天），默认 7\"}}",
                     "keep_head", EM_SYNC));
 

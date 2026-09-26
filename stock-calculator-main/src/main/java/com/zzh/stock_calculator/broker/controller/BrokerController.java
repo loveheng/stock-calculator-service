@@ -129,6 +129,13 @@ public class BrokerController {
         return ApiResponse.success(monitorService.start(userId, body));
     }
 
+    /** 用户预告单列表（docs/alert/design.md）：含 alert_count 进度与 band，前端管理页用 */
+    @GetMapping("/monitor/list")
+    public ApiResponse<BrokerDtos.MonitorListData> monitorList(
+            @RequestAttribute("authUserId") String userId) {
+        return ApiResponse.success(monitorService.list(userId));
+    }
+
     /** §3.5 监控任务停止 */
     @PostMapping("/monitor/stop")
     public ApiResponse<BrokerDtos.MonitorStopData> monitorStop(

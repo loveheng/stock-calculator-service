@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-24
+updated: 2026-09-26
 ---
 
 # MCP 服务设计（stock-calculator-mcp）
@@ -174,15 +174,24 @@ main 现状：stock 表仅 crawler 域使用，Redis 中无字典镜像（Redis 
 
 本地自用不分发，整书文本入库无实际风险；**红线**：服务与库数据不得开源或提供他人接入。
 
-## 九、MCP 工具契约（6 个）
+## 九、MCP 工具契约
 
 | 工具 | 入参 | 返回 | 背后 |
 |---|---|---|---|
 | stock_analysis | stockId（或名称，内存解析） | MA5/10/20/60、MACD、RSI、BOLL、KDJ 最新值 + 趋势摘要 | quote + indicator |
 | stock_daily | stockId, days | 原始日线序列（紧凑 JSON） | quote |
+| fetch_kline | stock, adjustType(qfq/raw), from/to | 升序日线切片（查库覆盖，不足自动拉取入库） | quote（画布读穿代理） |
+| fetch_realtime_quote | codes[]（≤200 只） | quotes:{代码:现价}（停牌/失败不出现在结果中） | 腾讯行情（监控取价数据源） |
+| compute_indicators | klines 切片, indicators[] | macd/kdj/boll 逐根序列（无状态纯计算） | indicator |
+| stock_levels | stockId（或名称） | 支撑/压力位带各 ≤5 档（枢轴/摆动聚类/成交密集三类型，带触及次数与占比依据） | SupportResistanceService（D10，2026-09-20） |
+| stock_radar_check | stock, maWindow, volumeRatio, conditions[], pctThreshold | 缺省=signal 枚举 both/break_only/volume_only/none（switch 分流兼容）；传 conditions（ma_break/volume_surge/macd金叉死叉/kdj金叉死叉与极值/pct_up·pct_down/位带破立 12 种）追加逐条件布尔 results + matched + allMatched | RadarCheckService（2026-09-26 条件枚举扩展） |
+| stock_radar_batch | stocks[]（≤50 只）, conditions 同上 | 逐只命中摘要（matched/allMatched/signal/changePct/lastClose）+ hitCount；解析失败进 unresolved 不中断 | RadarCheckService（2026-09-26，候选清单过筛） |
+| time_parse | text | 中文时间表达→时间点/范围（Asia/Shanghai），模糊表达出候选需用户确认 | time（2026-09-22） |
 | kb_search | query, topK(默认5) | chunk 正文 + 书名/章节出处，两路合并 | kb |
 | kb_book_list | — | 书目清单（含 chunk 数/分类/阅读顺序） | kb |
-| stock_levels | stockId（或名称） | 支撑/压力位带各 ≤5 档（枢轴/摆动聚类/成交密集三类型，带触及次数与占比依据） | SupportResistanceService（D10，2026-09-20） |
+| kb_persona | blogger | 博主人格卡（语气/立场/金句 few-shot） | kb |
+| ocr | imageBase64, language | 识别纯文本（azure→ocrspace 责任链+哈希缓存） | vision |
+| ping | text | 原样回显（连通性自检） | — |
 
 工具描述（description）写给 LLM 看：说明何时该用、入参口径（支持名称模糊解析）、返回结构——
 描述质量直接决定客户端调用命中率。

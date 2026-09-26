@@ -74,11 +74,40 @@ public class PushDeliveryService {
     /** 僵尸订阅判定窗口：90 天无成功触达即清（评估结论 #3） */
     private static final java.time.Duration STALE_WINDOW = java.time.Duration.ofDays(90);
 
+    /** 合并窗口缓冲单元：一条待投递消息的轻量载体（title/body/url 三元组） */
+    public record PendingMessage(String title, String body, String url) { }
+
+    /**
+     * 合并投递（PushCoalescingService 窗口冲刷调用）：批量逐条落库（通知中心明细不缩水），
+     * Web Push 只发一条——标题取首条，正文逐行列出（单条消息则与 pushToUser 等价）。
+     */
+    public int pushMerged(String userId, List<PendingMessage> messages) {
+        for (PendingMessage m : messages) {
+            messageRepository.save(PushMessage.builder()
+                    .userId(userId).title(m.title()).body(m.body()).url(m.url()).build());
+        }
+        PendingMessage first = messages.get(0);
+        String title = messages.size() == 1 ? first.title()
+                : first.title() + "（" + messages.size() + " 条合并）";
+        StringBuilder bodyBuilder = new StringBuilder();
+        for (PendingMessage m : messages) {
+            if (bodyBuilder.length() > 0) {
+                bodyBuilder.append('\n');
+            }
+            bodyBuilder.append(m.body());
+        }
+        return deliver(userId, title, bodyBuilder.toString(), first.url());
+    }
+
     public int pushToUser(String userId, String title, String body, String url) {
         // 1) 落库（不依赖订阅存在）：推送是尽力触达，打开 PWA 拉未读是兜底
         messageRepository.save(PushMessage.builder()
                 .userId(userId).title(title).body(body).url(url).build());
+        return deliver(userId, title, body, url);
+    }
 
+    /** 落库后的推送段（惰性清僵尸订阅 + 逐订阅尽力触达），pushToUser/pushMerged 共用 */
+    private int deliver(String userId, String title, String body, String url) {
         // 2) 惰性清理僵尸订阅（90 天无成功触达；顺带执行，无独立定时任务）
         int pruned = repository.pruneStale(java.time.OffsetDateTime.now().minus(STALE_WINDOW));
         if (pruned > 0) {

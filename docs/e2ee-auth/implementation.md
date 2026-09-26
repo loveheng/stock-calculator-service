@@ -169,7 +169,7 @@ ProfileResponse upsert(UUID userId, ProfileUpsertRequest req, String ifMatchHead
 | 项 | 内容 |
 |----|------|
 | common/pom.xml | + spring-boot-starter-mail |
-| application.yml | spring.mail.host / port / username / password + 默认发件人（占位符写法对齐 application.yml 现有 GEMINI_API_KEY 条目，凭据经 docker-compose 环境变量注入） |
+| application.yml | spring.mail.host / port / username / password + 默认发件人（占位符写法对齐 application.yml 现有 OPENAI_MINI_API_KEY 条目，凭据经 docker-compose 环境变量注入） |
 
 ### 3.2 文件清单（common）
 

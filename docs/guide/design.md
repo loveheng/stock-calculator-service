@@ -1,6 +1,6 @@
 ---
 status: active
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # 选股引导设计（guide 域）
@@ -37,10 +37,10 @@ updated: 2026-09-25
 
 **非目标（P2 展望，本期不做）**：
 
-- 技术面快照：经 dispatch 调 :18081 指标/位带（需 broker 域基包新增门面，本期仅 nextSteps 文案指路）；
+- ~~技术面快照~~（已实施 2026-09-26：GuideStockBriefService 经 common/McpDispatchClient 调 mcp stock_analysis+stock_levels，techSnapshot 字段随 stock_brief 返回，通道不可用降级为 null；见 api.md §2.2）；
 - 提醒登记联动（notify reminder，文案指路「帮我设个提醒」）；
 - KG 时间线聚合（kg 域基包无查询门面，需先补）；
-- `guide:stock_selection` copilot 系统提示词模板（注入路径待前端引导页 scopeId 或 taskType 路由，见 D7）；
+- ~~`guide:stock_selection` copilot 系统提示词模板~~（P2 已提前实施：改为 buildPrompt 固定短段，见 D12）；
 - 前端向导 UI（本设计只交付 API 地基）；
 - 全市场选股/回测（属 mcp 路线二独立 epic，与本引导无关）。
 
@@ -109,18 +109,21 @@ guide 两工具登记进 `ToolRegistry.REST_SEEDS`（kind=rest，risk=read → p
 
 | 端点 | 入参 | 返回（字段序即序列化序） | 背后 |
 |---|---|---|---|
-| `POST /api/guide/analyze-message` | `{message 必填, days?=7（1-30 钳制）}` | nextStep → candidates → entities → keywords → llmDegraded | 锚定 + LLM 抽取 + 题材两跳 |
+| `POST /api/guide/analyze-message` | `{message 必填, days?=7（1-30 钳制）}` | nextStep → nextAction → candidates → entities → keywords → relatedArticles → llmDegraded | 锚定 + LLM 抽取 + 题材两跳 |
 | `GET /api/guide/stock-brief` | query `stockId 必填, days?=7` | nextSteps → stockId/stockName → clsMention → subjects → announcements | 提及 + 反向题材 + 公告档案 |
 
 - 统一 ApiResponse 信封，异常交 GlobalExceptionHandler；`/api/guide/**` **不挂** AuthInterceptor——
   本端点族同时是 orchestration 工具面，ToolInvoker 无用户会话，对齐 `main.announcement.summaries`
-  先例（只读聚合 + 本地自用裸跑；设计早期「挂拦截」表述已废弃，见 D10）。
+  先例（只读聚合 + 本地自用裸跑；设计早期「挂拦截」表述已废弃，见 D10/D13）。
+- CORS：**不挂** `@CrossOrigin`——对齐 search/broker 数据端点多数派（同源/代理部署），
+  auth/import 的 CORS 是 Bearer 无 cookie 特例；前端对接口径见 api.md §0。
 
 ### 4.2 响应骨架（字段顺序为红线②约束）
 
 ```json
 {
-  "nextStep": "向用户呈现候选清单并请其选定关注对象；选定后调用 main.guide.stock_brief 取个股档案",
+  "nextStep": "向用户呈现候选清单（附近期提及数与样例依据），请其选定关注对象后查看个股档案。",
+  "nextAction": "present_candidates",
   "candidates": [
     {"stockId": "300750", "stockName": "宁德时代", "hitType": "STOCK", "hitName": "宁德时代",
      "recentMentionCount": 12,
@@ -189,10 +192,13 @@ copilot（CopilotPromptResolver）、llm（LlmChainRouter）、search（新 Stoc
 | D4 | 未锚定丢弃不编造 | LLM 抽出的名字必须过字典锚定才算数；未命中丢弃并回显 keywords——宁可澄清不可给错股票 |
 | D5 | nextStep/nextSteps 置 JSON 顶层首位 | keep_head(2KB) 截断安全位 + LLM 第一眼看到指令；响应自描述驱动多轮，任何调用方（LLM/前端）都天然知道下一步 |
 | D6 | stock_brief 用 GET query 而非 path variable | ToolInvoker GET 分支平铺 query，不支持路径模板；对齐 main.announcement.summaries 先例 |
-| D7 | v1 不动 copilot 系统提示词 | 聊天引导已由 dispatch 能力菜单自纠（2026-09-25）+ 工具描述 + 响应 nextStep 兜住；系统提示词模板的注入路径（前端引导页 scopeId / taskType 路由）未定，不预留死代码 |
-| D8 | LLM 免费链路 fail-open | LlmChainRouter（gemini→groq）失败/降级不阻塞主流程，回落词典路径并在响应标 `llmDegraded`，调用方可据此提示用户 |
+| D7 | v1 不动 copilot 系统提示词 | 聊天引导已由 dispatch 能力菜单自纠（2026-09-25）+ 工具描述 + 响应 nextStep 兜住；**P2 已由 D12 实施收编此悬置项** |
+| D8 | LLM 免费链路 fail-open | LlmChainRouter（openai-mini→fallback）失败/降级不阻塞主流程，回落词典路径并在响应标 `llmDegraded`，调用方可据此提示用户 |
 | D9 | 域名 guide、前缀 /api/guide | main 全仓无 guide 包零撞名；/api/broker 已被画布域占用 |
 | D10 | `/api/guide/**` 不挂 AuthInterceptor | 端点族同时是 dispatch 工具面，ToolInvoker 无用户会话，挂拦截会 401 掐断聊天路径；对齐 main.announcement.summaries 先例（实施期修正，2026-09-25 冒烟实证） |
+| D11 | 代码形态输入统一走 `StockDirectoryApi.resolveDictKey` 归一化 | 中途入口评估实测（2026-09-25）：裸 6 位码在 analyze（`resolveByName` 只认名称）与 brief（精确 findById）双断链；字典键混杂（沪深前缀/北交 .BJ 后缀）沿用 broker klines 同款双形态坑先例，归一化收敛到 crawler 基包单点 |
+| D12 | 旁路回流走 buildPrompt 固定短段（G2） | 全聊天面注入「选股引导约定」（约 130 字，置于动作块契约之前、任务型模版分支不叠加）——对齐会话身份块（reminder_* 工具名代码级耦合）与动作块契约两个既有先例；弃 `guide:stock_selection` 页面模板方案（resolve() 标签链按 scope 回落、无法全面覆盖，且 ON CONFLICT DO NOTHING 对存量库不生效） |
+| D13 | `/api/guide/**` 裸跑（无鉴权无频控）为**已评估的决定**而非默认发生 | 当前部署封闭（服务不对公网开放、访问需登录），暴露面风险可接受（2026-09-26 评审定案）；主要被刷资产=LLM 免费配额与电报/公告聚合。**公网化前置条件**：须先挂 IP 维度宽松限频（sync 域 RateLimitService 先例），并复核 D10 裸跑口径；nextStep 双语义已同步消解（v1.1 拆 nextAction 枚举 + 展示安全 hint，api.md §1.2） |
 
 ## 八、风险与对策
 
@@ -216,7 +222,9 @@ copilot（CopilotPromptResolver）、llm（LlmChainRouter）、search（新 Stoc
 | M4 | orchestration REST_SEEDS +2 与 data.sql 播种 | done 2026-09-25（tool_registry 自动登记实证） |
 | M5 | 单测 + `./mvnw test`（470 用例全绿） | done 2026-09-25 |
 | M6 | 冒烟（curl 两端点 + tool_registry 登记 + 题材两跳产出） | done 2026-09-25（LLM 免费链路 504 → fail-open 降级实证；dispatch 全链 MCP 握手因手搓 curl 与 SDK 序列化差异未走通，生产客户端不受影响，留给聊天窗实测） |
-| M7 | api.md 前端对接切片（按 docs skill §二 联动触发）与 implementation 实施记录 | 待实施（前端向导 UI 开工时） |
+| M7 | api.md 前端对接切片 | done 2026-09-26（docs/guide/api.md v1.0；implementation 实施记录随前端 UI 开工补） |
+| M8 | 中途入口加固 v1.1（G4 裸码归一化 D11 + G1/G3 dispatch 描述扩面） | done 2026-09-25（473 用例全绿 + 三场景实测回归） |
+| M9 | G2 旁路回流（D12：buildPrompt 固定「选股引导约定」段，全聊天面注入） | done 2026-09-26（编译+全量单测过；对话效果待聊天窗实测） |
 
 ## 十、关联文档
 
@@ -225,5 +233,5 @@ copilot（CopilotPromptResolver）、llm（LlmChainRouter）、search（新 Stoc
 - [cls-news-kg](../ai-pipeline/cls-news-kg.md) · ClsDictAnchorApi 锚点 API 来源（§9 基包门面）
 - [news-search](../news-search/) · 同源检索能力口径（isEntityLikeQuery / 双路径）
 - [copilot](../copilot/) · 提示词模板播种与 resolveTaskTemplate 机制
-- [mcp/design](../mcp/design.md) · P2 技术面快照的工具面（:18081 经纪人）
+- [mcp/design](../mcp/design.md) · 技术面快照的工具面（:18081 经纪人，techSnapshot 数据源）
 - [notify/design](../notify/design.md) · P2 提醒联动的触达面（:18082 通知者）

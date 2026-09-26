@@ -4,6 +4,7 @@ import com.zzh.stock_calculator.broker.config.BrokerProperties;
 import com.zzh.stock_calculator.broker.dto.BrokerDtos;
 import com.zzh.stock_calculator.broker.util.BrokerRateLimiter;
 import com.zzh.stock_calculator.common.BusinessException;
+import com.zzh.stock_calculator.common.McpDispatchClient;
 import com.zzh.stock_calculator.crawler.StockDirectoryApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,7 +42,7 @@ class BrokerKlineServiceTest {
     private StockDirectoryApi stockDirectoryApi;
 
     @Mock
-    private BrokerDispatchClient dispatchClient;
+    private McpDispatchClient dispatchClient;
 
     private BrokerKlineService service;
 

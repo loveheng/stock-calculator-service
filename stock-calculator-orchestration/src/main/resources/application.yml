@@ -45,8 +45,10 @@ spring:
         keep-alive-interval: 15s
       client:
         common:
-          # 超时梯队第 1 层（步 5 定案 3）：ToolInvoker 8s < dispatch 10s < copilot HTTP 15s
-          request-timeout: 8s
+          # 超时梯队（步 5 定案 3 基础上 2026-09-26 为 vision ocr 工具调档）：
+          # request-timeout 40s 覆盖 ocr 双渠道重试最坏耗时（azure 30s 读超时 × 2 次 + 退避）；
+          # REST 分支仍由 ToolInvoker.INVOKE_TIMEOUT 8s 独立兜底（kind=rest 才走 RestClient）
+          request-timeout: 40s
         sse:
           connections:
             # Executor kind=mcp 节点统一走 :18081 经纪人（D5：规划器不感知工具背后是 MCP 还是 REST）；

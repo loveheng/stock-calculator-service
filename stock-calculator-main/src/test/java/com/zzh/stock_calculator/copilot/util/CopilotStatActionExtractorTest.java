@@ -216,4 +216,25 @@ class CopilotStatActionExtractorTest {
         assertNotNull(parsed);
         assertEquals("canvas_add_widget", parsed.actions().get(0).getType());
     }
+
+    @Test
+    void actionOutputContract_fewShotExampleParses() {
+        // 契约内嵌的完整 few-shot 示例必须能被本解析器原样消费（提示词↔解析器同源红线；
+        // parse 取最后一个完整块 = 具体 few-shot，2026-09-26 画布散文幻觉补强的回归锚点）
+        CopilotStatActionExtractor.Parsed parsed =
+                CopilotStatActionExtractor.parse(CopilotStatActionExtractor.ACTION_OUTPUT_CONTRACT);
+        assertNotNull(parsed);
+        assertEquals(2, parsed.actions().size());
+        assertEquals("canvas_add_block", parsed.actions().get(0).getType());
+        assertEquals("brief", payloadType(parsed.actions().get(0)));
+        assertEquals("kline", payloadType(parsed.actions().get(1)));
+        // few-shot 之外，反幻觉后果句与围栏禁令必须在场
+        assertTrue(CopilotStatActionExtractor.ACTION_OUTPUT_CONTRACT.contains("该次请求即视为失败"));
+        assertTrue(CopilotStatActionExtractor.ACTION_OUTPUT_CONTRACT.contains("严禁用 ``` 等代码围栏包裹"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String payloadType(CopilotActionItem item) {
+        return String.valueOf(((Map<String, Object>) item.getPayload()).get("type"));
+    }
 }

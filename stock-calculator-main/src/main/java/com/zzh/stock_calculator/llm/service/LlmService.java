@@ -2,7 +2,7 @@ package com.zzh.stock_calculator.llm.service;
 
 /**
  * LLM 文本处理策略接口（策略模式）。
- * 每个实现代表一个模型渠道（gemini / groq / fallback），由 {@link com.zzh.stock_calculator.llm.LlmChainRouter}
+ * 每个实现代表一个模型渠道（openai-mini / fallback），由 {@link com.zzh.stock_calculator.llm.LlmChainRouter}
  * 按预设优先级（实现类的 @Order）编排为责任链。
  *
  * <p>结果契约（与 OCR 侧 OcrService 保持一致）：
@@ -14,7 +14,7 @@ package com.zzh.stock_calculator.llm.service;
  */
 public interface LlmService {
 
-    /** 渠道名（用于日志与全链失败原因汇总，如 "gemini"、"groq"、"fallback"） */
+    /** 渠道名（用于日志与全链失败原因汇总，如 "openai-mini"、"fallback"） */
     String providerName();
 
     /** 自我健康检查：渠道关闭或缺少 Key / baseUrl 时返回 false，调度器直接跳过该节点 */

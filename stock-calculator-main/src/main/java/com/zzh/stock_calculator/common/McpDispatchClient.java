@@ -1,6 +1,5 @@
-package com.zzh.stock_calculator.broker.service;
+package com.zzh.stock_calculator.common;
 
-import com.zzh.stock_calculator.common.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -14,16 +13,18 @@ import tools.jackson.databind.node.ObjectNode;
 import java.util.Map;
 
 /**
- * broker 域编排出口（free-canvas v3 硬约束 #1：main 不直连 :18081/:18082，
+ * 编排出口（free-canvas v3 硬约束 #1：main 不直连 :18081/:18082，
  * 一切工具面调用收敛到 :18083 dispatch 单连接）。
  * <p>确定性调用形态：经 Spring AI MCP client（orchestration-dispatch 连接）取 dispatch
  * 工具回调，intentText 直传工具名（DispatchRouter 工具名命中 +100 确定性路由 SYNC_DIRECT），
  * caller=service（程序化调用方，CLARIFY 降级为确定性错误）。连接缺失容错：兜 500 语义。</p>
+ * <p>2026-09-26 自 broker 域 McpDispatchClient 上移 common（Modulith：跨域只引基包公开类型；
+ * broker 与 vision 两个域共用同一 dispatch 通道）。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class BrokerDispatchClient {
+public class McpDispatchClient {
 
     private static final String DISPATCH_TOOL = "dispatch";
 
@@ -39,13 +40,21 @@ public class BrokerDispatchClient {
         input.put("traceId", traceId);
         input.put("paramsJson", objectMapper.writeValueAsString(params));
         String raw = dispatch.call(input.toString());
-        return unwrap(objectMapper.readTree(raw));
+        JsonNode result = unwrap(objectMapper.readTree(raw));
+        // dispatch 回的是纯文本（非结构化 JSON）：保留 error 语义，不让调用方误判为空结果
+        return isContainer(result)
+                ? result
+                : objectMapper.createObjectNode().put("error", result.asString());
     }
 
     /**
      * dispatch 返回逐层解包：实证形态为 JSON 数组 [{"text":"{\"text\":\"<工具结果JSON>\"}"}]——
      * ToolInvoker 包装数组 → 内层 ToolInvoker {"text":...} → 工具结果本体；也兼容
-     * MCP 标准包装 {"content":[{"text":...}]}。文本解不出 JSON 时包装为 error 节点透传上层。
+     * MCP 标准包装 {"content":[{"text":...}]}。
+     * <p>2026-09-26 修正：仅当剥出的内容是「结构化 JSON（对象/数组）」时才继续下探；剥出的文本不是
+     * JSON 时当前节点即工具结果本体（如 ocr 工具返回 {"text":"<纯识别文本>","length":n}——
+     * 旧逻辑会继续把识别文本当 JSON 解析，失败后包装成 {"error": "<识别文本>"}，
+     * 令上层把一次成功的 OCR 误判为 503 失败）。</p>
      */
     private JsonNode unwrap(JsonNode node) {
         for (int i = 0; i < 6 && node != null; i++) {
@@ -56,26 +65,45 @@ public class BrokerDispatchClient {
             if (!node.isObject()) {
                 break;
             }
+            String candidate = null;
             JsonNode contentText = node.path("content").path(0).path("text");
             if (contentText.isTextual()) {
-                node = tryParse(contentText.asString());
-                continue;
+                candidate = contentText.asString();
+            } else {
+                JsonNode text = node.path("text");
+                if (text.isTextual()) {
+                    candidate = text.asString();
+                }
             }
-            JsonNode text = node.path("text");
-            if (text.isTextual()) {
-                node = tryParse(text.asString());
-                continue;
+            if (candidate == null) {
+                break;
             }
-            break;
+            JsonNode parsed = tryParse(candidate);
+            if (!isContainer(parsed)) {
+                // 首层就解不出结构化 JSON：工具回的是纯文本（多为错误提示），保留 error 语义；
+                // 已剥过层则说明当前节点就是工具结果本体，其 text 字段本就是业务字符串（如 ocr 识别文本）
+                if (i == 0) {
+                    return objectMapper.createObjectNode().put("error", candidate);
+                }
+                break;
+            }
+            node = parsed;
         }
         return node == null ? objectMapper.createObjectNode().put("error", "dispatch 返回空结果") : node;
     }
 
+    /** 判断是否为结构化节点（对象/数组）；Jackson 3 的 JsonNode 无 isContainerNode */
+    private static boolean isContainer(JsonNode node) {
+        return node != null && (node.isObject() || node.isArray());
+    }
+
+    /** 文本 → JSON 节点；非 JSON 文本返回 null（由调用方决定回落策略，不再伪造 error 节点） */
     private JsonNode tryParse(String text) {
         try {
-            return objectMapper.readTree(text);
+            JsonNode node = objectMapper.readTree(text);
+            return node == null || node.isMissingNode() ? null : node;
         } catch (Exception e) {
-            return objectMapper.createObjectNode().put("error", text);
+            return null;
         }
     }
 

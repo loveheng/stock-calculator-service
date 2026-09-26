@@ -8,9 +8,9 @@ import java.time.Duration;
 
 /**
  * LLM 多渠道参数（llm 前缀）。
- * 渠道优先级固定为 gemini -> groq -> fallback，由各策略类的 @Order 决定；
+ * 责任链节点为各策略类（见 service.impl 包），当前仅 openai-mini(1) -> fallback(4) 两个节点。
+ * openai-mini 为廉价批量档（硅基流动 Qwen 等 OpenAI 兼容端点），承担图片交易流水规整解析；
  * enabled=false 或缺少 Key/baseUrl 的渠道会被 LlmChainRouter 的健康检查跳过。
- * Gemini / Groq 均为 OpenAI 兼容端点，连接参数结构一致（Provider）。
  */
 @Data
 @ConfigurationProperties(prefix = "llm")
@@ -25,13 +25,11 @@ public class LlmProperties {
     /** 可重试失败后的退避间隔（maxAttempts > 1 时生效） */
     private Duration retryBackoff = Duration.ofMillis(300);
 
-    private final Provider gemini = new Provider();
-
-    private final Provider groq = new Provider();
+    private final Provider openaiMini = new Provider();
 
     private final Fallback fallback = new Fallback();
 
-    /** OpenAI 兼容渠道连接参数（Gemini / Groq 同构） */
+    /** OpenAI 兼容渠道连接参数 */
     @Data
     public static class Provider {
 

@@ -1,4 +1,4 @@
-package com.zzh.stock_calculator.vision.config;
+package com.zzh.stock_calculator.mcp.vision;
 
 import lombok.Data;
 import lombok.ToString;
@@ -8,7 +8,7 @@ import java.time.Duration;
 
 /**
  * OCR 多渠道识别参数（vision.ocr 前缀）。
- * 渠道优先级固定为 azure -> ocrspace -> local-gemini，由各策略类的 @Order 决定；
+ * 渠道优先级固定为 azure -> ocrspace，由各策略类的 @Order 决定；
  * enabled=false 或缺少 Key 的渠道会被 OcrChainManager 的健康检查跳过。
  */
 @Data

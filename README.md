@@ -1,10 +1,10 @@
 # Stock Calculator Service
 
-基于 **Spring Boot 4.x** 的单模块服务：**股票交易截图智能识别（OCR + LLM）** 与 **财联社快讯数据采集**。用户上传股票交易截图，通过 **Google Gemini 多模态大模型** 自动识别并提取成交流水，生成结构化交易明细数据；内置财联社快讯爬虫，将快讯及其关联股票/题材入库（PostgreSQL）。
+基于 **Spring Boot 4.x** 的单模块服务：**股票交易截图智能识别（OCR + LLM）** 与 **财联社快讯数据采集**。用户上传股票交易截图，通过 **OCR 文本提取 + LLM 结构化（OpenAI 兼容端点，如硅基流动 Qwen）** 自动识别并提取成交流水，生成结构化交易明细数据；内置财联社快讯爬虫，将快讯及其关联股票/题材入库（PostgreSQL）。
 
 | 模块 | 定位 | AI 接入 | JSON 序列化 | 数据库 | 运行形态 |
 |------|------|---------|-------------|--------|----------|
-| `stock-calculator-main` | 唯一模块：OCR 服务 + CLS 爬虫 + E2EE auth（全功能） | Spring AI（Gemini OpenAI 兼容端点） | Jackson 3（tools.jackson） | PostgreSQL（必需） | JVM Fat JAR 或 GraalVM Native Image（推荐生产） |
+| `stock-calculator-main` | 唯一模块：OCR 服务 + CLS 爬虫 + E2EE auth（全功能） | Spring AI（OpenAI 兼容端点，如硅基流动 Qwen） | Jackson 3（tools.jackson） | PostgreSQL（必需） | JVM Fat JAR 或 GraalVM Native Image（推荐生产） |
 
 > 原双模块（common 公共库 + main 应用）已合并为单模块（2026-09）：领域隔离由包级限界上下文 + Spring Modulith 边界测试承担。注意：**JVM 与 Native 两种形态都监听 18080 端口，不能同时运行**。
 
@@ -32,15 +32,11 @@ flowchart LR
     B --> C[TradeVisionService]
     C --> D[ImagePreprocessService]
     D -->|校验| E[预处理后图片]
-    C --> F[OcrExecutor]
-    F -->|图像+Prompt| G[Gemini API]
-    G -->|结构化 JSON| F
-    F -->|缓存命中| H[Redis Cache]
-    C --> I[结构化 TradeDraftItem]
+    C --> F[MCP ocr 工具（azure→ocrspace）]
+    F -->|OCR 文本| K[PromptFormatter 清洗]
+    K --> L[LlmChainRouter openai-mini]
+    L -->|TradeDraftItem| I[结构化 TradeDraftItem]
     I --> J[ApiResponse 返回]
-
-    style G fill:#4285F4,color:#fff
-    style H fill:#f0ad4e,color:#fff
 ```
 
 OCR 链路：`OcrExecutor` 由 Spring AI `ChatClient` 实现多模态调用（main 模块唯一实现）：
@@ -48,7 +44,7 @@ OCR 链路：`OcrExecutor` 由 Spring AI `ChatClient` 实现多模态调用（ma
 | | 实现 |
 |---|---|
 | 模型调用 | Spring AI `ChatClient` 多模态 media API（OCR）；`OpenAiChatModel`（LLM 文本链路） |
-| 接入配置 | `spring.ai.openai.*`（Gemini OpenAI 兼容端点；`max-retries=0` 交由责任链降级） |
+| 接入配置 | `llm.openai-mini.*`（OpenAI 兼容端点，如硅基流动；`max-retries=0` 交由责任链降级） |
 | JSON 解析 | Jackson 3（tools.jackson）`ObjectMapper` |
 
 模块额外运行 CLS 爬虫调度（`@EnableScheduling`）：
@@ -67,8 +63,8 @@ flowchart LR
 
 1. 客户端上传截图至 `POST /api/import/ocr-parse`
 2. `ImagePreprocessService` 对图片进行格式/大小/尺寸校验
-3. `GeminiTradeVisionServiceImpl` 触发 OCR 识别流程
-4. `GeminiOcrExecutorImpl`（Spring AI ChatClient）调用 Gemini 多模态模型（`gemini-3.6-flash`），解析返回的 JSON 二维数组
+3. 经 MCP `ocr` 工具（azure→ocrspace 责任链，纯 OCR 无模型）提取文本，结果入 Redis 缓存
+4. `LlmChainRouter`（openai-mini）解析清洗后的文本为 `TradeDraftItem` 列表
 5. 识别结果写入 Redis 结果缓存（key=vision:executor:<MD5>，TTL 24h），相同图片重复请求直接命中缓存
 6. 原始 JSON 数组映射为强类型 `TradeDraftItem` 列表返回
 
@@ -90,7 +86,7 @@ flowchart LR
 | 缓存 | Redis 7（OCR/视觉结果、会话热读、限流计数） | docker-compose 提供 |
 | 虚拟线程 | Project Loom | 已启用 |
 | HTTP 客户端 | Spring RestClient | 由 Spring Boot 管理 |
-| 多模态 AI | Google Gemini API | gemini-3.6-flash |
+| LLM 文本解析 | OpenAI 兼容端点（硅基流动 Qwen） | — |
 | 原生编译 | GraalVM Native Image | 25.0.x |
 | 容器化 | Docker 多阶段构建 + GHCR CI | — |
 
@@ -101,7 +97,7 @@ flowchart LR
 ### 1. 智能截图识别（OCR + LLM）
 
 - 支持 **JPEG / PNG / GIF / WebP** 图片格式
-- 通过 Gemini 多模态大模型识别截图中的已成交交易记录
+- 通过 OCR 提取文本 + LLM 结构化识别截图中的已成交交易记录
 - 提取字段：股票代码、股票名称、买卖方向、成交价格、成交数量、成交时间
 - 输出严格格式化的 JSON 数据结构
 
@@ -140,7 +136,7 @@ flowchart LR
 
 - JDK 21+（Native 编译需 GraalVM 25.0.x）
 - Maven 3.9+（或直接使用仓库自带 mvnw）
-- Google Gemini API Key
+- OpenAI 兼容 LLM 的 API Key（如硅基流动）
 
 ### 运行 main 模块（OCR + 爬虫，需 PostgreSQL）
 
@@ -152,9 +148,9 @@ cd stock-calculator-service
 # 2. 启动本地数据库基础设施（postgres，见根目录 docker-compose.middleware.yml）
 docker compose -f docker-compose.middleware.yml up -d postgres
 
-# 3. 设置 Gemini API Key 并启动（建表与种子全自动：classpath schema.sql 随包，
+# 3. 设置 OpenAI 兼容 LLM Key 并启动（建表与种子全自动：classpath schema.sql 随包，
 #    启动幂等建表 + 播种；原 postgres/data.sql 已并入 schema.sql，无需手工 SQL）
-export GEMINI_API_KEY=your-api-key-here
+export OPENAI_MINI_API_KEY=your-api-key-here
 ./mvnw spring-boot:run
 
 # 4. 服务启动后访问
@@ -239,7 +235,7 @@ docker build -f stock-calculator-main/Dockerfile.native -t stock-calculator:late
 # Native 模式（推荐，启动快内存低）
 docker run -d --name stock-calculator \
   -p 18080:18080 \
-  -e GEMINI_API_KEY=your-api-key \
+  -e OPENAI_MINI_API_KEY=your-api-key \
   -e POSTGRES_URL=jdbc:postgresql://host:5432/scs \
   -e POSTGRES_USER=root \
   -e POSTGRES_PASS=your-password \
@@ -248,7 +244,7 @@ docker run -d --name stock-calculator \
 # JVM 模式
 docker run -d --name stock-calculator-jvm \
   -p 18080:18080 \
-  -e GEMINI_API_KEY=your-api-key \
+  -e OPENAI_MINI_API_KEY=your-api-key \
   -e POSTGRES_URL=jdbc:postgresql://host:5432/scs \
   -e POSTGRES_USER=root \
   -e POSTGRES_PASS=your-password \
@@ -266,7 +262,7 @@ docker run -d --name stock-calculator-jvm \
 
 ```dotenv
 POSTGRES_PASSWORD=...             # 必填：Postgres 与应用共用口令
-GEMINI_API_KEY=...                # 可选：LLM 渠道 Key（GROQ_API_KEY、AZURE_OCR_API_KEY、SMTP_* 等同理）
+OPENAI_MINI_API_KEY=...                # 可选：LLM 渠道 Key（AZURE_OCR_API_KEY、SMTP_* 等同理）
 CRAWLER_ADMIN_TOKEN=...           # 可选：/api/admin/sync 管理端点令牌
 APP_PORT=18080                    # 可选：宿主机端口（默认 18080）
 APP_IMAGE_TAG=1942570             # 可选：应用镜像 tag（默认 1942570）
@@ -310,7 +306,7 @@ flowchart LR
 
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `GEMINI_API_KEY` | **是** | `dummy-gemini-key` | Google Gemini API 密钥 |
+| `OPENAI_MINI_API_KEY` | **是** | （无默认值） | OpenAI 兼容 LLM 密钥（硅基流动等） |
 | `POSTGRES_URL` | 否 | `jdbc:postgresql://localhost/scs` | 数据库连接 |
 | `POSTGRES_USER` | 否 | `root` | 数据库用户（建议显式设置） |
 | `POSTGRES_PASS` | **是** | 无 | 数据库密码（必须环境变量注入，不再提供默认值） |

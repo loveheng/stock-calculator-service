@@ -32,8 +32,10 @@ public class GuideDtos {
     @AllArgsConstructor
     @Builder
     public static class AnalyzeMessageResponse {
-        /** 流程指令（首位红线②）：告诉调用方下一步该做什么 */
+        /** 流程提示文案（首位红线②；v1.1 起展示安全——不含工具名，前端可直接渲染） */
         private String nextStep;
+        /** 机器可读分支（v1.1，判据唯一来源）：present_candidates=有候选请用户选定；clarify=空候选需追问 */
+        private String nextAction;
         /** 候选股票清单（≤8，STOCK 直锚在前，题材扩展按提及数降序） */
         private List<Candidate> candidates;
         /** 消息锚定结果回显（含未锚定自由词，anchorType=null） */
@@ -91,6 +93,40 @@ public class GuideDtos {
         private List<SubjectItem> subjects;
         /** 近期公告蒸馏摘要（≤3 条，annDate 倒序） */
         private List<AnnouncementItem> announcements;
+        /** 日线级技术面快照（经 dispatch 调 mcp 指标/位带；dispatch 不可用时为 null，档案其余部分不受影响） */
+        private TechSnapshot techSnapshot;
+    }
+
+    /** 技术面快照（P2 落地）：粗粒度最新值 + 指标文字信号 + 最近支撑/压力位带各一档 */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class TechSnapshot {
+        private String lastDate;
+        private Double lastClose;
+        /** 相对前收盘涨跌幅（百分比） */
+        private Double changePct;
+        /** 指标面文字信号（MA 排列/金叉死叉/超买超卖等，≤8 条） */
+        private List<String> signals;
+        /** 最近支撑位带（按现价由近及远首档） */
+        private LevelBand nearestSupport;
+        /** 最近压力位带（按现价由近及远首档） */
+        private LevelBand nearestResistance;
+    }
+
+    /** 位带摘要（日线级数据本质是区间，输出位带非精确点位） */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class LevelBand {
+        private Double priceLow;
+        private Double priceHigh;
+        /** pivot=枢轴点 | swing=摆动聚类 | volume=成交密集区 */
+        private String type;
+        /** 位带中心相对现价距离（%） */
+        private Double distPct;
     }
 
     @Data

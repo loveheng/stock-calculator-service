@@ -41,6 +41,12 @@ public class QuoteConfig {
         return new TencentDailyClient(quoteRestClientBuilder);
     }
 
+    /** 实时行情客户端（复用同一条频控后的 RestClient.Builder；仅取价不入库，无 RateLimited 装饰需求） */
+    @Bean
+    public TencentRealtimeClient tencentRealtimeClient(RestClient.Builder quoteRestClientBuilder) {
+        return new TencentRealtimeClient(quoteRestClientBuilder);
+    }
+
     /** 业务注入口：频控装饰后的客户端（@Primary 消除与裸腾讯 bean 的双候选歧义） */
     @Bean
     @Primary

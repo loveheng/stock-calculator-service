@@ -13,7 +13,8 @@ import java.util.List;
 
 /**
  * LLM 多渠道统一调度器（责任链模式，llm 模块对外 API——跨域调用只允许经此基包类型）。
- * 按预设优先级（实现类的 @Order：gemini -> groq -> fallback，Spring 注入 List 时已排序）逐节点执行
+ * 按预设优先级（实现类的 @Order：openai-mini -> fallback，Spring 注入 List 时已排序）逐节点执行；
+ * 图片交易流水规整统一走 openai-mini，失败即流转 fallback 诚实降级。
  * {@link LlmService} 策略：
  * <ul>
  *   <li>节点成功：立即返回模型输出；</li>
@@ -21,7 +22,7 @@ import java.util.List;
  *       max-attempts=1 不做单渠道重试（429 属 RPM/TPM 窗口限流，短退避重试无意义），可配置调高；</li>
  *   <li>全部节点失败（含 fallback 关闭）：抛出明确的 {@link BusinessException}(503)，message 汇总原因。</li>
  * </ul>
- * 与 OCR 路由器（OcrChainManager）刻意保持独立实现：差异点实质（缓存策略、重试策略、异常类型），
+ * 与 mcp 侧 OCR 路由器（mcp.vision.OcrChainManager）刻意保持独立实现：差异点实质（缓存策略、重试策略、异常类型），
  * 待出现第三个路由器再考虑抽象（Rule of Three）。
  */
 @Slf4j

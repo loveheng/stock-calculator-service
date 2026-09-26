@@ -60,7 +60,7 @@ updated: 2026-09-24
 
 ## 4. LLM 接入（D11/D12 → C1/C2）
 
-- 复用 llm 域 `LlmChainRouter` + Gemini/Groq 渠道 Bean（连接参数全工程仅 `llm.gemini.*` / `llm.groq.*` 一处）；copilot 零新增渠道配置。
+- 复用 llm 域 `LlmChainRouter` + `OpenAiMiniLlmService` 渠道 Bean（连接参数全工程仅 `llm.openai-mini.*` 一处）；copilot 零新增渠道配置。
 - llm 包向后兼容扩展（vision 零改动）：`LlmTurn` / `LlmConversation` / `LlmChatResult` / `LlmService.chat(LlmConversation)` 默认方法 / `LlmChainRouter.chatDetailed`，细化见 `docs/copilot/design.md` §4.5。
 - 降级：`isDegradedResponse` 命中（fallback 模板）按 `UPSTREAM_ERROR` 处理，不归档 assistant 消息。
 
@@ -123,4 +123,4 @@ scope 变化调 `ensureThreadLoaded(newScope)`（内置墓碑对账）；前一 
 | P0 | 前端 tsc 零错 / check:arch 过 / 新单测绿 / mock（VITE_COPILOT_MOCK=1）全链路可演示 |
 | P1 | 后端 mvnw test 全绿（无 DB 环境排除两个 @SpringBootTest）；curl 三端点走通（含级联 DELETE、软删后 scopeId 复用、get-or-create 竞态单测、幂等两段式单测）；双渠道容灾由复用链天然具备 |
 | P2 | 全链路手工验收：历史/翻页/级联触发端到端、离线删除→墓碑补发、错误子码反馈闭环；llm 扩展单测绿 |
-| P3 | native 全量重建 + 8s/90s 冒烟 + smoke-curl 403 门禁 + 带 GEMINI_API_KEY 真实 ask 一次；usage 反射缺口按报错类名补 gen-logger-config.py EXTRA_CLASSES 迭代（预留 1 轮）；无 AesGcmUtil 遗留引用 |
+| P3 | native 全量重建 + 8s/90s 冒烟 + smoke-curl 403 门禁 + 带 OPENAI_MINI_API_KEY 真实 ask 一次；usage 反射缺口按报错类名补 gen-logger-config.py EXTRA_CLASSES 迭代（预留 1 轮）；无 AesGcmUtil 遗留引用 |
