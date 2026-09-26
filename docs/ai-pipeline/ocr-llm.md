@@ -453,4 +453,4 @@ OCR 层扩展新渠道不受上述限制：直接实现 `OcrService` 三方法�
 6. **最坏耗时**：约等于 Σ(启用渠道数 × connect+read 超时 × max-attempts) + 退避 + Azure 轮询，个人场景低概率触顶；前端/网关超时建议 ≥90s，或按需调低各渠道 read-timeout；
 7. **网络代理（生产实测）**：本机直连 `generativelanguage.googleapis.com` 不通（connect timeout），必须走代理——JVM 需真实系统属性 `-Dhttps.proxyHost=... -Dhttps.proxyPort=...`（IDEA 里放 **VM options**，放 Program arguments 无效，`HttpClient` 经 `ProxySelector.getDefault()` 读取）；代理故障时 Gemini 免费层偶发 503 high demand，重试可过；`api.groq.com` 与 global Azure 端点直连可达；
 8. **验证口径**：2026-09-01 真实端到端冒烟（azure OCR blocks 兑底路径 656 字符 → gemini 16936ms → 9 笔交易草稿全部正确）发生在旧手写 HTTP 传输层上；其后传输层收敛为 Spring AI（OpenAI SDK + options 多实例），真实 API 冒烟待重做；`api.groq.com` 历史直连可达，Groq 渠道 2026-09-01 随 options 多实例方案恢复；
-9. **Smartbox 补全依赖**：代码补全依赖腾讯 Smartbox 接口可达性（fail-open：异常不缓存不阻塞主链路，缺码行退化为前端人工补录）；旧公司名/改名股不在联想词库时零匹配，走人工兜底（决策 P11 有意不接 crawler 字典）；存量库旧 6 列提示词模板需手动 UPDATE（见 `postgres/data.sql` 播种区注释），否则旧行仍要求模型输出代码列；
+9. **Smartbox 补全依赖**：代码补全依赖腾讯 Smartbox 接口可达性（fail-open：异常不缓存不阻塞主链路，缺码行退化为前端人工补录）；旧公司名/改名股不在联想词库时零匹配，走人工兜底（决策 P11 有意不接 crawler 字典）；存量库旧 6 列提示词模板需手动 UPDATE（见 main 模块 resources 的 schema.sql 播种区注释），否则旧行仍要求模型输出代码列；

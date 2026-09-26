@@ -6,8 +6,8 @@ spring:
     password: ${POSTGRES_PASS:}
   sql:
     init:
-      # schema.sql 位于本模块 resources 根（SSOT 随包，Boot 默认脚本位置），启动时幂等建表；
-      # data.sql 已退化为纯记录（postgres/ 目录备档，不随包不执行），播种改 psql 手工
-      # 执行（CI docker-image.yml 各 job 预灌），详见 application.yml 同节点注释。
+      # schema.sql 位于本模块 resources 根（SSOT 随包，Boot 默认脚本位置），启动时幂等
+      # 建表 + 灌全部种子（文件尾部播种区：pull_task_config + copilot prompt 模版；
+      # 原 postgres/data.sql 已删除并入），详见 application.yml 同节点注释。
       # 回滚此行 = 停用。
       mode: always

@@ -313,7 +313,7 @@ openai-mini 档（`.env` 的 OPENAI_MINI_* 三键）若选用**带 thinking 的�
 | main 新域 kg/ | task/KgExtractTask（进程内 handler）、mq/KgExtractPublisher、service/KgResultService（摄取）、service/KgFuseService（融合）、entity×6、repository×6；基包出 KgIngestApi 端口（供 crawler 消费中枢回调） |
 | main crawler | 基包增汇编查询 API（按标题模式取最新候选）与字典锚点查询 API；mq/ClsArticleMqConsumer 分发增 kg 分支；data.sql 播种 job.kg.extract 行 |
 | data | worker/KgExtractWorker（Spring AI ChatClient structured output）、config/KgWorkerConfig（ai.tiers.openai-mini tier 装配，LlmRegistry）、错误三分类上报 |
-| schema | stock-calculator-main/src/main/resources/schema.sql 增 6 张表（§5）；postgres/data.sql 增 1 行播种 |
+| schema | stock-calculator-main/src/main/resources/schema.sql 增 6 张表（§5）+ 尾部播种区 1 行播种（原 postgres/data.sql，2026-09-26 并入） |
 | 配置 | main application.yml：kg.digest.*、kg.process.*、kg.backfill.*（enabled/batch-size/scan-multiplier/startup-delay） |
 | 监控 | monitor/PipelineWatchTask 队列清单 + PENDING_AGE 纳入 |
 | 文档/索引 | docs/README.md ai-pipeline 域增条目；stock-calculator-service-index 归属表增 kg 行（实施首轮同步） |

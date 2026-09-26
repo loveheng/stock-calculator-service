@@ -32,7 +32,7 @@ updated: 2026-09-25
 - crawler 基包扩展：逐名锚点解析 + 3 个两跳查询（含 native SQL）；
 - search 基包小门面：StockProfileApi（公告摘要）；
 - orchestration ToolRegistry.REST_SEEDS 登记 2 个 guide 工具（聊天入口）；
-- postgres/data.sql 播种 `guide:entity_extract` 抽取模板（热调）；
+- main 模块 resources 的 schema.sql 播种区播种（原 postgres/data.sql，2026-09-26 并入） `guide:entity_extract` 抽取模板（热调）；
 - 单测 + EXPLAIN 验证 + 冒烟。
 
 **非目标（P2 展望，本期不做）**：
@@ -162,7 +162,7 @@ guide 两工具登记进 `ToolRegistry.REST_SEEDS`（kind=rest，risk=read → p
 | 4 | search 基包 | `StockProfileApi` 门面（基包接口 + Impl 委托 `StockProfileService.profile`，返回基包 record，避免 guide 引 search.dto 子包） |
 | 5 | guide 新域 | `controller/GuideController` + `service/GuideAnalyzeService` + `service/GuideStockBriefService` + `dto/GuideDtos`（单文件，照 SearchDtos 惯例）；`/api/guide/**` 不挂 AuthInterceptor（见 D10） |
 | 6 | orchestration | `ToolRegistry.REST_SEEDS` +2（§4.3）；工具描述写清触发时机（「用户表达听到消息想选股时」） |
-| 7 | postgres/data.sql | 播种 `guide:entity_extract` 模板（LLM 抽取契约，ON CONFLICT 幂等）；guide 代码常量兜底 + `CopilotPromptResolver.resolveTaskTemplate("guide:entity_extract")` fail-open 覆盖（热调） |
+| 7 | schema.sql 播种区（原 postgres/data.sql，2026-09-26 并入） | 播种 `guide:entity_extract` 模板（LLM 抽取契约，ON CONFLICT 幂等）；guide 代码常量兜底 + `CopilotPromptResolver.resolveTaskTemplate("guide:entity_extract")` fail-open 覆盖（热调） |
 | 8 | 测试与验证 | `GuideAnalyzeServiceTest` / `GuideStockBriefServiceTest`（Mockito，mock 基包 API/LlmChainRouter/StockProfileApi，照 broker/service/*Test 风格）；`./mvnw test -pl stock-calculator-main -am`；三条 native 查询 EXPLAIN；curl 冒烟两端点 + `caller=service` 经 dispatch 冒烟 |
 
 跨域引用纪律：guide 仅引用对方**基包**公开类型——crawler（ClsDictAnchorApi / ClsArticleQueryApi）、

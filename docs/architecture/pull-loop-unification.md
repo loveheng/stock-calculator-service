@@ -403,7 +403,7 @@ EmbeddingStatsReportTask 的 gate.isAvailable() / report.enabled 同理保留（
 ### 9.4 新增本地任务接入清单（runbook）
 
 1. 任务类实现 AppTaskHandler（taskCode 用 `job.<域>.<名>`）注册为 Bean；
-2. postgres/data.sql 播种行（cron 六域 Spring 方言、timezone 显式钉死、enabled 初值）；
+2. main 模块 resources 的 schema.sql 播种区加行（cron 六域 Spring 方言、timezone 显式钉死、enabled 初值；pull_task_config 种子 2026-09-26 起并入 schema.sql 随建表自动执行）；
 3. 存量库手工执行幂等 INSERT；
 4. 回归：AppTaskSchedulerTest + ModulithVerifyTest。
 

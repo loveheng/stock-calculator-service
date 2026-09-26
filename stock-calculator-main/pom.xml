@@ -157,11 +157,11 @@
                 <directory>src/main/resources</directory>
             </resource>
             <!-- schema.sql 直接位于 src/main/resources 根（SSOT 随包，Boot 默认脚本位置）：
-                 配合 spring.sql.init.mode=always 启动幂等建表；native 资源由 Boot 内置
+                 配合 spring.sql.init.mode=always 启动幂等建表 + 灌全部种子（文件尾部播种区：
+                 pull_task_config + copilot prompt 模版）；native 资源由 Boot 内置
                  SqlInitializationScriptsRuntimeHints（schema.sql/schema-*.sql/data.sql/
                  data-*.sql 四个模式）自动注册，无需手动 hints。
-                 postgres/data.sql 已退化为纯记录（种子备档，不随包不执行）：
-                 播种用 psql 手工执行（CI docker-image.yml 各 job 预灌；本地新库手动灌一次） -->
+                 原 postgres/data.sql 已删除并入（2026-09-26），表结构与种子单文件 SSOT -->
         </resources>
         <plugins>
             <plugin>

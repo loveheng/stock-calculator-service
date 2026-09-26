@@ -24,7 +24,7 @@ updated: 2026-09-15
 | `util/CopilotTaskPromptRenderer.java` | 新增 | 任务型系统提示词构建与占位符渲染（纯函数无状态） |
 | `util/CopilotStatActionExtractor.java` | 新增 | LLM 输出动作块容错提取器（纯函数无状态） |
 | `service/AiChatOrchestrationService.java` | 修改 | taskType 路由分支、动作提取接线、SSE 抑制位、`persistAssistant`/`buildAskResponse` 扩参 |
-| `postgres/data.sql` | 修改 | 播种模板行 `copilot_custom_stat_gen`（文件尾部，`ON CONFLICT (tag) DO NOTHING`） |
+| `stock-calculator-main/src/main/resources/schema.sql` | 修改 | 播种模板行 `copilot_custom_stat_gen`（尾部播种区，原落 postgres/data.sql 2026-09-26 并入，`ON CONFLICT (tag) DO NOTHING`） |
 | 测试 ×3 | 新增/追加 | Renderer 17 / Extractor 15 / Resolver 25 用例（§5） |
 
 无新端点、无新表、无新依赖（JSON 解析复用既有 `tools.jackson.databind.ObjectMapper`，Jackson 3）。
@@ -156,7 +156,7 @@ JSON 阻塞路径（非流式）：聚合响应过同一提取器 → `persistAs
 | `askStream`（SSE 路径） | 抑制位逻辑（§2.3）；complete 回调中同一提取器解析后归档，done 下发 |
 | `persistAssistant` / `buildAskResponse` | 扩参 actions；assistant 落库行不含 actions（ephemeral） |
 
-## 4. 模板登记（postgres/data.sql 播种）
+## 4. 模板登记（schema.sql 播种区，原 postgres/data.sql 2026-09-26 并入）
 
 ```sql
 INSERT INTO copilot_prompt_template (tag, content, ctime, mtime) VALUES

@@ -152,15 +152,12 @@ cd stock-calculator-service
 # 2. 启动本地数据库基础设施（postgres，见根目录 docker-compose.middleware.yml）
 docker compose -f docker-compose.middleware.yml up -d postgres
 
-# 3. 建表自动（classpath schema.sql 随包，启动幂等自建）；仅种子需手动灌一次
-#    （pull_task_config / copilot prompt 模版等，postgres/data.sql 为纯记录备档）
-psql -h localhost -U root -d scs -f postgres/data.sql
-
-# 4. 设置 Gemini API Key 并启动
+# 3. 设置 Gemini API Key 并启动（建表与种子全自动：classpath schema.sql 随包，
+#    启动幂等建表 + 播种；原 postgres/data.sql 已并入 schema.sql，无需手工 SQL）
 export GEMINI_API_KEY=your-api-key-here
 ./mvnw spring-boot:run
 
-# 5. 服务启动后访问
+# 4. 服务启动后访问
 curl http://localhost:18080/
 ```
 

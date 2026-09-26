@@ -145,17 +145,15 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 2. 初始化数据库 schema：schema.sql 已迁至 main 模块 resources（SSOT 随包，
-      #    应用 mode=always 也会幂等自建），psql 预灌保留——SQL 错误在 10 分钟
-      #    native-image 编译之前就失败，且冒烟起于已知 schema 状态；
-      #    data.sql 已退化为纯记录不再随包执行，pull_task_config / prompt 模版种子
-      #    全靠本步骤灌入，缺了它启动期按空表降级、拉取循环静默空转。
+      # 2. 初始化数据库 schema：schema.sql 已迁至 main 模块 resources 并整体承接播种区
+      #    （DDL + pull_task_config + prompt 模版；原 postgres/data.sql 已删除并入），
+      #    应用 mode=always 也会幂等自建，psql 预灌保留——SQL 错误在 10 分钟
+      #    native-image 编译之前就失败，且冒烟起于已知 schema 状态。
       - name: 初始化数据库 schema
         env:
           PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
         run: |
           psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f stock-calculator-main/src/main/resources/schema.sql
-          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
 
       # 3. 安全处理：将仓库名强制转为全小写，防止推送 GHCR 时大小写不合规报错
       - name: 格式化镜像名称 (全小写)
@@ -346,7 +344,6 @@ jobs:
           PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
         run: |
           psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f stock-calculator-main/src/main/resources/schema.sql
-          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
           psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stock_mcp OWNER root'
           psql -h 127.0.0.1 -U root -d stock_mcp -v ON_ERROR_STOP=1 -f stock-calculator-mcp/src/main/resources/mcp-schema.sql
 
@@ -444,7 +441,6 @@ jobs:
           PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
         run: |
           psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f stock-calculator-main/src/main/resources/schema.sql
-          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
           psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stock_mcp OWNER root'
           psql -h 127.0.0.1 -U root -d stock_mcp -v ON_ERROR_STOP=1 -f stock-calculator-mcp-notify/src/main/resources/notify-schema.sql
 
@@ -542,7 +538,6 @@ jobs:
           PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'zzh@scs.com' }}
         run: |
           psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f stock-calculator-main/src/main/resources/schema.sql
-          psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -f postgres/data.sql
           psql -h 127.0.0.1 -U root -d scs -v ON_ERROR_STOP=1 -c 'CREATE DATABASE stock_mcp OWNER root'
           psql -h 127.0.0.1 -U root -d stock_mcp -v ON_ERROR_STOP=1 -f stock-calculator-orchestration/src/main/resources/orchestration-schema.sql
 

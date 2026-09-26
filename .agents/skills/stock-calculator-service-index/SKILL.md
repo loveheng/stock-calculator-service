@@ -67,7 +67,7 @@ description: stock-calculator-service（Maven 模块 contract/main/data，本表
 
 1. 接口行为：`controller` → `service` → `repository`/`entity` → `dto`
 2. 新增配置键：main 模块 `src/main/resources/application*.yml`
-3. 表结构：main 模块 `stock-calculator-main/src/main/resources/schema.sql`（SSOT 随包自建）；种子备档 `postgres/data.sql`（纯记录，psql 手工执行）
+3. 表结构 + 全部种子：main 模块 `stock-calculator-main/src/main/resources/schema.sql`（SSOT 随包：自建 + 播种区，pull_task_config 与 copilot prompt 模版均在；原 postgres/data.sql 已删除并入）
 4. 定时任务：crawler/task；领域事件：crawler/event
 5. Modulith 边界：跨域只能引用对方**基包**公开类型（ModulithVerifyTest 守护）；vision 的 `OcrExecutor` 留在基包是 @Cacheable 缓存边界，勿内联进 service（self-invocation 会让缓存失效）
 
