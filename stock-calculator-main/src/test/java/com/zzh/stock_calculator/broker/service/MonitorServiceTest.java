@@ -47,8 +47,9 @@ class MonitorServiceTest {
     void dictSixDigitHitPassesValidation() {
         when(stockDirectoryApi.existsBySixDigit("600519")).thenReturn(true);
         when(repository.countByUserIdAndStatus(anyString(), anyString())).thenReturn(0L);
-        when(repository.findFirstByUserIdAndStockCodeAndAlertTypeAndThresholdAndStatus(
-                anyString(), anyString(), anyString(), any(BigDecimal.class), anyString()))
+        when(repository.findFirstByUserIdAndStockCodeAndAlertTypeAndThresholdAndBandAndDirectionAndStatus(
+                anyString(), anyString(), anyString(), any(BigDecimal.class),
+                any(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
         when(repository.save(any(BrokerMonitorTaskEntity.class))).thenReturn(
                 BrokerMonitorTaskEntity.builder().id(7L).status(MonitorService.STATUS_RUNNING).build());
@@ -73,6 +74,7 @@ class MonitorServiceTest {
         return BrokerDtos.MonitorStartRequest.builder()
                 .fullCode(fullCode)
                 .interval("1d")
+                .direction("BUY")
                 .alertRule(BrokerDtos.AlertRule.builder()
                         .type("PRICE_BELOW").threshold(new BigDecimal("9.5")).build())
                 .build();
