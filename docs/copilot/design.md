@@ -89,7 +89,7 @@ flowchart TD
 | copilot 域（新增包） | CopilotController / CopilotDtos / AiChatSession·AiChatMessage 实体 / 两 Repository / AiChatOrchestrationService / CopilotRateLimiter / CopilotProperties | 领域隔离（ModulithVerifyTest 守护），与 auth/vision 并列 |
 | llm 域（既有包，小扩展） | LlmTurn / LlmConversation / LlmChatResult / LlmService.chat(LlmConversation) / LlmChainRouter.chatDetailed | C1/C2：容灾路由只此一份；扩展向后兼容，vision OCR 零改动 |
 | common（既有包，微扩展） | ApiResponse.subCode（可空）/ BusinessException subCode 构造器 | C6：恒 200 信封的机器可读子码 |
-| postgres/schema.sql | ai_chat_session / ai_chat_message DDL | 变更落点顺序，stock-calculator-service-index 登记 |
+| stock-calculator-main/src/main/resources/schema.sql | ai_chat_session / ai_chat_message DDL | 变更落点顺序，stock-calculator-service-index 登记 |
 | 前端仓库 | types/domain 追加 / copilotService / copilotSlice / usePageContext / GlobalCopilot / App 挂载 / 试点页 builder | C17，实施文档 §1.1 |
 
 ### 2.3 一次产出、两路分发（数据流主干）
@@ -187,7 +187,7 @@ com.zzh.stock_calculator.copilot/
 - 依赖白名单：`common`（ApiResponse / BusinessException / GlobalExceptionHandler 透传）+ `llm` 基包（LlmChainRouter / LlmConversation / LlmChatResult）+ Spring 基础设施（StringRedisTemplate 等）；**禁** import auth/vision/crawler 子包。
 - 无 Key 也能启动：llm 渠道健康检查自动跳过未配置渠道 → 全链降级为 UPSTREAM_ERROR，服务本身不因缺 Key 拒启。
 
-### 4.2 数据模型（postgres/schema.sql 追加）
+### 4.2 数据模型（stock-calculator-main/src/main/resources/schema.sql 追加）
 
 ```sql
 -- 会话表：仅元数据，不存快照明细

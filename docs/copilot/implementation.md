@@ -91,7 +91,7 @@ stock-calculator-main/src/main/java/com/zzh/stock_calculator/copilot/
 **common 域微扩展（C6）：** `ApiResponse` 增可空 `subCode`（`@JsonInclude(NON_NULL)`）+ `fail(code, message, subCode)` 重载；`BusinessException` 增可选 subCode 构造器；`GlobalExceptionHandler` 透传。
 
 - Modulith 边界：copilot 只引用 `common` 基包与 llm **基包**公开类型（LlmChainRouter / LlmConversation / LlmChatResult）；**不 import 任何域的子包**（`ModulithVerifyTest` 守护）。
-- 表结构落 `postgres/schema.sql`（stock-calculator-service-index 变更落点顺序）；新增领域按 stock-calculator-service-index 约定登记。
+- 表结构落 `stock-calculator-main/src/main/resources/schema.sql`（stock-calculator-service-index 变更落点顺序）；新增领域按 stock-calculator-service-index 约定登记。
 
 ## 2. 前端契约（`types/domain.ts` 追加，R3 零依赖）
 
@@ -324,7 +324,7 @@ function buildHomeSummary(state: AppState): Record<string, unknown> {
 
 ## 7. 后端：表结构与持久化层
 
-### 7.1 `postgres/schema.sql` 追加（v1.5：对齐现状加 `public.` 前缀）
+### 7.1 `stock-calculator-main/src/main/resources/schema.sql` 追加（v1.5：对齐现状加 `public.` 前缀）
 
 ```sql
 -- 会话表：仅存储元数据，不存完整快照
@@ -761,7 +761,7 @@ npm run map:features    # copilot 关键词登记后确认「未归类」为 0
 
 ```sh
 ./mvnw compile -q
-cat postgres/schema.sql | docker exec -i <pg容器> psql -U postgres -d stock_calculator   # 或手动执行 DDL
+cat stock-calculator-main/src/main/resources/schema.sql | docker exec -i <pg容器> psql -U postgres -d stock_calculator   # 或手动执行 DDL
 POSTGRES_PASS=... ./mvnw install -pl stock-calculator-main -am
 ```
 

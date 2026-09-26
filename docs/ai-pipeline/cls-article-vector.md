@@ -8,7 +8,7 @@ updated: 2026-09-24
 > 版本：v1.6（2026-09-12，数据服务拆分终态回填：进程内 CF 计算/存量回填/增量嵌入移交 data worker（task/result.embedding.*），主服务仅存 查询嵌入（search 相似检索）与结果落账（EmbeddingResultService）；§4.4/§4.5/§4.6/§6.1 的进程内回填语义为历史基线；§7.1 的 batch-size/batch-interval-ms 键已删除；C5 完成邮件事件随进程内路径退役（周期统计报告邮件保留）；CfUsageFixingClient 两侧各一份——main 服务查询嵌入、data 服务计算嵌入，非双控）
 > 历版本：v1.5（2026-09-09，R1 运行期门控重构：native 终态自带向量化，见 §9.3 C8）
 > 范围：crawler 域 embedding 子包——cls_article 全量向量化管道（存量回填 + 增量）、pgvector 存储、Cloudflare Workers AI 配额治理与熔断；相似检索 service 能力随 P0 就绪，消费场景（copilot RAG）为 P1 待定。
-> 关联：`docs/copilot/design.md`（P1 消费方先例）、`postgres/schema.sql`（表结构落点）
+> 关联：`docs/copilot/design.md`（P1 消费方先例）、`stock-calculator-main/src/main/resources/schema.sql`（表结构落点）
 > 状态：P0 已实现（2026-09-09 编码完成；R1 重构后全量回归 300 测试 0 失败 1 skip；存量回填待生产库开闸）
 
 ---
@@ -104,7 +104,7 @@ graph TD
 - `content` 列复制文章正文（50 万 × ~160 字 ≈ 80MB，可接受）；业务键入 metadata：`articleId`、`ctime`、`level`、`model`
 - 可选优化：50 万灌完后 DROP 并重建 HNSW 索引一次，优化图质量（pgvector 官方建议 bulk load 后建索引）
 
-### 3.2 cls_article_embedding 状态表（入 postgres/schema.sql）
+### 3.2 cls_article_embedding 状态表（入 stock-calculator-main/src/main/resources/schema.sql）
 
 ```sql
 CREATE TABLE if not exists public.cls_article_embedding (
@@ -392,7 +392,7 @@ embedding:
 | 新增 | EmbeddingStatsReportEvent.java（crawler **基包**） | 统计报告事件：窗口/新增/处理量/完成标志（§9.3 C7） |
 | 新增 | task/EmbeddingStatsReportTask.java | 周期统计报告 Task：每日检查点 + 满间隔发送，存量完成后仅报增量 |
 | 修改 | service/ClsArticleService.java | 保存成功后发布事件（唯一侵入点，一行） |
-| 修改 | postgres/schema.sql（仓库根） | cls_article_embedding DDL（含 fail_count + 幂等 ALTER）+ CREATE EXTENSION vector |
+| 修改 | stock-calculator-main/src/main/resources/schema.sql（main 模块 resources） | cls_article_embedding DDL（含 fail_count + 幂等 ALTER）+ CREATE EXTENSION vector |
 | 新增 | auth/service/EmbeddingBackfillMailListener.java（auth 域） | 回填完成事件 → 邮件通知（ObjectProvider 兕底条件 Bean；EMBEDDING_NOTIFY_EMAIL 门控） |
 | 新增 | auth/service/EmbeddingStatsMailListener.java（auth 域） | 统计报告事件 → 邮件渲染发送（进行中完整模板 / 完成后仅增量模板） |
 | 修改 | auth/service/MailService.java | 抽 requireSender/buildMessage + 新增 sendText(to, subject, text) |

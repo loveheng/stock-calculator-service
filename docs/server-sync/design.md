@@ -103,7 +103,7 @@ sequenceDiagram
 
 ## 3. 数据库设计（PostgreSQL，两表）
 
-### 3.1 DDL（追加到仓库根 postgres/schema.sql，风格对齐既有条目）
+### 3.1 DDL（追加到stock-calculator-main/src/main/resources/schema.sql，风格对齐既有条目）
 
 ```sql
 CREATE TABLE IF NOT EXISTS public.user_sync_data (
@@ -340,7 +340,7 @@ SELECT version FROM user_sync_data WHERE user_id = :userId
 
 | 步骤 | 内容 | 注意 |
 |---|---|---|
-| 1 | postgres/schema.sql 增量执行（两表） | 先于后端发布；IF NOT EXISTS 幂等 |
+| 1 | stock-calculator-main/src/main/resources/schema.sql 增量执行（两表） | 先于后端发布；IF NOT EXISTS 幂等 |
 | 2 | 后端部署（native 全量重建） | 零 yml 改动；新包进 native 需全量构建 |
 | 3 | 反代暴露 `/api/sync` → :18080 | **location 级 `client_max_body_size 3m`**（E6：Nginx 默认 1m，2MB 信封会被 413，表象是前端 network 失败难排查） |
 | 4 | 前端发布（前端仓库 M2-M5） | SW 缓存提示强刷或等 autoUpdate |

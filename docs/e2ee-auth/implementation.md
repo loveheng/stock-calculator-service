@@ -34,7 +34,7 @@ updated: 2026-09-15
 
 > spring-boot-starter-mail 在 B2 再引入，保持 B1 最小面。
 
-### 2.2 DDL 追加（postgres/schema.sql 尾部，手工执行）
+### 2.2 DDL 追加（stock-calculator-main/src/main/resources/schema.sql 尾部，手工执行）
 
 ```sql
 -- ============================================================
@@ -229,7 +229,7 @@ ProfileResponse upsert(UUID userId, ProfileUpsertRequest req, String ifMatchHead
 
 | 步骤 | 操作 | 载体 |
 |------|------|------|
-| 1 | 手工执行 postgres/schema.sql 增量（4 表，幂等） | 服务器 psql |
+| 1 | 手工执行 stock-calculator-main/src/main/resources/schema.sql 增量（4 表，幂等） | 服务器 psql |
 | 2 | docker-compose 增 SMTP_HOST / SMTP_PORT / SMTP_USERNAME / SMTP_PASSWORD / MAIL_FROM 环境变量 | docker-compose.yml |
 | 3 | 重建镜像并部署（Dockerfile 无需改动，已构建 main 变体） | Dockerfile / compose |
 | 4 | Edge Middleware 白名单加 /api/auth；vite dev proxy 同步 | 前端仓库 middleware.js / vite.config.ts |
@@ -259,5 +259,5 @@ ProfileResponse upsert(UUID userId, ProfileUpsertRequest req, String ifMatchHead
 - [ ] ./mvnw test 全绿（含 §4.4 全部测试类）
 - [ ] §4.5 冒烟 10 步全过 + 真实邮箱收码
 - [ ] 前端全链路联调通过（对齐《前端 spec》§12.2 步骤 8 的用户旅程）
-- [ ] postgres/schema.sql 增量已入库；README 部署提示更新
+- [ ] stock-calculator-main/src/main/resources/schema.sql 增量已入库；README 部署提示更新
 - [ ] 《前端 spec》§5.1 / §8 / §11 修订同步完成

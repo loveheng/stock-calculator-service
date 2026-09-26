@@ -80,7 +80,7 @@ graph TD
 | AnnouncementSubscriptionService | announcement/service | 订阅 CRUD（幂等标记，不触达抓取逻辑）+ orgId 懒解析回填 + 首拉事件发布 |
 | AnnouncementSubscriptionController | announcement/controller | 订阅/退订/列表 API |
 
-## 3. 数据模型（入 postgres/schema.sql）
+## 3. 数据模型（入 stock-calculator-main/src/main/resources/schema.sql）
 
 ```sql
 CREATE TABLE announcement (
@@ -248,7 +248,7 @@ CREATE INDEX idx_ann_sub_stock ON announcement_subscription (stock_id);
 | 新增 | announcement/entity、repository、dto、config | 主表/content 表访问 + 配置 |
 | 修改 | crawler 基包：EmbeddingQuotaGuard 提升 | 共享额度计数（D6，方式见 S6） |
 | 修改 | stock-calculator-main/pom.xml | 新增 pdfbox 3.0.x 显式版本（父 POM 无管理） |
-| 修改 | postgres/schema.sql | §3 三表 DDL（含订阅表） |
+| 修改 | stock-calculator-main/src/main/resources/schema.sql | §3 三表 DDL（含订阅表） |
 
 依赖红线：crawler 域业务代码零改动（QuotaGuard 提升除外）；ModulithVerifyTest 守护。
 

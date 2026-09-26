@@ -171,7 +171,7 @@ copilot（CopilotPromptResolver）、llm（LlmChainRouter）、search（新 Stoc
 
 ## 六、实施红线（评审定案，两条必守）
 
-1. **两跳 native SQL 性能**：已核验 `postgres/schema.sql`——驱动侧索引已在
+1. **两跳 native SQL 性能**：已核验 `stock-calculator-main/src/main/resources/schema.sql`——驱动侧索引已在
    （`idx_cas_stock_id` / `idx_csub_subject_id`），join 走 `cls_article` 主键，ctime 过滤发生在主表行上
    （关联表本身无 ctime 列，无需 `(stock_id,ctime)` 复合索引，与既有 `countDistinctArticleIdByStockIdSince`
    同款索引形态）。三条新查询落地后各跑一次 `EXPLAIN`，若出现顺序扫描再补索引，**不凭猜预先加**。

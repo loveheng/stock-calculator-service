@@ -295,7 +295,7 @@ yml 内以 Spring 占位符引用（写法对齐 application.yml 现有 GEMINI_A
 
 ### 7.3 DDL 执行
 
-jpa.ddl-auto=none（现状），4 张表 DDL 追加至 postgres/schema.sql（CREATE TABLE IF NOT EXISTS 风格），部署时手工执行——与现有流程一致，README 增加提示防遗漏。
+jpa.ddl-auto=none（现状），4 张表 DDL 追加至 stock-calculator-main/src/main/resources/schema.sql（CREATE TABLE IF NOT EXISTS 风格），部署时手工执行——与现有流程一致，README 增加提示防遗漏。
 
 ---
 

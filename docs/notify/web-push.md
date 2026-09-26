@@ -68,7 +68,7 @@ sequenceDiagram
     Note over DB: 未读徽标；点开面板拉 /messages；全部已读 POST /messages/read-all
 ```
 
-## 四、数据模型（postgres/schema.sql）
+## 四、数据模型（stock-calculator-main/src/main/resources/schema.sql）
 
 ### 4.1 push_subscription
 

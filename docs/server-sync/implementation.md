@@ -24,7 +24,7 @@ updated: 2026-09-15
 | 401 出口唯一 | `AuthInterceptor.reject`：HTTP 401 + `ApiResponse.fail(AuthErrorCode.UNAUTHORIZED, …)` |
 | 拦截路径白名单（E3） | `auth/config/WebConfig`：现挂 `/api/auth/profile/**`、`/api/auth/logout`、`/api/auth/recovery/confirm`、`/api/copilot/**`；类上 `@ConditionalOnProperty(name="app.auth.enabled", havingValue="true")` |
 | JSON 栈为 Jackson 3 | `tools.jackson.databind.ObjectMapper`（Boot 4 自动装配 Bean，AuthInterceptor 注入同款） |
-| 表结构手工管理 | `spring.jpa.hibernate.ddl-auto: none`；仓库根 `postgres/schema.sql`（`public.` 前缀、缩写类型、`IF NOT EXISTS`、显式约束名） |
+| 表结构手工管理 | `spring.jpa.hibernate.ddl-auto: none`；`stock-calculator-main/src/main/resources/schema.sql`（`public.` 前缀、缩写类型、`IF NOT EXISTS`、显式约束名） |
 | 测试基建 | 纯 Mockito 单测（`auth/service/SessionServiceTest` 模式）；无 H2 / Testcontainers；`@SpringBootTest` contextLoads 需本地 PG 环境变量 |
 | 验证命令 | `./mvnw compile -q`；`POSTGRES_PASS=… ./mvnw install -pl stock-calculator-main -am`（需本地 PG） |
 
@@ -47,12 +47,12 @@ stock-calculator-main/src/test/java/com/zzh/stock_calculator/sync/service/
 
 改动既有文件（2 处）：
 ├── auth/config/WebConfig.java              # +1 行：/api/sync/**（E3，§8）
-└── postgres/schema.sql                     # 追加两表（§2）
+└── stock-calculator-main/src/main/resources/schema.sql                     # 追加两表（§2）
 ```
 
 Modulith：sync 只依赖 `common` 基包；userId 经 `@RequestAttribute` 注入，不 import auth/其他域任何类型。
 
-## 2. schema.sql 增量（追加到仓库根 postgres/schema.sql）
+## 2. schema.sql 增量（追加到stock-calculator-main/src/main/resources/schema.sql）
 
 ```sql
 -- ============================================================

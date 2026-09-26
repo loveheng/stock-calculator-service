@@ -47,7 +47,7 @@ flowchart TD
 
 与 pull-loop 同构的分工：main 控制面（发布 / 入库 / 看门狗 / 召回），data 数据面（零 DB worker），契约模块承载 task / result；配置（TTL、cron、开关）走既有配置数据表。
 
-## 四、数据模型（postgres/schema.sql）
+## 四、数据模型（stock-calculator-main/src/main/resources/schema.sql）
 
 **copilot_memory（长期记忆条目）**
 
@@ -222,7 +222,7 @@ flowchart TD
 ## 十一、实施顺序与验证
 
 1. contract：MqKey / MqQueue（extract 的 delay+work、tick、profile 的 work）、MessageType、payload（MemoryExtractTickPayload / MemoryExtractTask / MemoryExtractedResult / MemoryProfileTask 含 snapshotMaxUpdatedAt + blacklistedFeatures / MemoryProfileResult）+ `ContractRuntimeHints` 注册；
-2. `postgres/schema.sql`：copilot_memory / copilot_user_profile（含画像游标列 + 黑名单列）两表 DDL + `ai_chat_session` 提炼水位列与在途锁列；
+2. `stock-calculator-main/src/main/resources/schema.sql`：copilot_memory / copilot_user_profile（含画像游标列 + 黑名单列）两表 DDL + `ai_chat_session` 提炼水位列与在途锁列；
 3. main：entity / repository → 发布端（落库后轻量种子）→ tick 消费（在途锁 CAS → 重算差量，空 drop）→ result 消费（窗口记忆 upsert + 水位推进清锁 / ΔCount 统计与画像任务发布 / 画像入库 + 游标推进至快照 max）→ 召回注入 → controller；
 4. data：`MemoryExtractWorker` / `MemoryProfileWorker`（LLM 网关）+ 拓扑声明（delay 队列无消费者、work 队列 quorum、tick 与 result 走既有 result.ingest.q 由 main 消费，两侧参数一致）；
 5. 配置：application.yml（种子 TTL、在途锁超时、ΔCount 阈值、Top-M、衰减系数、注入预算族）；

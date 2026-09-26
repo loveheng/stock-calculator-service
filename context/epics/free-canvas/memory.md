@@ -20,7 +20,7 @@ last-merge: 2026-09-25
 - M1 数据主通道：mcp `fetch_kline`（qfq 读穿入库 / raw 纯读穿不入库；出口频控 `RateLimitedQuoteClient` 令牌桶 5QPS burst20；重叠段 Epsilon 漂移阈值比对→不一致自动 resync 重灌；连续性缺口日志）+ orchestration 种子；main `/api/broker/klines` 读穿代理 + `/api/broker/indicators` 能力端点 + `BrokerRateLimiter` + 5s 请求合并窗口。
 - M2 指标计算：mcp `IndicatorSeriesService`（ta4j 逐根序列，macd/kdj/boll；暖机期以 null 占位 33/10/20；不足 minBars 整段返回 null）+ `ComputeIndicatorsTool`（纯计算无外部 IO）；main `POST /api/broker/indicators/compute`（256KB 硬上限→413、compute 桶 30/s、切片 ≤120 且升序校验、白名单外 400）；kdj minBars 对齐 10。
 - M3 画布对话：copilot 基包门面 `CopilotAskApi`（中性签名 askStream/askBlocking，Modulith 合法出口）；main `POST /api/broker/ask` 双映射（SSE 流式 + JSON 阻塞回落），ask 桶 2/5s + 256KB + cid 幂等透传 + fullCode 字典校验；fullCode/canvasContext/klines 摘要挂 contextSummary（只进 Prompt 不落库）。
-- M4 画布监控（B·调度路径）：main broker 域 `broker_monitor_task` 表（postgres/schema.sql）+ `job.broker.monitor.check` 播种行（每分钟）；`MonitorService`（并发 ≤5 DB 计数 + 幂等 start + 归属校验 stop）+ `MonitorCheckTask`（per-task 60s 节流 + 30min 告警冷却 + PRICE_BELOW 判定 + `BrokerAlertPublisher` 直投 notify.push 复用 Web Push 全链）+ `/api/broker/monitor/{start,stop}`。
+- M4 画布监控（B·调度路径）：main broker 域 `broker_monitor_task` 表（main resources schema.sql）+ `job.broker.monitor.check` 播种行（每分钟）；`MonitorService`（并发 ≤5 DB 计数 + 幂等 start + 归属校验 stop）+ `MonitorCheckTask`（per-task 60s 节流 + 30min 告警冷却 + PRICE_BELOW 判定 + `BrokerAlertPublisher` 直投 notify.push 复用 Web Push 全链）+ `/api/broker/monitor/{start,stop}`。
 - 验证水位：编译通过，单测 main 436 / mcp 61 全绿（含 Modulith 校验）；mcp 新增指标三项单测（序列对齐/暖机/minBars 边界）。
 
 ## 关键决策（SSOT）

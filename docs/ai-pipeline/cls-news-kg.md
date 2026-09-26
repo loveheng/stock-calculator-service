@@ -78,7 +78,7 @@ flowchart TD
 
 契约新增注意：message 包每个具体 payload 类必须登记 `ContractRuntimeHints.DTO_TYPES`（data 已有 ContractRuntimeHintsCoverageTest 包扫描守卫，漏登记 native 运行期必崩）。
 
-## 5. 数据模型（postgres/schema.sql，6 张表）
+## 5. 数据模型（stock-calculator-main/src/main/resources/schema.sql，6 张表）
 
 ```sql
 -- 抽取任务状态表（1 篇 = 1 任务，复刻 cls_article_embedding 范式）
@@ -313,7 +313,7 @@ openai-mini 档（`.env` 的 OPENAI_MINI_* 三键）若选用**带 thinking 的�
 | main 新域 kg/ | task/KgExtractTask（进程内 handler）、mq/KgExtractPublisher、service/KgResultService（摄取）、service/KgFuseService（融合）、entity×6、repository×6；基包出 KgIngestApi 端口（供 crawler 消费中枢回调） |
 | main crawler | 基包增汇编查询 API（按标题模式取最新候选）与字典锚点查询 API；mq/ClsArticleMqConsumer 分发增 kg 分支；data.sql 播种 job.kg.extract 行 |
 | data | worker/KgExtractWorker（Spring AI ChatClient structured output）、config/KgWorkerConfig（ai.tiers.openai-mini tier 装配，LlmRegistry）、错误三分类上报 |
-| schema | postgres/schema.sql 增 6 张表（§5）；postgres/data.sql 增 1 行播种 |
+| schema | stock-calculator-main/src/main/resources/schema.sql 增 6 张表（§5）；postgres/data.sql 增 1 行播种 |
 | 配置 | main application.yml：kg.digest.*、kg.process.*、kg.backfill.*（enabled/batch-size/scan-multiplier/startup-delay） |
 | 监控 | monitor/PipelineWatchTask 队列清单 + PENDING_AGE 纳入 |
 | 文档/索引 | docs/README.md ai-pipeline 域增条目；stock-calculator-service-index 归属表增 kg 行（实施首轮同步） |
