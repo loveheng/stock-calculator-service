@@ -21,12 +21,19 @@ public class BrokerProperties {
     public static class Monitor {
         /** 单用户并发监控上限（§3.5：≤5，DB 在途计数为准） */
         private int maxConcurrentPerUser = 5;
-        /** 单任务判定节流间隔（秒）：调度每分钟一轮，任务级再按此节流 */
-        private long minCheckIntervalSeconds = 60;
+        /** 单任务判定节流间隔（秒）：调度每 30 分钟一轮，任务级再按此节流（docs/alert/design.md R1） */
+        private long minCheckIntervalSeconds = 1800;
         /** 告警冷却窗（秒）：同任务两次告警最小间隔，防轰炸 */
         private long alertCooldownSeconds = 1800;
         /** 判定用 K 线回看日历日（fetch_kline from 参数） */
         private int checkLookbackDays = 7;
+
+        /**
+         * A股休市日历（法定节假日全量日，与代码「周几」判断取并集）。
+         * 来源：chinacalendar.app 2026 ICS（与上交所 2026 年休市公告一致，DTEND 为排他端）；
+         * 每年年末更新次年日历。调休上班的周末仍休市——由代码周几判断承担，日历只作补充。
+         */
+        private java.util.List<java.time.LocalDate> marketHolidays = new java.util.ArrayList<>();
     }
 
     @Data

@@ -690,9 +690,10 @@ INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, 
     ('job.kg.backfill', true, 0, 'CALENDAR', '0 */30 * * * *', 'Asia/Shanghai')
 ON CONFLICT (task_code) DO NOTHING;
 
--- free-canvas §3.5：画布经纪监控判定循环（每分钟一轮，任务内再做 per-task 节流与告警冷却）
+-- free-canvas §3.5 + docs/alert/design.md R1：画布经纪监控判定循环（每 30 分钟一轮，
+-- 交易时段门控在 MonitorCheckTask 内；存量库改 cron 需手动 UPDATE，ON CONFLICT DO NOTHING 不更新已存在行）
 INSERT INTO public.pull_task_config (task_code, enabled, ttl_ms, schedule_mode, cron_expression, timezone) VALUES
-    ('job.broker.monitor.check', true, 0, 'CALENDAR', '0 * * * * *', 'Asia/Shanghai')
+    ('job.broker.monitor.check', true, 0, 'CALENDAR', '0 0/30 * * * *', 'Asia/Shanghai')
 ON CONFLICT (task_code) DO NOTHING;
 
 -- =====================================================================
@@ -813,9 +814,7 @@ ON CONFLICT (tag) DO NOTHING;
 
 ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS band numeric(12,4);
 ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS alert_count int NOT NULL DEFAULT 0;
-
-ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS band numeric(12,4);
-ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS alert_count int NOT NULL DEFAULT 0;
 ALTER TABLE public.broker_monitor_task ADD COLUMN IF NOT EXISTS direction varchar(8);
-UPDATE public.broker_monitor_task SET direction = 'BUY' WHERE direction IS NULL;  -- 存量任务按低吸语义补默认
+UPDATE public.broker_monitor_task SET direction = 'BUY' WHERE direction IS NULL;
 ALTER TABLE public.broker_monitor_task ALTER COLUMN direction SET NOT NULL;
+UPDATE public.pull_task_config SET cron_expression = '0 0/30 * * * *' WHERE task_code = 'job.broker.monitor.check';

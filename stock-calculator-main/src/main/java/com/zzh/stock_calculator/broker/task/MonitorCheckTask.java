@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -27,9 +28,10 @@ import java.util.UUID;
  * 画布经纪监控判定循环（free-canvas §3.5·B 调度路径 + docs/alert/design.md 增强）：
  * pull_task_config CALENDAR 行 job.broker.monitor.check（每 30 分钟）驱动。
  * <p>增强点（docs/alert/design.md §二/§三/§四）：①A股交易时段门控（非时段零请求）；
- * ②批量取价——一轮 RUNNING 任务按 stock_code 去重后经 dispatch 调 MCP fetch_realtime_quote
- * 一次拿全部现价（防 IP 封禁，多用户同股共享一次请求）；③PRICE_NEAR 区间判定
- * （用户自定义 band）；④alert_count 累计 3 次后同事务自动 STOPPED（预告单生命周期结束）。</p>
+ * ②双行情口径——判定用「当轮 30 分钟 K 线」low/high（fetch_m30_range，消盘中触及又回落的漏报），
+ * 推送文案用实时现价（fetch_realtime_quote，触达即时可读；取不到回退当轮区间）；
+ * 批量按 stock_code 去重，多用户同股共享请求（防 IP 封禁）；③单边区间判定
+ * （direction BUY/SELL + 用户自定义 band）；④alert_count 累计 3 次后同事务自动 STOPPED。</p>
  * <p>单任务失败隔离：try-catch 逐条处理，不中断整轮（TaskService 同款纪律）。
  * 取价失败/股票缺价（停牌、未开盘）该股本轮跳过，下轮自然重试。</p>
  */
@@ -69,25 +71,36 @@ public class MonitorCheckTask implements AppTaskHandler {
             log.warn("[broker-monitor] no m30 range resolved, skip round ({} tasks)", due.size());
             return;
         }
+        // 先逐任务判定并收集触发者（计数/封顶在 check 内完成，落库推迟到推送后统一做），再批量取实时现价组装文案
+        List<BrokerMonitorTaskEntity> triggered = new ArrayList<>();
         for (BrokerMonitorTaskEntity task : due) {
             try {
                 BigDecimal[] range = ranges.get(task.getStockCode());
-                check(task, range == null ? null : range[0], range == null ? null : range[1]);
+                if (check(task, range == null ? null : range[0], range == null ? null : range[1])) {
+                    triggered.add(task);
+                }
             } catch (Exception e) {
                 log.warn("[broker-monitor] check failed id={} code={}: {}",
                         task.getId(), task.getStockCode(), e.getMessage());
             }
         }
+        if (!triggered.isEmpty()) {
+            publishAlerts(triggered, ranges);
+        }
     }
 
     /**
-     * A股交易时段门控（docs/alert/design.md R3）：周一至周五 9:30–11:30 / 13:00–15:00。
-     * 边界推演：收盘瞬间 15:00:00 整仍算时段内（最后一笔价格可得）；节假日未排除——
-     * // UNCERTAIN: 节假日判断数据源待定（crawler 交易日历或周几兜底，docs/alert/design.md §四.4）
+     * A股交易时段门控（docs/alert/design.md R3）：周一至周五且非法定休市日，9:30–11:30 / 13:00–15:00。
+     * 边界推演：周末恒休市——上交所不随国家调休开市（如 2026 年 2/14、2/28、10/10 均为周末休市），
+     * 调休上班的周末仍被周几判断拦下；法定节假日的「工作日」部分由 market-holidays 日历拦下
+     * （与周几判断取并集，两道闸都不放行才轮空）。收盘瞬间 15:00:00 仍算时段内。
      */
     private boolean inTradingSession(OffsetDateTime now) {
         DayOfWeek dow = now.getDayOfWeek();
         if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            return false;
+        }
+        if (properties.getMonitor().getMarketHolidays().contains(now.toLocalDate())) {
             return false;
         }
         LocalTime t = now.toLocalTime();
@@ -123,26 +136,30 @@ public class MonitorCheckTask implements AppTaskHandler {
         return ranges;
     }
 
-    /** 逐任务判定；low/high 为 null（该股缺 m30 数据）直接落 last_checked_at 跳过 */
-    private void check(BrokerMonitorTaskEntity task, BigDecimal low, BigDecimal high) {
+    /**
+     * 逐任务判定；low/high 为 null（该股缺 m30 数据）直接落 last_checked_at 跳过。
+     * 返回是否触发（触发者由调用方收集，推送统一在 publishAlerts 做——计数/封顶已在此处完成，
+     * 落库推迟到推送后统一执行，避免推送失败时状态已写死）。
+     */
+    private boolean check(BrokerMonitorTaskEntity task, BigDecimal low, BigDecimal high) {
         OffsetDateTime now = OffsetDateTime.now();
         task.setLastCheckedAt(now);
         if (low == null || high == null) {
             repository.save(task);
-            return;
+            return false;
         }
         boolean triggered = isTriggered(task, low, high);
         if (triggered && cooldownPassed(task, now)) {
             task.setAlertCount(task.getAlertCount() + 1);
-            publishAlert(task, low, high);
             task.setLastAlertAt(now);
             if (task.getAlertCount() >= MAX_ALERT_COUNT) {
                 task.setStatus(MonitorStatus.STATUS_STOPPED);
                 log.info("[broker-monitor] alert limit reached, auto-stopped id={} user={} code={} count={}",
                         task.getId(), task.getUserId(), task.getStockCode(), task.getAlertCount());
             }
+            return true;
         }
-        repository.save(task);
+        return false;
     }
 
     /**
@@ -167,13 +184,62 @@ public class MonitorCheckTask implements AppTaskHandler {
                 now.minusSeconds(properties.getMonitor().getAlertCooldownSeconds()));
     }
 
-    private void publishAlert(BrokerMonitorTaskEntity task, BigDecimal low, BigDecimal high) {
+    /**
+     * 触发者批量推送：文案价格用实时现价（fetch_realtime_quote，触达即时可读），
+     * 该股取不到现价回退当轮 m30 区间；推送与落库统一在此收尾（check 只做判定与计数）。
+     * 单任务推送失败不阻断其他任务，状态（计数/封顶）照常落库。
+     */
+    private void publishAlerts(List<BrokerMonitorTaskEntity> triggered, Map<String, BigDecimal[]> ranges) {
+        Map<String, BigDecimal> prices = fetchRealtimePrices(triggered);
+        for (BrokerMonitorTaskEntity task : triggered) {
+            try {
+                publishAlert(task, prices.get(task.getStockCode()), ranges.get(task.getStockCode()));
+            } catch (Exception e) {
+                log.warn("[broker-monitor] publish failed id={} code={}: {}",
+                        task.getId(), task.getStockCode(), e.getMessage());
+            } finally {
+                repository.save(task);
+            }
+        }
+    }
+
+    /** 批量取实时现价（经 dispatch 调 MCP fetch_realtime_quote）；缺股不入 map，文案处回退当轮区间 */
+    private Map<String, BigDecimal> fetchRealtimePrices(List<BrokerMonitorTaskEntity> tasks) {
+        Set<String> codes = new LinkedHashSet<>();
+        for (BrokerMonitorTaskEntity task : tasks) {
+            codes.add(task.getStockCode());
+        }
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("codes", List.copyOf(codes));
+        JsonNode payload = dispatchClient.invokeTool("fetch_realtime_quote", params,
+                UUID.randomUUID().toString());
+        Map<String, BigDecimal> prices = new LinkedHashMap<>();
+        if (payload == null || payload.has("error")) {
+            log.warn("[broker-monitor] fetch_realtime_quote failed: {}",
+                    payload == null ? "no response" : payload.get("error").asString());
+            return prices;
+        }
+        JsonNode quotes = payload.path("quotes");
+        quotes.properties().forEach(e -> {
+            JsonNode v = e.getValue();
+            if (v.isNumber()) {
+                prices.put(e.getKey(), BigDecimal.valueOf(v.asDouble()));
+            }
+        });
+        return prices;
+    }
+
+    private void publishAlert(BrokerMonitorTaskEntity task, BigDecimal price, BigDecimal[] range) {
         String title = "价格提醒 " + task.getStockCode();
+        // 文案价格双口径：实时现价优先（触达即所见），缺价回退当轮 m30 区间（判定依据，不误导）
+        String priceText = price != null
+                ? "最新价 " + price.stripTrailingZeros().toPlainString()
+                : "当轮最低 " + range[0].stripTrailingZeros().toPlainString()
+                        + " / 最高 " + range[1].stripTrailingZeros().toPlainString();
         StringBuilder body = new StringBuilder()
                 .append(describe(task.getAlertType(), task.getDirection()))
                 .append(task.getThreshold().stripTrailingZeros().toPlainString())
-                .append("，当轮最低 ").append(low.stripTrailingZeros().toPlainString())
-                .append(" / 最高 ").append(high.stripTrailingZeros().toPlainString())
+                .append("，").append(priceText)
                 .append("（第 ").append(task.getAlertCount()).append("/").append(MAX_ALERT_COUNT).append(" 次提醒）");
         if (task.getAlertCount() >= MAX_ALERT_COUNT) {
             body.append("——这是最后一次提醒，之后自动结束");
@@ -184,8 +250,8 @@ public class MonitorCheckTask implements AppTaskHandler {
                         .body(body.toString())
                         .build(),
                 UUID.randomUUID().toString());
-        log.info("[broker-monitor] alert sent id={} code={} low={} high={} type={} direction={} threshold={}",
-                task.getId(), task.getStockCode(), low, high, task.getAlertType(),
+        log.info("[broker-monitor] alert sent id={} code={} price={} low={} high={} type={} direction={} threshold={}",
+                task.getId(), task.getStockCode(), price, range[0], range[1], task.getAlertType(),
                 task.getDirection(), task.getThreshold());
     }
 

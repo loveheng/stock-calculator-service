@@ -43,16 +43,16 @@ updated: 2026-09-26
 
 ```mermaid
 flowchart TD
-    A[pull_task_config 驱动<br/>broker.monitor.check 每 30 分钟] --> B{交易时段?<br/>9:30-11:30 / 13:00-15:00}
+    A[pull_task_config 驱动<br/>broker.monitor.check 每 30 分钟] --> B{交易时段门控<br/>9:30-11:30 / 13:00-15:00<br/>周末+法定休市日拦}
     B -- 否 --> Z[直接 return 零请求]
-    B -- 是 --> C[查 RUNNING 任务<br/>SELECT DISTINCT stock_code]
-    C --> D[dispatch 调 MCP fetch_realtime_quote<br/>批量现价, ≤60 只/请求分批]
-    D --> E{逐任务判定<br/>PRICE_NEAR: abs 现价-threshold ≤ band<br/>PRICE_BELOW: 现价 ≤ threshold}
-    E -- 触发且冷却窗外 --> F[发 notify.push Web Push<br/>alert_count + 1]
-    F --> G{alert_count ≥ 3?}
-    G -- 是 --> H[同事务 status=STOPPED<br/>预告单生命周期结束]
-    G -- 否 --> I[保存 last_alert_at]
-    E -- 未触发/冷却中 --> I
+    B -- 是 --> C[查到期 RUNNING 任务 findDueRunning]
+    C --> D[dispatch 调 MCP fetch_m30_range<br/>批量当轮 30 分钟 K 线 low/high]
+    D --> E{逐任务单边判定<br/>BUY: low ≤ threshold+band<br/>SELL: high ≥ threshold-band<br/>PRICE_BELOW 为 BUY 变体}
+    E -- 触发且冷却窗外 --> F[alert_count + 1<br/>达 3 同事务 status=STOPPED]
+    E -- 未触发/冷却中 --> I[保存 last_checked_at]
+    F --> G[dispatch 调 MCP fetch_realtime_quote<br/>批量实时现价 供文案]
+    G --> H[发 notify.push Web Push<br/>文案: 最新价 优先<br/>缺价回退当轮区间<br/>落库统一收尾]
+    H --> I
 ```
 
 ## 四、改动清单
@@ -66,11 +66,19 @@ flowchart TD
 - 注册为 MCP 工具 `fetch_realtime_quote`（入参股票代码列表，出参 code→price 映射）。
 - **边界**：main 不直连行情源，MonitorCheckTask 仍经 `McpDispatchClient` 调用。
 
-### 2. MonitorCheckTask 批量化
+### 2. MonitorCheckTask 批量化（双行情口径，2026-09-26 定案）
 
-- 判定循环改为三段：查 DISTINCT 股票 → 一次批量取价（>60 只分批）→ 逐任务内存判定。
+- 判定链四段：查到期任务 → 批量取 **m30 low/high**（判定依据）→ 逐任务单边判定并计数/封顶
+  （触发者收集）→ 触发者批量取**实时现价**组装文案 → 推送与状态统一落库。
+- **双口径分工**：判定用当轮 30 分钟 K 线（消盘中触及又回落的漏报）；推送文案用实时现价
+  （「最新价 xxx」，触达即时可读），该股取不到现价回退当轮区间（判定依据，不误导）。
+- **备选否决留档（2026-09-26 评审）**：「当日极值判定」（实时接口顺带取当日 high/low，一个请求两用）被否——
+  极值全天记忆不复位，深击穿下沿后反弹，每轮判定都满足触发线，冷却窗（=判定周期）拦不住，
+  3 次额度被一次击穿烧光、预告单提前终局，当天后续真实回落机会全部丢失；
+  「当日极值 + 现价仍在触发侧」的修补在数学上退化为纯现价判定（漏报回归）。
+  m30 窗口的记忆长度恰为一个判定周期：bar 滚动即复位，既不漏也不陈旧。
+- 批量请求失败隔离：单只解析失败不影响其他股票；单任务推送失败不阻断其他任务，状态照常落库。
 - 单任务失败隔离纪律保留（try-catch 逐条，不中断整轮）。
-- 批量请求失败隔离：单只解析失败不影响其他股票。
 
 ### 3. PRICE_NEAR 告警类型 + direction 方向（前端反馈定案 2026-09-26）
 
@@ -88,9 +96,15 @@ flowchart TD
 
 ### 4. 调度节奏与交易时段门控
 
-- 调度频率改 30 分钟（pull_task_config 的 `job.broker.monitor.check` 配置）；
-- `MonitorCheckTask.run()` 头部加交易时段门控：A股 9:30–11:30 / 13:00–15:00，周末跳过；
-  节假日若 crawler 域有交易日历则用之，否则「周几 + 时段」兜底（// UNCERTAIN: 节假日判断数据源待定）。
+- 调度频率改 30 分钟（pull_task_config 的 `job.broker.monitor.check` 配置，播种 cron
+  `0 0/30 * * * *`，存量库需手动 UPDATE，见 api.md §6.5）；
+- `MonitorCheckTask.run()` 头部加交易时段门控：A股 9:30–11:30 / 13:00–15:00；
+- **休市日判断（2026-09-26 定案）**：两道闸取并集——
+  ① 周六/周日恒休市（上交所不随国家调休开市，调休上班的周末如 2026 的 2/14、2/28、10/10 仍休市，
+  由周几判断承担，**无需调休上班日日历**）；② 法定节假日的「工作日」部分由
+  `broker.monitor.market-holidays` 配置日历拦下（application.yml 萖 2026 全量 19 天，
+  来源 chinacalendar.app 2026 ICS，与上交所上证公告〔2025〕45 号休市安排一致）。
+  日历为静态配置：每年年末更新次年清单即可，无需运行时拉取。
 
 ### 5. alert_count 三次封顶（唯一 DDL 变更）
 
@@ -107,11 +121,15 @@ ALTER TABLE public.broker_monitor_task ADD COLUMN alert_count int NOT NULL DEFAU
 - **冷却窗保留**（`alertCooldownSeconds`，建议 ≥ 检查周期同量级如 2h）：
   价格持续在区间内徘徊时，每冷却窗提醒一次、累计 3 次、自动停。
   即 R6 语义为「**按任务累计 3 次**，含冷却窗内的重复提醒」。
-- **推送合并窗口（2026-09-26 定案「替代方案」）**：不做按轮聚合，做**同用户 30s 合并窗口**——
+- **推送合并窗口（2026-09-26 定案「替代方案」，同日升级多实例安全版）**：不做按轮聚合，做**同用户 30s 合并窗口**——
   `PushCoalescingService`（main notify 包）缓冲同用户消息，窗口冲刷时批量逐条落库
   （通知中心明细不缩水）但 Web Push 只发一条（标题取首条 +「N 条合并」，正文逐行列出）。
-  配置键 `push.coalesce-window-seconds`（默认 30）。JVM 内缓冲：进程重启丢窗口内在途推送，
-  拉取兜底通道不受影响；多实例部署各实例独立成窗（// UNCERTAIN: 多实例需改 MQ 延迟队列方案）。
+  配置键 `push.coalesce-window-seconds`（默认 30）。
+  **多实例安全（Redis ZSET 延迟窗）**：缓冲在 Redis ZSET `push:coalesce:z`（score=到点冲刷时刻，
+  member=消息 JSON），各实例 5s 步长独立扫描、ZPOPMIN 原子认领——同一消息只被一个实例投递，
+  不随实例数放大；投递失败回 ZSET 重试（计数随 member 往返，超 3 次降级逐条落库，拉取兜底仍达）；
+  Redis 不可用时 offer 当场降级直投（[DEGRADE] 日志，只丢合并不丢消息）。
+  实例宕机仅丢「已认领未投递」的一小批，其余消息由存活实例继续冲刷；ZSET 空集自动回收 + 1h TTL 兜底。
 - 触发后价格离开区间再进入，同样受冷却窗约束、计入同一 3 次额度。
 - 多用户同股互不影响：告警按任务（user 粒度）各自计数与冷却。
 
