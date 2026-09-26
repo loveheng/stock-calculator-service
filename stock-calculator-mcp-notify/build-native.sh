@@ -9,7 +9,7 @@
 #      CI 由 workflow 的 postgres service 预灌 schema；本地复用 compose 常驻实例）
 #   3. RabbitMQ 连接 fail-fast：构建期注入 dummy 防止 process-aot 实例化单例时
 #      意外触发（运行期值仍从环境变量取）
-#   4. 复用 gen-logger-config.py（jboss-logging 动态 logger + openai any-setter
+#   4. 复用 gen-native-metadata.py（jboss-logging 动态 logger + openai any-setter
 #      反射注册；脚本按自身所在目录的 target/cp.txt 扫描，模块无关直接拷贝）
 #
 # 用法:
@@ -60,9 +60,9 @@ export SPRING_APPLICATION_JSON='{
 SKIP_PKG=${1:-}
 
 if [ "$SKIP_PKG" != "--no-pkg" ]; then
-  echo "█████ 步骤 0/4: install 父 POM + contract + main（notify 单独编译的解析前提）..."
+  echo "█████ 步骤 0/4: install 父 POM + contract + llm + jpa + main（notify 单独编译的解析前提；P2 起 main 传递依赖 stock-calculator-jpa 与 llm）..."
   ../mvnw -f .. install -N -q -DskipTests
-  ../mvnw -f .. install -pl stock-calculator-contract,stock-calculator-main -q -DskipTests
+  ../mvnw -f .. install -pl stock-calculator-contract,stock-calculator-llm,stock-calculator-jpa,stock-calculator-main -q -DskipTests
 
   echo "█████ 步骤 1/4: Maven compile + AOT 处理..."
   ../mvnw -DskipTests compile spring-boot:process-aot -q -Dfile.encoding=UTF-8 \
@@ -95,8 +95,13 @@ if [ -z "$CP" ] || [ "$CP" = ":target/classes:target/spring-aot/main/classes:tar
 fi
 echo "        classpath jar 数量: $(printf '%s' "$CP" | tr ':' '\n' | grep -c '\.jar$')"
 
-echo "█████ 步骤 2.5/4: 生成 jboss-logging/openai 反射元数据（gen-logger-config.py）..."
-python3 gen-logger-config.py
+echo "█████ 步骤 2.5/4: 生成 jboss-logging/openai 反射元数据（gen-native-metadata.py）..."
+python3 ../scripts/agent-tools/gen-native-metadata.py
+python3 ../scripts/agent-tools/gen-openai-metadata.py
+if [ ! -f target/classes/META-INF/native-image/com.zzh/ni-openai-config/reachability-metadata.json ]; then
+  echo "❌ 生成 openai 反射元数据失败（需要 python3）" >&2
+  exit 1
+fi
 if [ ! -f target/classes/META-INF/native-image/com.zzh/ni-logger-config/reachability-metadata.json ]; then
   echo "❌ 反射元数据未生成" >&2
   exit 1

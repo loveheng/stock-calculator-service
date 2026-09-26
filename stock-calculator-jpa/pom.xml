@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.zzh</groupId>
+        <artifactId>stock-calculator-service</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>stock-calculator-jpa</artifactId>
+    <name>stock-calculator-jpa</name>
+    <description>
+        JPA / Hibernate native-image 静态反射元数据（docs/architecture/jpa-native-extraction.md P1）：
+        框架类反射注册（naming/implicit 策略、StrategySelector、Dialect、id 优化器、hikari 数组、
+        EntityBatchLoader 数组类、JPA 注解内部类 CacheAnnotation、BytecodeProvider none、
+        JsonFormatMapper、PG JdbcType 全族）经 JpaRuntimeHints(RuntimeHintsRegistrar) +
+        META-INF/spring/aot.factories 自动吸收；同名静态元数据另提交于
+        META-INF/native-image/com.zzh/jpa-config/reachability-metadata.json 作双轨保险，
+        资源(DTD/XSD)与 BytecodeProvider service 排除见同目录 resource-config.json。
+        另经 RuntimeHints 补资源(DTD/XSD) include、JDK 代理(EntityManager/Session)、
+        序列化(UUID/Long/String) 框架级安全网；库自带同目录 native-image.properties 提供通用
+        -H: 开关（ReportExceptionStackTraces），消费模块依赖即继承。
+        仅承载元数据，不引入持久化装配；消费模块加本依赖即复用，无需逐个 @Import。
+    </description>
+    <dependencies>
+        <!-- 仅供 JpaRuntimeHints（native 反射注册辅助类）编译；optional 不传递，
+             库表面仍零 Spring 运行期类型依赖（注册在 AOT 期按名 Class.forName） -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+</project>

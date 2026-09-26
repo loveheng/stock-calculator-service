@@ -1,0 +1,834 @@
+{
+  "reflection": [
+    {
+      "type": "org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.model.naming.PhysicalNamingStrategySnakeCaseImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.model.naming.ImplicitNamingStrategyJpaCompliantImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyHbmImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.model.naming.ImplicitNamingStrategyComponentPathImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.model.relational.ColumnOrderingStrategyStandard",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.model.relational.ColumnOrderingStrategyLegacy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.resource.transaction.backend.jdbc.internal.JdbcResourceLocalTransactionCoordinatorBuilderImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.resource.transaction.backend.jta.internal.JtaTransactionCoordinatorBuilderImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.cte.CteInsertStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.temptable.GlobalTemporaryTableInsertStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.temptable.LocalTemporaryTableInsertStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.temptable.PersistentTableInsertStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.cte.CteMutationStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.temptable.GlobalTemporaryTableMutationStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.temptable.LocalTemporaryTableMutationStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.query.sqm.mutation.internal.temptable.PersistentTableMutationStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.StandardNamingStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.SingleNamingStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.LegacyNamingStrategy",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.cache.internal.DefaultCacheKeysFactory",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.cache.internal.SimpleCacheKeysFactory",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.type.format.jackson.JacksonJsonFormatMapper",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.hibernate.type.format.FormatMapperCreationContext"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.type.format.jackson.Jackson3JsonFormatMapper",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.hibernate.type.format.FormatMapperCreationContext"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.type.format.jackson.JacksonXmlFormatMapper",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.hibernate.type.format.FormatMapperCreationContext"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.type.format.jaxb.JaxbXmlFormatMapper",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.PostgreSQLDialect",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLArrayJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLArrayJdbcTypeConstructor",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLCastingInetJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLCastingIntervalSecondJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLCastingJsonArrayJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLCastingJsonArrayJdbcTypeConstructor",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLCastingJsonJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLEnumJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLInetJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLIntervalSecondJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLJsonArrayPGObjectJsonJdbcTypeConstructor",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLJsonArrayPGObjectJsonbJdbcTypeConstructor",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLJsonArrayPGObjectType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLJsonPGObjectJsonType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLJsonPGObjectJsonbType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLOrdinalEnumJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLStructCastingJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLStructPGObjectJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.dialect.type.PostgreSQLUUIDJdbcType",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.models.annotations.internal.CacheAnnotation",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.hibernate.models.spi.ModelsContext"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.NoopOptimizer",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.PooledOptimizer",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.PooledLoOptimizer",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.HiLoOptimizer",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.id.enhanced.LegacyHiLoAlgorithmOptimizer",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.zaxxer.hikari.util.ConcurrentBag$IConcurrentBagEntry",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.zaxxer.hikari.util.ConcurrentBag$IConcurrentBagEntry[]"
+    },
+    {
+      "type": "java.util.UUID[]"
+    },
+    {
+      "type": "java.lang.Long[]"
+    },
+    {
+      "type": "java.lang.String[]"
+    },
+    {
+      "type": "java.sql.Statement[]"
+    },
+    {
+      "type": "java.sql.ResultSet[]"
+    },
+    {
+      "type": "java.sql.Connection[]"
+    },
+    {
+      "type": "org.hibernate.bytecode.internal.none.BytecodeProviderImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.hibernate.boot.registry.selector.internal.StrategySelectorImpl",
+      "queryAllDeclaredMethods": true,
+      "queryAllPublicMethods": true,
+      "queryAllDeclaredConstructors": true,
+      "queryAllPublicConstructors": true,
+      "queryAllDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    }
+  ],
+  "resources": []
+}

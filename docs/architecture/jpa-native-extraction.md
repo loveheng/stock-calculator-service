@@ -70,13 +70,20 @@ scripts/agent-tools/gen-native-metadata  ← 单一共享脚本（登记 toolbox
 - 落入：`JpaRuntimeHints`（RuntimeHintsRegistrar）+ 提交静态 `reachability-metadata.json` + `resource-config.json`
   （内容平移自当前各 `gen-logger-config.py` 的 EXTRA_CLASSES / DTD pattern / BytecodeProvider excludes；
   保留 classpath 存在性过滤——注册前 `ClassUtils.isPresent` 判存在，Hibernate 改名不致崩）。
-- 无条件配置类 `@ImportRuntimeHints(JpaRuntimeHints.class)`，供消费模块 `@Import` 或经 `META-INF/spring/aot.factories`。
+- 注册方式定为 `META-INF/spring/aot.factories`（RuntimeHintsRegistrar），消费模块**仅加依赖即自动吸收**，无需逐个 `@Import`
+  （避开 SKILL §三 条件类 false 漏注册的坑；aot.factories 无条件）。
 - **验收**：本模块 `mvn test`（如有）编译过；JSON 经 javap/字节级抽查关键类（PhysicalNamingStrategyStd、BytecodeProviderImpl、UUID[]）齐全。
+- 2026-09-26 已落地：库模块编译通过（`mvn compile` MVN_EXIT=0），target/classes 含 `jpa-config/reachability-metadata.json`(63 条静态反射)
+  + `resource-config.json`(DTD/BytecodeProvider 排除) + `aot.factories` 注册 `JpaRuntimeHints`；消费者依赖接线见 P2。
 
 ### 断点 P2 — 消费模块接入（试点先行）
 - 顺序：**orchestration（6 repo，最小 JPA 面）先做 spike** → main（≈40 repo，全量回归）→ mcp → mcp-notify。
 - 每模块：加 `stock-calculator-jpa` 依赖；删本地 `gen-logger-config.py`；`build-native.sh` 改调共享脚本 +
   保留官方仓库 `ConfigurationFileDirectories`；如采用库内通用持久化装配则迁移 DataSource/EMF/事务/JPA 属性。
+- 2026-09-26 已落地（依赖接线 + DTD 收敛）：4 个 JPA 模块（main/mcp/mcp-notify/orchestration）pom 均已加
+  `stock-calculator-jpa` 依赖；`gen-native-metadata.py` 中重复的 DTD/XSD 资源段（consolidated `glob` +
+  经典 `resource-config.json`，含 BytecodeProvider 排除）已收敛删除，改由库的 `resource-config.json` +
+  `JpaRuntimeHints` 双轨提供，消费模块依赖即继承，无需脚本兜底。
 - **验收（每模块）**：见 §四。
 
 ### 断点 P3 — CI 收口与文档联动
@@ -114,8 +121,10 @@ scripts/agent-tools/gen-native-metadata  ← 单一共享脚本（登记 toolbox
 
 ## 六、验收标准（整体）
 
-- [ ] `gen-logger-config.py` 4 份副本删除，统一为 `scripts/agent-tools/gen-native-metadata`（+ openai 独立）；
-- [ ] `stock-calculator-jpa` 库含 `JpaRuntimeHints` + 提交静态元数据，4 个 JPA 模块均依赖；
+- [x] `gen-logger-config.py` 4 份副本删除，统一为 `scripts/agent-tools/gen-native-metadata`（以 mcp 版为超集基准，并集含 PG JdbcType 全族 / CacheAnnotation / java.sql.*[] / StockDictEntry / EXTRA_CTORS）；openai 独立拆分见 D2，暂缓；
+  - 2026-09-26 已落地：4 模块 build-native.sh 改调共享脚本、本地副本删除、脚本 `chdir` 改为模块目录、语法+守卫校验通过；剩余 native 终闸（逐模块 `bash build-native.sh`）待跑
+- [x] `stock-calculator-jpa` 库已建（pom + `JpaRuntimeHints` + 提交静态 `reachability-metadata.json`/`resource-config.json` + `aot.factories` 注册），离线编译通过（63 条静态反射 + DTD/BytecodeProvider 排除）；
+  - 2026-09-26 已落地；4 个 JPA 模块的**依赖接线 + native 终闸**见 P2
 - [ ] 4 模块 native 构建全绿（8s 冒烟 + 90s 加长，零 ERROR），且 Hibernate 升版只需改 1 处；
 - [ ] 单处 JPA/wiring 改动可在 JVM（contextLoads + Postgres test）分钟级验证，无需每改必 native；
 - [ ] SKILL 文档与 README 同步"JPA native 组件"统一来源。

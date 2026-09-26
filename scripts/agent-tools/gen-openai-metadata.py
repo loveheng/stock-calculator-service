@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""data 服务 openai SDK 反射元数据生成器（移植自 main/gen-logger-config.py 轮 17/18）。
+"""openai SDK 反射元数据生成器（从 gen-native-metadata.py 拆出的独立脚本，D2）。
 
 背景（docs：stock-calculator-native-runtime-metadata skill §十一）：
-openai-java 4.49 + Spring AI 2.x 有两段 Jackson 反射面，jar 自带的 classic 元数据
-只覆盖构造器/字段/getter，覆盖不到——
+openai-java + Spring AI 有两段 Jackson 反射面，jar 自带的 classic 元数据只覆盖
+构造器/字段/getter，覆盖不到——
   1. 反序列化：响应含 SDK 未建模字段时，Jackson any-setter 反射调用
      private putAdditionalProperty(String, com.openai.core.JsonValue)；
      Gemini/Groq 兼容网关响应必带未建模字段 → 必崩（MissingReflectionRegistrationError，
@@ -13,8 +13,9 @@ openai-java 4.49 + Spring AI 2.x 有两段 Jackson 反射面，jar 自带的 cla
 修法 = 包级全量注册（拒绝逐方法打地鼠）：字节码含 putAdditionalProperty 常量的类
 显式注册 any-setter 签名（对仅引用常量的类静默容忍）+ com.openai.core.** 全部类
 注册全部声明方法（纯 Python class 文件解析器，descriptor 转点分参数类型）。
-与 main 的区别：data 无 DB / 无 Hibernate，agent 基线、jboss-logger、JpaAnnotation、
-EXTRA_CLASSES、resources 段均不需要，只产出 openai 两段反射注册。
+
+与 JPA/hibernate/jboss-logging 无关，故独立成共享脚本，供所有用到 Spring AI OpenAI
+的模块（main/mcp/mcp-notify/orchestration/data）统一调用，消除每模块各持一份的漂移。
 
 产物：target/classes/META-INF/native-image/com.zzh/ni-openai-config/
 reachability-metadata.json（native-image 自动检测 classpath 目录元数据）。
@@ -26,9 +27,14 @@ import struct
 import sys
 import zipfile
 
-cp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'target', 'cp.txt')
-if not os.path.exists(cp_path):
-    print('gen-openai-metadata: target/cp.txt 不存在（须在 build-native.sh 步骤 2 之后运行）')
+# 共享生成器：由各模块 build-native.sh 从模块目录调用（脚本开头已
+# `cd "$(dirname "$0")"`），故 cwd 即模块目录；CI/非 cwd 场景可传模块目录为 argv[1]。
+MODULE_DIR = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+os.chdir(MODULE_DIR)
+
+cp = 'target/cp.txt'
+if not os.path.exists(cp):
+    print('gen-openai-metadata: target/cp.txt not found (run the maven step first)', file=sys.stderr)
     sys.exit(1)
 
 OPENAI_ANY_SETTER = {
@@ -41,7 +47,7 @@ def scan_openai_any_setter():
     # DECLARES or references the any-setter; native-image silently tolerates
     # registrations for absent members, so no proper method-table parse needed
     found = set()
-    for j in open(cp_path).read().strip().split(':'):
+    for j in open(cp).read().strip().split(':'):
         j = j.strip()
         if not j.endswith('.jar') or not os.path.exists(j):
             continue
@@ -153,7 +159,7 @@ def scan_openai_core_methods():
     # all declared methods of every class under com/openai/core/ in every
     # openai jar on the classpath -> explicit invocable registration
     found = {}
-    for j in open(cp_path).read().strip().split(':'):
+    for j in open(cp).read().strip().split(':'):
         j = j.strip()
         if not j.endswith('.jar') or not os.path.exists(j):
             continue
@@ -190,8 +196,7 @@ def main():
             entry['methods'].append({'name': name, 'parameterTypes': list(params)})
             method_count += 1
         reflection.append(entry)
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           'target', 'classes',
+    out_dir = os.path.join('target', 'classes',
                            'META-INF', 'native-image', 'com.zzh', 'ni-openai-config')
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, 'reachability-metadata.json'), 'w') as f:

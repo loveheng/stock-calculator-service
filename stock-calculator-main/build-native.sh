@@ -73,10 +73,11 @@ echo "████████ 开始 GraalVM Native 编译"
 # ---------------- 步骤 1: Maven compile + AOT ----------------
 if [ "$SKIP_PKG" != "--no-pkg" ]; then
   echo "█████ 步骤 1/4: Maven compile + AOT 处理..."
-  # 先 install 父 POM + contract（main 从自身目录编译，reactor 不含 contract；
+  # 先 install 父 POM + contract + llm + jpa（main 从自身目录编译，reactor 不含这些本地模块；
+  # P2 起 main 依赖 stock-calculator-jpa（native 静态元数据），llm 为其 LLM tier 设施；
   # 与 stock-calculator-data/build-native.sh 同款两行，CI 冷缓存依赖此步）
   ../mvnw -f .. install -N -q -DskipTests
-  ../mvnw -f .. install -pl stock-calculator-contract -q -DskipTests
+  ../mvnw -f .. install -pl stock-calculator-contract,stock-calculator-llm,stock-calculator-jpa -q -DskipTests
   # 只编译不 package，避免触发 native-maven-plugin 卡死问题。
   # process-aot 显式调用（它会生成并编译 AOT 类到 target/spring-aot/main/classes），
   # 不依赖 lifecycle phase 绑定，行为确定。
@@ -116,7 +117,12 @@ echo "        classpath jar 数量: $(printf '%s' "$CP" | tr ':' '\n' | grep -c 
 # MethodHandles.Lookup.findClass 按计算出的类名动态加载，静态可达性分析发现不了，
 # 必须显式注册进反射配置，否则启动报:
 #   Invalid logger interface Xxx (implementation not found)
-python3 gen-logger-config.py
+python3 ../scripts/agent-tools/gen-native-metadata.py
+python3 ../scripts/agent-tools/gen-openai-metadata.py
+if [ ! -f target/classes/META-INF/native-image/com.zzh/ni-openai-config/reachability-metadata.json ]; then
+  echo "❌ 生成 openai 反射元数据失败（需要 python3）" >&2
+  exit 1
+fi
 if [ ! -f target/classes/META-INF/native-image/com.zzh/ni-logger-config/reachability-metadata.json ]; then
   echo "❌ 生成 jboss-logging logger 反射配置失败（需要 python3）" >&2
   exit 1

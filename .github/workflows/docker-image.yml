@@ -56,6 +56,8 @@ jobs:
           filters: |
             main:
               - 'stock-calculator-main/**'
+              - 'stock-calculator-jpa/**'
+              - 'stock-calculator-llm/**'
               - 'stock-calculator-contract/**'
               - 'pom.xml'
               - 'mvnw'
@@ -64,6 +66,8 @@ jobs:
               - '.github/workflows/docker-image.yml'
             data:
               - 'stock-calculator-data/**'
+              - 'stock-calculator-jpa/**'
+              - 'stock-calculator-llm/**'
               - 'stock-calculator-contract/**'
               - 'pom.xml'
               - 'mvnw'
@@ -72,6 +76,8 @@ jobs:
               - '.github/workflows/docker-image.yml'
             mcp:
               - 'stock-calculator-mcp/**'
+              - 'stock-calculator-jpa/**'
+              - 'stock-calculator-llm/**'
               - 'stock-calculator-main/**'
               - 'stock-calculator-contract/**'
               - 'pom.xml'
@@ -81,6 +87,8 @@ jobs:
               - '.github/workflows/docker-image.yml'
             notify:
               - 'stock-calculator-mcp-notify/**'
+              - 'stock-calculator-jpa/**'
+              - 'stock-calculator-llm/**'
               - 'stock-calculator-main/**'
               - 'stock-calculator-contract/**'
               - 'pom.xml'
@@ -90,6 +98,8 @@ jobs:
               - '.github/workflows/docker-image.yml'
             orchestration:
               - 'stock-calculator-orchestration/**'
+              - 'stock-calculator-jpa/**'
+              - 'stock-calculator-llm/**'
               - 'stock-calculator-main/**'
               - 'stock-calculator-contract/**'
               - 'pom.xml'

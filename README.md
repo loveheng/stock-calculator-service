@@ -206,7 +206,7 @@ java -jar stock-calculator-main/target/stock-calculator-main-0.0.1-SNAPSHOT.jar
 
 二进制产物：`stock-calculator-main/target/stock-calculator-service`（实测约 303MB，含 Spring AI 全家桶）
 
-> 反射元数据说明：`stock-calculator-main/agent-config/reachability-metadata.json`（tracing agent 录制）与 `gen-logger-config.py`（生成器补缺）共同提供运行期反射注册；依赖升级后用 `record-agent.sh` 重录。
+> 反射元数据说明：`stock-calculator-main/agent-config/reachability-metadata.json`（tracing agent 录制）与 `scripts/agent-tools/gen-native-metadata.py`（共享生成器，4 模块复用，补缺 JPA/hibernate/jboss-logging/openai 反射）共同提供运行期反射注册；依赖升级后用 `record-agent.sh` 重录。
 
 ### 3. Docker 镜像构建
 
@@ -403,7 +403,7 @@ stock-calculator-service/
 │   │   └── application-postgres.yml   # 数据源配置
 │   ├── src/test/java/                 # ModulithVerifyTest（领域边界校验）+ 单测
 │   ├── build-native.sh                # Native 编译脚本（不依赖 sdkman）
-│   ├── gen-logger-config.py           # native 反射元数据生成器
+│   ├── (gen-logger-config.py → scripts/agent-tools/gen-native-metadata.py)  # native 反射元数据生成器（已抽为共享脚本，4 模块复用）
 │   ├── record-agent.sh                # tracing agent 录制脚本（依赖升级后重录）
 │   ├── agent-config/                  # agent 录制的 reachability metadata（入库，免重录）
 │   ├── smoke-curl.sh                  # 二进制 HTTP 冒烟（token 门禁验证）

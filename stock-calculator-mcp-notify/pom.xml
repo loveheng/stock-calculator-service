@@ -38,6 +38,16 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- JPA native 静态反射/资源元数据（naming/Dialect/id 优化器/BytecodeProvider none/
+             DTD 资源）：经 JpaRuntimeHints(RuntimeHintsRegistrar) + aot.factories 自动吸收，
+             库自带 resource-config.json / native-image.properties 一并继承；详见
+             docs/architecture/jpa-native-extraction.md P1/P2。仅元数据，无运行期类型依赖
+             （spring-core optional 不传递）。 -->
+        <dependency>
+            <groupId>com.zzh</groupId>
+            <artifactId>stock-calculator-jpa</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <!-- Jackson 3（Boot 4 线）：信封/payload 序列化 -->
         <dependency>
             <groupId>tools.jackson.core</groupId>

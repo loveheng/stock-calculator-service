@@ -18,6 +18,7 @@
     </properties>
     <modules>
         <module>stock-calculator-contract</module>
+        <module>stock-calculator-jpa</module>
         <module>stock-calculator-llm</module>
         <module>stock-calculator-main</module>
         <module>stock-calculator-data</module>

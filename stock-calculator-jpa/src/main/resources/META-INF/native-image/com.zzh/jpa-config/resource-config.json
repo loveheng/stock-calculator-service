@@ -1,0 +1,11 @@
+{
+  "resources": {
+    "includes": [
+      {"pattern": "org/hibernate/.*\\.(dtd|xsd)"},
+      {"pattern": "jakarta/persistence/.*\\.(dtd|xsd)"}
+    ],
+    "excludes": [
+      {"pattern": "META-INF/services/org\\.hibernate\\.bytecode\\.spi\\.BytecodeProvider"}
+    ]
+  }
+}

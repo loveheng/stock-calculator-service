@@ -16,36 +16,21 @@ registration breaks runtime instantiation.
    getDeclaredConstructor(). Without ctor registration:
        Could not instantiate named strategy class [...]
 
-Also includes hibernate DTD/XSD schema resources (LocalXmlResourceResolver
-static-init resolves them; native images exclude resources by default):
-   XmlInfrastructureException: Unable to locate schema [...] via classpath
+Hibernate DTD/XSD schema resources are NO LONGER emitted by this script — they are
+owned by the stock-calculator-jpa shared library (library resource-config.json +
+JpaRuntimeHints resource hints), so every JPA consumer inherits them simply by
+depending on that library. This script now only covers the dynamic, classpath-
+dependent gaps (jboss-logging generated loggers, JPA annotation internals, agent
+recorded resources). See docs/architecture/jpa-native-extraction.md (P1/P2).
 
-3. openai-java (the Spring AI 2.x OpenAI HTTP client) ships agent-recorded
-   metadata covering introspection (queryAllDeclaredMethods), fields and the
-   constructors/getters its own recordings exercised — but NOT the private
-   Jackson any-setter putAdditionalProperty(String, JsonValue), which only
-   fires when a response contains a field the SDK does not model:
-       MissingReflectionRegistrationError: Cannot reflectively invoke method
-       'private final void ...putAdditionalProperty(...)'
-   Model classes are uniform generated code, so every openai jar's class files
-   are scanned for the method-name constant and the any-setter is registered
-   explicitly (registrations on classes that merely reference the constant are
-   silently tolerated, same as the no-arg ctor entries below).
+3. Hibernate models 的 JPA 注解内部类（XxxJpaAnnotation）在运行期经反射构造，
+   静态分析不可达；agent 只录得启动路径出现过的注解。实体新增注解（如 @Enumerated）
+   就会 NoSuchMethodException。此处按 classpath 上实际存在的全部 JpaAnnotation
+   实现类做 UNION 补齐（构造器签名统一为 (jakarta 注解, ModelsContext)），
+   新实体加注解无需再重录 agent。
 
-4. Same root cause one level later: Spring AI's OpenAiChatModel.from() converts
-   ChatCompletion._additionalProperties() (Map<String, JsonValue>) through
-   Jackson 3 (tools.jackson) convertValue, whose BeanPropertyWriter fetches
-   methods from com.openai.core.JsonField (isMissing()) reflectively via
-   MethodHandles — the lambda only catches Exception, and
-   MissingReflectionRegistrationError is an Error, so it kills the request.
-   Registering single methods here would just shift the crash to the next one,
-   so every class under com.openai.core. (the JsonField/JsonValue family and
-   friends, ~205 classes) gets ALL its declared methods registered as explicit
-   invocable entries via a small class-file parser (constant pool + method
-   table; no javap dependency, works in CI). Models classes are deliberately
-   NOT blanket-registered: they deserialize via constructors (the jar's own
-   classic-format metadata covers those) plus the any-setter scan, and their
-   getters are called directly (no reflection), so they add nothing but size.
+openai SDK 的反射面（any-setter + com.openai.core 全量方法）与本脚本无关，
+已拆为独立脚本 gen-openai-metadata.py（D2），由各模块 build-native.sh 另调。
 
 Scans every jar on the native classpath (target/cp.txt), registers all found
 generated logger classes plus EXTRA_CLASSES (filtered to classes that actually
@@ -54,8 +39,14 @@ single reachability-metadata.json (new consolidated format, same as the tracing
 agent emits) written to target/classes/META-INF/native-image/, where native-image
 auto-detects it. Existing entries from other config dirs (e.g. agent capture) are
 merged when native-image runs, not here.
+
+（静态可固化层——EXTRA_CLASSES 中的框架类——正逐步收口进 stock-calculator-jpa
+共享库；本脚本保留模块特定 EXTRA_CLASSES 与必须扫 classpath 的动态段。）
 """
-import json, os, struct, sys, zipfile
+import json
+import os
+import sys
+import zipfile
 
 EXTRA_CLASSES = [
     # naming strategies (yml configures physical-strategy by name)
@@ -150,14 +141,24 @@ EXTRA_CLASSES = [
     # ctor is still registered defensively in case some path instantiates it
     'org.hibernate.bytecode.internal.none.BytecodeProviderImpl',
     'org.hibernate.boot.registry.selector.internal.StrategySelectorImpl',
+    # StockDictMemoryService 字典镜像 readValue(StockDictEntry)：Jackson 3 走
+    # PropertyBasedCreator 反射调无参 ctor；Spring AOT(@RegisterReflectionForBinding)
+    # 只显式注册 getter/setter，构造器依赖 allDeclaredConstructors——新版元数据
+    # 静默忽略该键（技能四节），缺显式 <init> 即每行 "no property-based Creator"
+    # 模块特定类：仅 mcp 模块 target/classes 含此类，其余模块经 extra_on_classpath
+    # 过滤静默跳过（不进 stock-calculator-jpa 共享库）
+    'com.zzh.stock_calculator.mcp.dict.StockDictEntry',
 ]
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-os.chdir(BASE)  # stock-calculator-main/
+# 共享生成器：由各模块 build-native.sh 从模块目录调用（脚本开头已
+# `cd "$(dirname "$0")"`），故 cwd 即模块目录；CI/非 cwd 场景可传模块目录为 argv[1]。
+# 切勿 chdir 到脚本自身所在目录——target/cp.txt、target/classes、agent-config 都在模块目录。
+MODULE_DIR = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+os.chdir(MODULE_DIR)
 
 cp = 'target/cp.txt'
 if not os.path.exists(cp):
-    print('gen-logger-config: target/cp.txt not found (run the maven step first)', file=sys.stderr)
+    print('gen-native-metadata: target/cp.txt not found (run the maven step first)', file=sys.stderr)
     sys.exit(1)
 
 all_names = set()
@@ -182,155 +183,16 @@ for j in open(cp).read().strip().split(':'):
                 if line and not line.startswith('#'):
                     service_providers.add(line)
 
-OPENAI_ANY_SETTER = {
-    'name': 'putAdditionalProperty',
-    'parameterTypes': ['java.lang.String', 'com.openai.core.JsonValue'],
-}
-
-def scan_openai_any_setter():
-    # class bytecode carries the method-name constant whenever the class
-    # DECLARES or references the any-setter; native-image silently tolerates
-    # registrations for absent members, so no proper method-table parse needed
-    found = set()
-    for j in open(cp).read().strip().split(':'):
-        j = j.strip()
-        if not j.endswith('.jar') or not os.path.exists(j):
-            continue
-        if 'openai' not in os.path.basename(j).lower():
-            continue
-        try:
-            z = zipfile.ZipFile(j)
-        except Exception:
-            continue
-        for n in z.namelist():
-            if n.endswith('.class') and b'putAdditionalProperty' in z.read(n):
-                found.add(n[:-6].replace('/', '.'))
-    return found
-
-openai_any_setter = scan_openai_any_setter()
-
-PRIM_TYPES = {'B': 'byte', 'C': 'char', 'D': 'double', 'F': 'float',
-              'I': 'int', 'J': 'long', 'S': 'short', 'Z': 'boolean'}
-
-def descriptor_param_types(desc):
-    # '(Ljava/lang/String;J[[I)V' -> ['java.lang.String', 'long', 'int[][]']
-    end = desc.find(')')
-    if end < 0:
-        raise ValueError('bad method descriptor')
-    body = desc[1:end]
-    out = []
-    k = 0
-    while k < len(body):
-        dims = 0
-        while k < len(body) and body[k] == '[':
-            dims += 1
-            k += 1
-        c = body[k]
-        k += 1
-        if c == 'L':
-            semi = body.find(';', k)
-            if semi < 0:
-                raise ValueError('bad method descriptor')
-            base = body[k:semi].replace('/', '.')
-            k = semi + 1
-        else:
-            base = PRIM_TYPES[c]
-        out.append(base + '[]' * dims)
-    return out
-
-def parse_class_methods(data):
-    """Declared methods of a class file as (name, (param types...)) tuples.
-
-    Minimal JVM spec walk: magic+version, constant pool (long/double take two
-    slots), flags/this/super, interfaces, then the fields and methods tables
-    (skipping each member's attributes). Enough for name+descriptor extraction;
-    any surprise raises and the caller skips that class.
-    """
-    def u2(off):
-        return struct.unpack_from('>H', data, off)[0]
-
-    pos = 8
-    cp_count = u2(pos)
-    pos += 2
-    utf8 = {}
-    idx = 1
-    while idx < cp_count:
-        tag = data[pos]
-        pos += 1
-        if tag == 1:
-            ln = u2(pos)
-            pos += 2
-            utf8[idx] = data[pos:pos + ln]
-            pos += ln
-        elif tag in (7, 8, 16, 19, 20):
-            pos += 2
-        elif tag == 15:
-            pos += 3
-        elif tag in (3, 4, 9, 10, 11, 12, 17, 18):
-            pos += 4
-        elif tag in (5, 6):
-            pos += 8
-            idx += 1
-        else:
-            raise ValueError('unknown constant pool tag ' + str(tag))
-        idx += 1
-    pos += 6  # access_flags + this_class + super_class
-    pos += 2 + 2 * u2(pos)  # interfaces
-    methods = []
-    for section in (0, 1):  # 0 = fields (parsed, discarded), 1 = methods
-        count = u2(pos)
-        pos += 2
-        collected = []
-        for _i in range(count):
-            name_i, desc_i, attr_n = u2(pos + 2), u2(pos + 4), u2(pos + 6)
-            pos += 8
-            for _a in range(attr_n):
-                alen = struct.unpack_from('>I', data, pos + 2)[0]
-                pos += 6 + alen
-            if section != 1:
-                continue
-            name = utf8.get(name_i, b'').decode('utf-8', 'replace')
-            if name == '<clinit>':
-                continue
-            try:
-                params = descriptor_param_types(
-                    utf8.get(desc_i, b'').decode('utf-8', 'replace'))
-            except (ValueError, KeyError, IndexError):
-                continue
-            collected.append((name, tuple(params)))
-        if section == 1:
-            methods = collected
-    return methods
-
-def scan_openai_core_methods():
-    # all declared methods of every class under com/openai/core/ in every
-    # openai jar on the classpath -> explicit invocable registration
-    found = {}
-    for j in open(cp).read().strip().split(':'):
-        j = j.strip()
-        if not j.endswith('.jar') or not os.path.exists(j):
-            continue
-        if 'openai' not in os.path.basename(j).lower():
-            continue
-        try:
-            z = zipfile.ZipFile(j)
-        except Exception:
-            continue
-        for n in z.namelist():
-            if not n.endswith('.class'):
-                continue
-            fqn = n[:-6].replace('/', '.')
-            if not fqn.startswith('com.openai.core.'):
-                continue
-            try:
-                ms = parse_class_methods(z.read(n))
-            except Exception:
-                continue
-            if ms:
-                found.setdefault(fqn, set()).update(ms)
-    return found
-
-openai_core_methods = scan_openai_core_methods()
+# 模块自身类编译在 target/classes（不在任何依赖 jar 里，cp.txt 只有依赖），
+# 但同样运行在 native classpath 上——不扫这里的话 EXTRA_CLASSES 里引用本模块类
+# 会被 extra_on_classpath 过滤静默跳过（2026-09 StockDictEntry 即中招）
+own_classes = 'target/classes'
+if os.path.isdir(own_classes):
+    for root, _, files in os.walk(own_classes):
+        for f in files:
+            if f.endswith('.class'):
+                rel = os.path.relpath(os.path.join(root, f), own_classes)
+                all_names.add(rel[:-6].replace(os.sep, '.'))
 
 def extra_on_classpath(c):
     # array types like 'Foo[]' exist only through their component class
@@ -343,7 +205,7 @@ def extra_on_classpath(c):
 present = [c for c in EXTRA_CLASSES if extra_on_classpath(c)]
 missing = [c for c in EXTRA_CLASSES if not extra_on_classpath(c)]
 if missing:
-    print(f'gen-logger-config: {len(missing)} extra classes not on classpath, skipped')
+    print(f'gen-native-metadata: {len(missing)} extra classes not on classpath, skipped')
 
 classes = sorted(set(present) | set(logger_classes) | (service_providers & all_names))
 
@@ -365,12 +227,6 @@ for d in agent_dirs:
     m = json.load(open(os.path.join(d, 'reachability-metadata.json')))
     agent_meta['reflection'].extend(m.get('reflection', []))
     agent_meta['resources'].extend(m.get('resources', []))
-
-# Hibernate models 的 JPA 注解内部类（XxxJpaAnnotation）在运行期经反射构造，
-# 静态分析不可达；agent 只录得启动路径出现过的注解。实体新增注解（如 @Enumerated）
-# 就会 NoSuchMethodException。此处按 classpath 上实际存在的全部 JpaAnnotation
-# 实现类做 UNION 补齐（构造器签名统一为 (jakarta 注解, ModelsContext)），
-# 新实体加注解无需再重录 agent。
 
 def fill_missing_jpa_annotation_reflection(entries):
     known = set()
@@ -460,6 +316,18 @@ logger_set = set(logger_classes)
 EXTRA_CTORS = {
     'org.hibernate.boot.models.annotations.internal.CacheAnnotation':
         [['org.hibernate.models.spi.ModelsContext']],
+    # SessionFactoryOptionsBuilder.lambda$formatMapper 对显式按名选择的 json/xml
+    # format mapper（hibernate.type.json_format_mapper 等设置）优先反射调用
+    # <init>(FormatMapperCreationContext)，缺失才回退无参（javap 实证 7.4.5.Final）。
+    # 不注册则 json_format_mapper=jackson3 时 native EMF 构建即炸
+    # （Could not instantiate named strategy class [..Jackson3JsonFormatMapper]）。
+    # JaxbXmlFormatMapper 无该构造器，走无参回退，无需登记
+    'org.hibernate.type.format.jackson.Jackson3JsonFormatMapper':
+        [['org.hibernate.type.format.FormatMapperCreationContext']],
+    'org.hibernate.type.format.jackson.JacksonJsonFormatMapper':
+        [['org.hibernate.type.format.FormatMapperCreationContext']],
+    'org.hibernate.type.format.jackson.JacksonXmlFormatMapper':
+        [['org.hibernate.type.format.FormatMapperCreationContext']],
 }
 
 def ctor_entries(fq):
@@ -500,77 +368,20 @@ for fq in classes:
             if (c['name'], tuple(c['parameterTypes'])) not in have:
                 methods.append(c)
 
-# an explicit methods entry is what makes INVOCATION work (the SDK's embedded
-# queryAllDeclared* flags only enable introspection); merge into whatever entry
-# already exists (agent-recorded or generated above) so each type appears once
-merged_by_type = {}
-for e in merged:
-    merged_by_type.setdefault(type_of(e), e)
-sig = (OPENAI_ANY_SETTER['name'], tuple(OPENAI_ANY_SETTER['parameterTypes']))
-for fq in sorted(openai_any_setter):
-    e = merged_by_type.get(fq)
-    if e is None:
-        merged_by_type[fq] = {'type': fq, 'methods': [dict(OPENAI_ANY_SETTER)]}
-        merged.append(merged_by_type[fq])
-        continue
-    methods = e.setdefault('methods', [])
-    have = {(m.get('name'), tuple(m.get('parameterTypes', []))) for m in methods}
-    if sig not in have:
-        methods.append(dict(OPENAI_ANY_SETTER))
-
-# blanket: every declared method of every com.openai.core class becomes an
-# explicit invocable entry (query* flags alone only allow introspection).
-# Deterministic superset of what any tracing-agent recording could capture for
-# this package — provider responses with arbitrary unmodeled fields all funnel
-# through JsonField/JsonValue serialization, so one broad registration beats
-# whack-a-mole per reported method.
-openai_method_count = 0
-for fq in sorted(openai_core_methods):
-    e = merged_by_type.get(fq)
-    if e is None:
-        e = {'type': fq, 'methods': []}
-        merged_by_type[fq] = e
-        merged.append(e)
-    methods = e.setdefault('methods', [])
-    have = {(m.get('name'), tuple(m.get('parameterTypes', []))) for m in methods}
-    for name, params in sorted(openai_core_methods[fq]):
-        if (name, params) not in have:
-            methods.append({'name': name, 'parameterTypes': list(params)})
-            have.add((name, params))
-            openai_method_count += 1
-
-res_patterns = {e.get('pattern') or e.get('glob') for e in agent_meta.get('resources', [])}
+# DTD/XSD schema resources（org/hibernate、jakarta/persistence）已收口进
+# stock-calculator-jpa 共享库：库自带 resource-config.json（经典 includes）+
+# JpaRuntimeHints(RuntimeHints.resource) 双轨提供，消费模块依赖即自动继承。
+# 本脚本不再重复产出 DTD；仅合并 agent 录制资源（jdbc 驱动等运行期缺口）。
+# （openai 段无 DTD 需求，见 gen-openai-metadata.py；BytecodeProvider service
+#  排除也已在库的 resource-config.json 表达，无需脚本兜底）
 merged_res = list(agent_meta.get('resources', []))
-# NOTE: must use the 'glob' key — GraalVM 25 silently ignores 'pattern' entries in
-# the consolidated reachability-metadata.json resources section (agent capture
-# emits glob; CI builds have no agent-config, so the generator's own entries are
-# the only resource includes and must actually take effect)
-for pat in ('org/hibernate/.*\\.(dtd|xsd)', 'jakarta/persistence/.*\\.(dtd|xsd)'):
-    if not any(p and p == pat for p in res_patterns):
-        merged_res.append({'glob': pat})
 
 out_dir = 'target/classes/META-INF/native-image/com.zzh/ni-logger-config'
 os.makedirs(out_dir, exist_ok=True)
 with open(os.path.join(out_dir, 'reachability-metadata.json'), 'w') as f:
     json.dump({'reflection': merged, 'resources': merged_res}, f, indent=2)
-
-# DTD/XSD schema resources are registered in the classic resource-config.json
-# (includes), NOT via the consolidated reachability-metadata.json resources
-# section: on GraalVM 25 the latter does not include resources into the image
-# (verified: both 'pattern' and 'glob' keys are silently ignored there), while
-# classic resource-config.json includes do work. Without this, EMF boot fails
-# with XmlInfrastructureException: Unable to locate schema
-# [org/hibernate/hibernate-mapping-3.0.dtd] via classpath
-with open(os.path.join(out_dir, 'resource-config.json'), 'w') as f:
-    json.dump({'resources': {'includes': [
-        {'pattern': 'org/hibernate/.*\\.(dtd|xsd)'},
-        {'pattern': 'jakarta/persistence/.*\\.(dtd|xsd)'},
-    ], 'excludes': [
-        {'pattern': 'META-INF/services/org\\.hibernate\\.bytecode\\.spi\\.BytecodeProvider'},
-    ]}}, f, indent=2)
-print(f'gen-logger-config: agent dirs merged: {agent_dirs or "(none)"}')
-print(f'gen-logger-config: registered {len(merged)} reflection entries '
-      f'(+{len(merged) - len(agent_meta.get("reflection", []))} from generator, '
-      f'{len(openai_any_setter)} openai any-setter classes, '
-      f'{len(openai_core_methods)} openai core classes / +{openai_method_count} methods) and '
-      f'{len(merged_res)} resource patterns; BytecodeProvider service excluded')
+print(f'gen-native-metadata: agent dirs merged: {agent_dirs or "(none)"}')
+print(f'gen-native-metadata: registered {len(merged)} reflection entries '
+      f'(+{len(merged) - len(agent_meta.get("reflection", []))} from generator) and '
+      f'{len(merged_res)} resource patterns; BytecodeProvider service excluded '
+      f'(openai 段见 gen-openai-metadata.py)')
