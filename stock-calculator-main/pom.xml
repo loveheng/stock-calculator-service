@@ -156,18 +156,12 @@
             <resource>
                 <directory>src/main/resources</directory>
             </resource>
-            <!-- postgres/schema.sql + data.sql → classpath 根（Boot 默认脚本位置）：
-                 配合 spring.sql.init.mode=always，应用每次启动自动建表+播种（脚本幂等）；
-                 native 资源由 Boot 内置 SqlInitializationScriptsRuntimeHints
-                 （schema.sql/schema-*.sql/data.sql/data-*.sql 四个模式）自动注册，
-                 无需手动 hints。文件本体仍以 postgres/ 目录为事实源（README/设计文档引用） -->
-            <resource>
-                <directory>../postgres</directory>
-                <includes>
-                    <include>schema.sql</include>
-                    <include>data.sql</include>
-                </includes>
-            </resource>
+            <!-- schema.sql 直接位于 src/main/resources 根（SSOT 随包，Boot 默认脚本位置）：
+                 配合 spring.sql.init.mode=always 启动幂等建表；native 资源由 Boot 内置
+                 SqlInitializationScriptsRuntimeHints（schema.sql/schema-*.sql/data.sql/
+                 data-*.sql 四个模式）自动注册，无需手动 hints。
+                 postgres/data.sql 已退化为纯记录（种子备档，不随包不执行）：
+                 播种用 psql 手工执行（CI docker-image.yml 各 job 预灌；本地新库手动灌一次） -->
         </resources>
         <plugins>
             <plugin>

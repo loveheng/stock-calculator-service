@@ -1,4 +1,4 @@
--- stock_mcp 独立库初始化（与主库 postgres/schema.sql 无关；mcp 模块 spring.sql.init 每次启动执行，全部幂等）
+-- stock_mcp 独立库初始化（与主库 schema.sql 无关——主库文件在 main 模块 resources；mcp 模块 spring.sql.init 每次启动执行，全部幂等）
 -- vector 扩展 per-database 生效：新库必须自建（主库已建不影响本库）
 CREATE EXTENSION IF NOT EXISTS vector;
 

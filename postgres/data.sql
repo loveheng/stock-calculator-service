@@ -1,8 +1,10 @@
 -- =====================================================================
--- Copilot Prompt 模版默认值（唯一默认来源）。
+-- Copilot Prompt 模版默认值 + pull_task_config 播种（唯一默认来源）。
+-- 纯记录备档：本文件不再随包打包、也不在应用启动时自动执行——新环境/新库
+-- 播种用 psql 手工执行（须在 schema 建好后跑；CI 由 docker-image.yml 各 job
+-- 的「初始化数据库 schema」步骤预灌）。
 -- 语义：ON CONFLICT (tag) DO NOTHING —— 仅当标签缺失时播种，已有行一律不动
---（在线接口的修改/删除不受重启影响）；删除某默认标签后重启，会由此恢复默认值。
--- 需配合 spring.sql.init.mode: always（外置 PostgreSQL 默认不执行 data.sql）。
+--（在线接口的修改/删除不会被覆盖回默认值）。
 -- =====================================================================
 
 INSERT INTO copilot_prompt_template (tag, content, ctime, mtime) VALUES

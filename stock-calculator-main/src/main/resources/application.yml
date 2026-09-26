@@ -28,8 +28,10 @@ spring:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
   sql:
     init:
-      # schema.sql + data.sql 由 pom resources 从 postgres/ 打包到 classpath 根
-      # （即默认脚本位置），每次启动自动建表+播种（copilot prompt 模版等）；
+      # schema.sql 位于本模块 resources 根（SSOT 随包，即默认脚本位置），每次启动幂等建表；
+      # data.sql 退化为纯记录（postgres/ 目录备档，不随包不执行）：pull_task_config /
+      # copilot prompt 模版等种子改由 psql 手工执行（CI docker-image.yml 各 job 预灌；
+      # 本地新库需手动灌一次，空表不炸启动——watchdog 跳过并 log 提示）；
       # 脚本幂等（IF NOT EXISTS / ON CONFLICT DO NOTHING，缺才插不覆盖已有行）；
       # 连接的库必须带 pgvector 扩展（schema.sql 会 CREATE EXTENSION vector）；
       # native 资源由 Boot SqlInitializationScriptsRuntimeHints 自动注册

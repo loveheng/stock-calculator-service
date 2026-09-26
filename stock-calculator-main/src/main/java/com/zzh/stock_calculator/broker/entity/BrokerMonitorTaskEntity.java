@@ -20,7 +20,7 @@ import java.time.OffsetDateTime;
 /**
  * 画布经纪监控任务（free-canvas §3.5·B 调度路径 SSOT 修订）：
  * 用户级个股价格监控，状态机 RUNNING/STOPPED；判定节流与告警冷却见
- * last_checked_at / last_alert_at。表结构：postgres/schema.sql（ddl-auto=none）。
+ * last_checked_at / last_alert_at。表结构：main 模块 resources 的 schema.sql（ddl-auto=none）。
  */
 @Data
 @Builder
