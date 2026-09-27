@@ -1,9 +1,9 @@
 ---
-dev-loop: memory | devlog | lessons | decisions
+dev-loop: memory
 format: v1
 epic: free-canvas
-total-merged: 1
-last-merge: 2026-09-25
+total-merged: 2
+last-merge: 2026-09-27
 ---
 
 # free-canvas · 自由画布后端对接（v3 代理模式）
@@ -38,10 +38,17 @@ last-merge: 2026-09-25
 - 实测暴露并已修：compute/ask/monitor 字典校验沿用 `existsByCode`（裸 6 位码 `existsById` 永远落空）→ 对合法 fullCode 全量 400「未收录」；统一改 `existsBySixDigit` 并补回归单测。契约 §三 已补记该口径与成因。
 - 状态码口径复核：契约 §三统一约定即「HTTP 200 + 信封 code」，实现一致（仅 401 为例外真实状态码），无需改动。
 
+## vision/OCR 迁移（2026-09-26）
+- OCR 层（azure→ocrspace 责任链 + MD5 缓存，删 local-gemini 多模态）平移 mcp 模块 `mcp.vision` 暴露 ocr 工具（McpToolConfig/ToolRegistry 种子注册）；main 经 common 化 `McpDispatchClient` dispatch 调用（broker/vision 共用）；`/ocr-parse` 收敛进 `/process-image` 同管道，端点全保留前端零改动；缺码补全由 Smartbox 外呼换 `stock:dict` 字典镜像（DictStockCodeResolver）。
+- `/api/import/**` 挂 AuthInterceptor 登录鉴权（与 /api/broker/** 同款；OPTIONS preflight 放行防跨域预检 401）。
+- 超时梯队调档 orchestration 40s / main 45s；ocr-llm.md v2.0 改写 + README 索引同步。
+- vision 域结构清尾收口：17→14 文件，零单文件目录、零单实现接口（DictStockCodeResolver 提至 service/；删单实现接口 StockCodeResolver 与 VisionConfig 空壳，VisionAiProperties 挪 vision 基包）；删死代码（无消费者 config/RestClientConfig，其唯一注入方 SmartBoxStockCodeResolver 已随拆分删除）；11 处 javadoc 去历史化 + 3 处过时 javadoc 修正。
+- 近期验证状态：main 449 / mcp 74 / orchestration 60 全绿（2026-09-26；docs-index-lint 仅存量遗留 2 缺条目，非本轮产物）。
+
 ## 风险记录
 - ~~StockDirectoryApi 字典覆盖不全 vs 契约 400 强校验~~（2026-09-25 收口）：四端点统一 `existsBySixDigit` 6 位尾匹配后 sh600000/sh600519 实测放行；字典本身仍称"覆盖不全"，若个别代码误杀再评估形状白名单兜底。
 - ToolInvoker 8s 上限 vs 全量拉取：klines 实测 1.5s 级（库命中/单窗口读穿），未触预算；超预算再升级为 §8.2 per-connection 超时议题。
 - ask 时延：JSON 阻塞实测 11.3s，逼近 main 15s 硬超时；并发或弱网下有超时风险——§8.2 压测（W1）时重点看 ask P99，必要时前端优先走 SSE 变体。
 
 ## 断点
-- [断点] 下一步：前端联调——coverage 空洞降级核对 + §5.2-1 agent 提示词配合项落地（服务端四端点已 E2E 通过，可作为联调基线）
+- [断点] 下一步：前端联调——四端点 + /process-image (ocr) 链路 + coverage 空洞降级核对 + §5.2 条目 1 agent 提示词配合项落地（服务端四端点已 E2E 通过、ocr 链路单测已全绿，可作联调基线）
