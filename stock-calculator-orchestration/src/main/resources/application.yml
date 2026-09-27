@@ -1,6 +1,20 @@
 spring:
   application:
     name: stock-mcp-orchestration
+  # 排除 starter 的 MCP client 自动装配（2026-09-27 启动解耦档 2）：McpSyncClient 改由
+  # ToolInvoker 侧的 McpBrokerClientProvider 自托管——惰性建连、失败丢弃重建，编排服务与
+  # :18081 只保留「调用期弱依赖」，启动期完全不碰网络。
+  # 之所以显式排除而不是只设 spring.ai.mcp.client.enabled=false：该类没查到类级
+  # ConditionalOnProperty，无法实证 enabled=false 一定关得住；排除是确定性的。
+  # native 反射元数据来自 spring-ai 的 META-INF/spring/aot.factories（RuntimeHintsRegistrar
+  # 与 bean 条件无关），排除后不丢。server 侧自动配置（本服务的 MCP 工具面）不受影响。
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.mcp.client.common.autoconfigure.McpClientAutoConfiguration
+      - org.springframework.ai.mcp.client.common.autoconfigure.McpToolCallbackAutoConfiguration
+      - org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration
+      - org.springframework.ai.mcp.client.httpclient.autoconfigure.SseHttpClientTransportAutoConfiguration
+      - org.springframework.ai.mcp.client.httpclient.autoconfigure.StreamableHttpHttpClientTransportAutoConfiguration
   datasource:
     # 三表复用 stock_mcp 独立库（D6，与 mcp/notify 同库分表）；变量名同款防误接主库
     url: ${POSTGRES_URL_MCP:jdbc:postgresql://localhost/stock_mcp}
@@ -44,17 +58,18 @@ spring:
         # SSE 心跳：默认 null 不发保活，空闲连接易被中间层/容器回收
         keep-alive-interval: 15s
       client:
-        common:
-          # 超时梯队（步 5 定案 3 基础上 2026-09-26 为 vision ocr 工具调档）：
-          # request-timeout 40s 覆盖 ocr 双渠道重试最坏耗时（azure 30s 读超时 × 2 次 + 退避）；
-          # REST 分支仍由 ToolInvoker.INVOKE_TIMEOUT 8s 独立兜底（kind=rest 才走 RestClient）
-          request-timeout: 40s
-        sse:
-          connections:
-            # Executor kind=mcp 节点统一走 :18081 经纪人（D5：规划器不感知工具背后是 MCP 还是 REST）；
-            # mcp 服务端只开 SSE（/sse），streamable-http client 打 /mcp 404（2026-09-23 冒烟定案）
-            mcp-broker:
-              url: ${MCP_BROKER_URL:http://localhost:18081/sse}
+        # 双保险（自动配置已被 spring.autoconfigure.exclude 挡住，此二者仅作显式声明与降级兼容）：
+        # enabled=false + initialized=false——万一将来有人移掉 exclude，也不会退回到
+        # 「bean 创建期连 :18081，20s 超时炸启动」的老样子。
+        enabled: false
+        initialized: false
+        # request-timeout：provider 读取作为单次 callTool / connect 超时
+        # （步 5 定案 3 基础上 2026-09-26 为 vision ocr 工具调档）：
+        # 40s 覆盖 ocr 双渠道重试最坏耗时（azure 30s 读超时 × 2 次 + 退避）；
+        # REST 分支仍由 ToolInvoker.INVOKE_TIMEOUT 8s 独立兜底（kind=rest 才走 RestClient）
+        request-timeout: 40s
+        # sse.connections.* 不再使用：经纪人地址由 provider 直接读 MCP_BROKER_URL
+        # （Executor kind=mcp 节点统一走 :18081，D5：规划器不感知工具背后是 MCP 还是 REST）
 
 server:
   port: 18083

@@ -2,6 +2,8 @@ package com.zzh.stock_calculator.orchestration;
 
 import com.zzh.stock_calculator.orchestration.tool.ToolDescriptor;
 import com.zzh.stock_calculator.orchestration.tool.ToolInvoker;
+import com.zzh.stock_calculator.orchestration.tool.McpBrokerClientProvider;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import tools.jackson.databind.JsonNode;
@@ -19,10 +21,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ToolInvokerDryRunTest {
 
     private final ObjectMapper om = new ObjectMapper();
-    private final ToolInvoker invoker = new ToolInvoker(
-            java.util.List.of(),
+
+    // 会话提供者不可用（经纪人未就绪/退避中）：取会话即抛，等价于改造前「List.of() 无 client」
+    private final McpBrokerClientProvider provider = Mockito.mock(McpBrokerClientProvider.class);
+
+    private final ToolInvoker invoker = new ToolInvoker(this.provider,
             Mockito.mock(org.springframework.web.client.RestClient.Builder.class,
                     Mockito.RETURNS_DEEP_STUBS));
+
+    @BeforeEach
+    void stubBrokerUnavailable() {
+        Mockito.doThrow(new IllegalStateException("退避剩余 1000ms"))
+                .when(this.provider).obtain();
+    }
 
     /** 高危工具用 mcp kind：无可用 MCP client 时真实调用路必然抛 IllegalStateException */
     private ToolDescriptor highDescriptor() {

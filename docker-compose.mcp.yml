@@ -66,15 +66,16 @@ services:
   # Executor 的 mcp 经纪人地址：容器内走 scs-net 服务名 mcp（非 .env 的 localhost），
   # 如经纪人不在本机 scs-net 上，在 .env 里覆盖 MCP_BROKER_URL 即可。
   #
-  # 【启动顺序：必须晚于 mcp 就绪】McpSyncClient 在 bean 创建期连 MCP_BROKER_URL 做 SSE
-  # initialize，mcp 未起则 ~20s 超时直接 BeanCreationException 炸启动。三重保险：
+  # 【启动顺序：2026-09-27 启动解耦后已非必需，保留是为了「少一次节点失败」】
+  # 现在 McpSyncClient 由 McpBrokerClientProvider 自托管，握手推迟到首次工具调用，
+  # mcp 迟到不会导致 BeanCreationException 炸进程（历史行为：bean 创建期连 SSE，20s 超时挂）。
+  # 仍留三重保险，目的从「保命」降为「首请求就能成功」：
   #   1) entrypoint 前置等待：轮询 mcp /internal/ready 最长 120s，就绪才起二进制
-  #      （不依赖 compose 能力，podman-compose 各版本都生效，是主力手段）；
-  #   2) depends_on.condition: service_healthy：新版 podman-compose/docker compose 生效，
-  #      低版本可能忽略 condition 仅保证创建顺序——故不能只靠它；
-  #   3) restart: unless-stopped：极端情况（mcp 起不来 / 等待窗口超时）首次启动失败后
-  #      由重启自愈，mcp 恢复后必然拉起。
-  # 等待窗口用完即放行而非无限阻塞：宁可让应用起失败重启，也不要卡在「永远起不来」。
+  #      （不依赖 compose 能力，podman-compose 各版本都生效）；
+  #   2) depends_on.condition: service_healthy：版本支持时更精确；
+  #   3) 会话自愈：调用期间对端重启导致 SSE 会话失效时，provider 丢弃旧会话并按指数退避重建，
+  #      无需重启编排服务进程。
+  # 等待窗口用完即放行而非无限阻塞。
   orchestration:
     image: ghcr.io/loveheng/stock-calculator-service-orchestration:${ORCHESTRATION_IMAGE_TAG:-latest}
     ports:

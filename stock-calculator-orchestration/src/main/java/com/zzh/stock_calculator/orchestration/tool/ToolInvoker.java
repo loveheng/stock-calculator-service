@@ -31,12 +31,12 @@ public class ToolInvoker {
     /** 超时梯队第 1 层（步 5 定案 3）：ToolInvoker 8s < dispatch 10s < copilot HTTP 15s */
     public static final java.time.Duration INVOKE_TIMEOUT = java.time.Duration.ofSeconds(8);
 
-    private final List<McpSyncClient> mcpSyncClients;
+    private final McpBrokerClientProvider brokerClientProvider;
     private final RestClient restClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ToolInvoker(List<McpSyncClient> mcpSyncClients, RestClient.Builder restClientBuilder) {
-        this.mcpSyncClients = mcpSyncClients;
+    public ToolInvoker(McpBrokerClientProvider brokerClientProvider, RestClient.Builder restClientBuilder) {
+        this.brokerClientProvider = brokerClientProvider;
         var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) INVOKE_TIMEOUT.toMillis());
         factory.setReadTimeout((int) INVOKE_TIMEOUT.toMillis());
@@ -86,10 +86,8 @@ public class ToolInvoker {
     }
 
     private JsonNode invokeMcp(ToolDescriptor descriptor, JsonNode arguments, String traceId) {
-        McpSyncClient client = mcpSyncClients.stream().findFirst()
-                .orElseThrow(() -> new IllegalStateException("无可用 MCP client 连接（:18081）"));
-        McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest(
-                descriptor.getToolName(), objectMapper.convertValue(arguments, Map.class)));
+        McpSyncClient client = brokerClient();
+        McpSchema.CallToolResult result = callToolOnce(client, descriptor, arguments);
         if (Boolean.TRUE.equals(result.isError())) {
             throw new IllegalStateException("mcp 工具报错: " + descriptor.getToolName()
                     + " traceId=" + traceId + " content=" + result.content());
@@ -105,6 +103,34 @@ public class ToolInvoker {
             }
         }
         return objectMapper.createObjectNode().put("text", text.toString());
+    }
+
+    /**
+     * 惰性建会话的取值口（2026-09-27 启动解耦档 2）：会话由 {@link McpBrokerClientProvider}
+     * 托管，首次工具调用才建 SSE 连接 + initialize，失败即节点 failed（Executor 既定语义），
+     * 进程不受影响；会话失效后 provider 负责丢弃重建，这里只做异常面包装。
+     */
+    private McpSyncClient brokerClient() {
+        try {
+            return this.brokerClientProvider.obtain();
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("无可用 MCP client 连接（:18081）: " + e.getMessage(), e);
+        }
+    }
+
+    /** callTool 单独成方法以便精准区分「会话级失败」与「工具业务报错」——只有前者丢会话重连 */
+    private McpSchema.CallToolResult callToolOnce(McpSyncClient client, ToolDescriptor descriptor,
+                                                 JsonNode arguments) {
+        try {
+            return client.callTool(new McpSchema.CallToolRequest(
+                    descriptor.getToolName(), objectMapper.convertValue(arguments, Map.class)));
+        } catch (RuntimeException e) {
+            // 会话失效（连接断开/对端重启）：连同 transport 一并丢弃，下次调用全新建连自愈
+            this.brokerClientProvider.discard();
+            log.warn("[orchestration] mcp 调用会话级失败，会话已丢弃待重建 tool={}",
+                    descriptor.getToolName());
+            throw e;
+        }
     }
 
     private JsonNode invokeRest(ToolDescriptor descriptor, JsonNode arguments, String traceId) {

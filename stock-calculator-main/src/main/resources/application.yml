@@ -101,16 +101,23 @@ spring:
       client:
         enabled: ${MCP_CLIENT_ENABLED:true}
         type: SYNC
+        # 启动期不握手（2026-09-27 启动解耦）：自动配置 McpClientAutoConfiguration.mcpSyncClients()
+        # 在 bean 创建期直接 initialize()，orchestration(:18083) 未就绪即 20s 超时 →
+        # BeanCreationException → Application run failed（asyncTaskResultConsumer 依赖链）。
+        # initialized=false 后只造 client 不握手，改由 McpSessionManager 在「首次调用」或
+        # 「ApplicationReadyEvent 后异步预热」时补做；对端没起时 main 照常起来，只是相关
+        # 功能报错（history：依赖链前端较多，故用挂 ready 事件异步预热覆盖 ToolCallbackProvider 路径）。
+        initialized: false
         toolcallback:
           enabled: true
         sse:
           connections:
             orchestration-dispatch:
               url: ${MCP_ORCH_URL:http://localhost:18083}
-        common:
-          # 超时梯队（步 5 定案 3 基础上 2026-09-26 为 vision ocr 工具调档）：
-          # main 经 dispatch 同步调 ocr 工具，需覆盖 orchestration 侧 40s 预算，45s 留余量
-          request-timeout: 45s
+        # request-timeout（原写 client.common.* 属无效路径，前缀是 spring.ai.mcp.client，此处纠偏）：
+        # 超时梯队（步 5 定案 3 基础上 2026-09-26 为 vision ocr 工具调档）：
+        # main 经 dispatch 同步调 ocr 工具，需覆盖 orchestration 侧 40s 预算，45s 留余量
+        request-timeout: 45s
 
 crawler:
   # /api/admin/sync 管理端点令牌；未配置时端点拒绝所有请求

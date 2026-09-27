@@ -1,6 +1,6 @@
 package com.zzh.stock_calculator.copilot.service;
 
-import io.modelcontextprotocol.client.McpSyncClient;
+import com.zzh.stock_calculator.common.McpSessionManager;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,7 +22,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PersonaPromptInjectionService {
 
-    private final List<McpSyncClient> mcpSyncClients;
+    /** 会话经 McpSessionManager 托管：握手推迟到首次调用 / 启动后异步预热，不阻塞启动 */
+    private final McpSessionManager mcpSession;
     private final ObjectMapper om = new ObjectMapper();
 
     /**
@@ -36,8 +36,7 @@ public class PersonaPromptInjectionService {
             return null;
         }
         try {
-            McpSchema.CallToolResult result = mcpSyncClients.stream().findFirst()
-                    .orElseThrow(() -> new IllegalStateException("MCP client 未装配"))
+            McpSchema.CallToolResult result = this.mcpSession.client()
                     .callTool(new McpSchema.CallToolRequest("dispatch", Map.of(
                             // 意图文本内嵌工具名：DispatchRouter 打分「工具名命中」权重最高，确定性路由
                             "intentText", "kb_persona " + blogger,
@@ -58,6 +57,8 @@ public class PersonaPromptInjectionService {
             }
             return render(card, blogger);
         } catch (RuntimeException e) {
+            // 会话级失败：失效化以便下次重新握手（对端重启场景）；其余同宽松降级
+            this.mcpSession.invalidate();
             log.info("[persona] 语气卡获取失败（宽松降级）: {} err={}", blogger, e.getMessage());
             return null;
         }

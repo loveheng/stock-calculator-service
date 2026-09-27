@@ -1,5 +1,6 @@
 package com.zzh.stock_calculator.copilot.service;
 
+import com.zzh.stock_calculator.common.McpSessionManager;
 import com.zzh.stock_calculator.copilot.entity.UserAsyncTaskLog;
 import com.zzh.stock_calculator.copilot.repository.UserAsyncTaskLogRepository;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -28,7 +29,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AsyncTaskChannelService {
 
-    private final List<McpSyncClient> mcpSyncClients;
+    /** 会话经 McpSessionManager 托管（不再直接持有自动配置的 client 列表）：
+     *  握手推迟到首次调用 / 启动后异步预热，避免启动期连 :18083 超时炸进程 */
+    private final McpSessionManager mcpSession;
     private final UserAsyncTaskLogRepository logRepository;
     private final AsyncTaskRateLimiter rateLimiter;
     private final ObjectMapper om = new ObjectMapper();
@@ -63,12 +66,7 @@ public class AsyncTaskChannelService {
         rateLimiter.checkFrequency(userId);
         String correlationId = UUID.randomUUID().toString();
         // 以 correlationId 兼作 orchestration traceId：task_instance.trace_id == correlation_id
-        McpSchema.CallToolResult result = mcpSyncClients.stream().findFirst()
-                .orElseThrow(() -> new IllegalStateException("MCP client 未装配（orchestration dispatch 不可达）"))
-                .callTool(new McpSchema.CallToolRequest("dispatch", Map.of(
-                        "intentText", intentText,
-                        "caller", "service",
-                        "traceId", correlationId)));
+        McpSchema.CallToolResult result = callDispatch(correlationId, intentText);
         if (Boolean.TRUE.equals(result.isError())) {
             throw new IllegalStateException("dispatch 创建任务失败: " + result.content());
         }
@@ -94,6 +92,20 @@ public class AsyncTaskChannelService {
         log.info("[async-channel] 任务创建 correlationId={} taskId={} user={} type={}",
                 correlationId, taskId, userId, taskType);
         return correlationId;
+    }
+
+    /** dispatch 调用：会话级异常即失效化（下次重新握手），业务级 isError 由上层按契约处理 */
+    private McpSchema.CallToolResult callDispatch(String correlationId, String intentText) {
+        McpSyncClient client = this.mcpSession.client();
+        try {
+            return client.callTool(new McpSchema.CallToolRequest("dispatch", Map.of(
+                    "intentText", intentText,
+                    "caller", "service",
+                    "traceId", correlationId)));
+        } catch (RuntimeException e) {
+            this.mcpSession.invalidate();
+            throw e;
+        }
     }
 
     /**
