@@ -14,8 +14,10 @@ import org.springframework.aot.hint.RuntimeHintsRegistrar;
  * 代码签名推断这些类型，缺注册则 native 反序列化报 InvalidDefinitionException
  * "no delegate- or property-based Creator"（JVM 不受影响，仅 native 必现）。
  * 【新增消息 DTO 必须同步登记 DTO_TYPES，否则 native 消费端解析失败】；
- * 两侧模块经 @ImportRuntimeHints 引用本类（data 挂 MqTopologyConfig、main 挂
- * ContractHintsConfig），DTO→hints 映射保持契约模块单点。
+ * 各消费模块经 @ImportRuntimeHints 引用本类（data 挂 MqTopologyConfig；main、notify、
+ * orchestration 各挂同名 ContractHintsConfig——orchestration 作为后加的 native 模块曾漏挂，
+ * 2026-09-27 线上消费信封报同款 InvalidDefinitionException；notify 同期补齐），
+ * DTO→hints 映射保持契约模块单点。
  * 全量 MemberCategory 覆盖构造器/字段/getter，序列化与反序列化一并满足；
  * getNestMembers 递归兜底 DTO 内部类（含 Lombok @Builder 生成类）。
  */
@@ -49,6 +51,9 @@ public class ContractRuntimeHints implements RuntimeHintsRegistrar {
         MemoryExtractedResult.class,
         MemoryProfileResult.class,
         MemoryProfileTask.class,
+        NotifyCapabilityResult.class,
+        NotifyCapabilityTask.class,
+        NotifyPushPayload.class,
         PullConfigPayload.class,
         PullHeartbeatPayload.class,
         SliceSelection.class,

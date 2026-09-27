@@ -26,7 +26,10 @@ USER spring:spring
 
 EXPOSE 18081
 
-HEALTHCHECK --start-period=10s --timeout=5s --interval=30s --retries=3 \
-    CMD curl -s http://localhost:18081/ > /dev/null 2>&1 || exit 1
+# 就绪探针（-f 必需）：orchestration 的 McpSyncClient 在 bean 创建期连 :18081 初始化，
+# 端口监听成功但工具面未装配时依赖方仍会 initialize 超时炸启动，故必须探 /internal/ready
+# （ApplicationContextReadyEvent 之后才 200；curl 不加 -f 时 404 也算成功，端口探活不可靠）。
+HEALTHCHECK --start-period=15s --timeout=5s --interval=30s --retries=3 \
+    CMD curl -fs -m 3 http://localhost:18081/internal/ready > /dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["/application/stock-mcp-service"]

@@ -20,6 +20,15 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    # 就绪探针：podman-compose 不继承镜像内置 HEALTHCHECK（Dockerfile 那份只用于 docker compose
+    # / podman 直接 run），此处必须显式重写；-f 必需——不带 -f 时 404 也算成功，退化成端口探活，
+    # 而 orchestration 需要的是「工具面已装配」，不是「端口已 listen」。
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "-m", "3", "http://localhost:18081/internal/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     logging:
       driver: "k8s-file"
       options:
@@ -56,6 +65,16 @@ services:
   # 服务级通行证 ORCH_PASSPORT_TOKEN 均经 env_file 从 .env 注入。
   # Executor 的 mcp 经纪人地址：容器内走 scs-net 服务名 mcp（非 .env 的 localhost），
   # 如经纪人不在本机 scs-net 上，在 .env 里覆盖 MCP_BROKER_URL 即可。
+  #
+  # 【启动顺序：必须晚于 mcp 就绪】McpSyncClient 在 bean 创建期连 MCP_BROKER_URL 做 SSE
+  # initialize，mcp 未起则 ~20s 超时直接 BeanCreationException 炸启动。三重保险：
+  #   1) entrypoint 前置等待：轮询 mcp /internal/ready 最长 120s，就绪才起二进制
+  #      （不依赖 compose 能力，podman-compose 各版本都生效，是主力手段）；
+  #   2) depends_on.condition: service_healthy：新版 podman-compose/docker compose 生效，
+  #      低版本可能忽略 condition 仅保证创建顺序——故不能只靠它；
+  #   3) restart: unless-stopped：极端情况（mcp 起不来 / 等待窗口超时）首次启动失败后
+  #      由重启自愈，mcp 恢复后必然拉起。
+  # 等待窗口用完即放行而非无限阻塞：宁可让应用起失败重启，也不要卡在「永远起不来」。
   orchestration:
     image: ghcr.io/loveheng/stock-calculator-service-orchestration:${ORCHESTRATION_IMAGE_TAG:-latest}
     ports:
@@ -64,6 +83,32 @@ services:
       - MCP_BROKER_URL=${MCP_BROKER_URL:-http://mcp:18081/sse}
     env_file:
       - .env
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # 就绪 URL：从 MCP_BROKER_URL 取 scheme://host:port（SSE transport 路径各异，删尾不稳）
+        BROKER_READY_URL="$$(printf '%s' "$${MCP_BROKER_URL:-http://mcp:18081/sse}" | sed -E 's#^([a-zA-Z]+://[^/]+).*#\1#')/internal/ready"
+        i=0
+        until curl -fs -m 3 "$$BROKER_READY_URL" >/dev/null 2>&1; do
+          i=$$((i+1))
+          if [ "$$i" -ge 60 ]; then
+            echo "orchestration: 等待 mcp 就绪超时(120s)，先行启动，失败由 restart 自愈" >&2
+            break
+          fi
+          sleep 2
+        done
+        exec /application/stock-mcp-orchestration-service
+    depends_on:
+      mcp:
+        condition: service_healthy
+    # 仅存活探活（本服务无下游依赖方断言就绪）：不加 -f，避免根路径 404 被误判 unhealthy
+    healthcheck:
+      test: ["CMD", "curl", "-s", "-m", "3", "-o", "/dev/null", "http://localhost:18083/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
     logging:
       driver: "k8s-file"
